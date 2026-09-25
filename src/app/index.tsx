@@ -11,7 +11,9 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
 import type { CameraRef, Expression, StyleSpecification } from '@maplibre/maplibre-react-native';
+import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useAppFeed, toFeatureCollection } from '@/api/appFeed';
+import { EventKort } from '@/components/EventKort';
 import { useRegion } from '@/lib/useRegion';
 import { BOOTSTRAP_STYLE, fetchThemeParkStyle, STREETS_STYLE_URL, type StyleJson } from '@/lib/themeParkStyle';
 import { BRICKA_IMAGES, BRICKA_ICON_EXPRESSION, BRICKA_ICON_SIZE } from '@/lib/brickor';
@@ -25,6 +27,7 @@ export default function KartScreen() {
     // plattan (samma land-grön → bytet tonar in). Nätfel → rå Voyager-URL,
     // webbens reservväg.
     const [mapStyle, setMapStyle] = useState<StyleJson | string>(BOOTSTRAP_STYLE);
+    const [valt, setValt] = useState<AppFeedEvent | null>(null);
     useEffect(() => {
         let aktiv = true;
         fetchThemeParkStyle()
@@ -54,7 +57,15 @@ export default function KartScreen() {
                 />
                 <Images images={BRICKA_IMAGES} />
                 {events.length > 0 && (
-                    <GeoJSONSource id="events" data={toFeatureCollection(events)}>
+                    <GeoJSONSource
+                        id="events"
+                        data={toFeatureCollection(events)}
+                        onPress={(e) => {
+                            const id = e.nativeEvent.features[0]?.properties?.id as string | undefined;
+                            const träff = id ? events.find(ev => ev.id === id) : undefined;
+                            if (träff) setValt(träff);
+                        }}
+                    >
                         <Layer
                             type="symbol"
                             id="event-brickor"
@@ -69,6 +80,7 @@ export default function KartScreen() {
                     </GeoJSONSource>
                 )}
             </Map>
+            {valt && <EventKort event={valt} onClose={() => setValt(null)} />}
             <View style={styles.badge} pointerEvents="none">
                 <Text style={styles.badgeText}>
                     {feed.isLoading ? 'Hämtar event …'
