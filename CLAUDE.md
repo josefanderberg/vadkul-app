@@ -17,8 +17,10 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
   Auth/push (fas 3) via @react-native-firebase.
 - **@vadkul/kontrakt är sanningen** för typer, stadslistan (regionvalet!),
   kategori-nycklarna och eventShareSlug. Definiera aldrig egna kopior.
-  OBS: installeras som `file:../packages/kontrakt` tills publiceringsbeslutet
-  (huvudrepots plan §9.1) — EAS-byggen kräver att det avgörs först.
+  Publiceringsbeslutet är taget (25/9, plan §9.1): publikt npmjs under
+  `@vadkul`-orgen, som TS-källa. `file:../packages/kontrakt` gäller lokalt
+  tills första publish är gjord — byt då till `^0.1.0` (krävs för EAS-byggen:
+  molnet ser inte mappen ovanför repot).
 - **Kartbesluten ärvs från huvudrepots `.claude/skills/kart-ui/`** — borttagna
   features återuppstår inte i appen. Kartan är MapLibre RN (aldrig Mapbox).
 - **EAS dev build, aldrig Expo Go** — kartan/push är native-moduler.
