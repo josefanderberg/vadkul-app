@@ -8,12 +8,14 @@
     "scheme": "vadkulapp",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "se.vadkul.app",
       "icon": "./assets/expo.icon",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "VADKUL använder din plats för att visa event nära dig och välja rätt län för eventflödet."
       }
     },
     "android": {
+      "package": "se.vadkul.app",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
@@ -45,6 +47,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f01f79f6-725b-4b7b-a20e-7f577db7d8d2"
+      }
+    },
+    "owner": "josefanderberg"
   }
 }
