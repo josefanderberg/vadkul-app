@@ -1,44 +1,69 @@
 /**
- * Kartan — appens hem. MVP-läget: MapLibre med Voyager-stilen, regionens
- * eventflöde som cirkelpunkter, centrerad på startstaden.
+ * Kartan — appens hem. Nöjesfälts-stilen (samma transform som webben),
+ * teardrop-brickor med kategori-emoji som symbol-lager, och GPS-regionval:
+ * kameran öppnar över närmaste stad och flödet hämtas för dess län.
  *
- * MEDVETET ENKELT ÄN: cirklar i kategorifärg-neutral blå, ingen kamera-
- * koreografi. Teardrop-brickorna med emoji (kart-ui-besluten i huvudrepot)
- * portas som nästa steg — och nöjesfälts-transformen av stilen likaså.
- * GPS-regionval kommer med platsbehörigheten; tills dess Stockholm.
+ * Kart-ui-arv från huvudrepot som gäller HÄR: ingen intro-kamera (kartan
+ * öppnar i staden och står still), brickor — inte bara prickar/emoji.
+ * Nästa steg: eventets FRIA emoji (runtime-bakning), eventkort + utlänk.
  */
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Camera, GeoJSONSource, Layer, Map } from '@maplibre/maplibre-react-native';
+import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
+import type { CameraRef, Expression, StyleSpecification } from '@maplibre/maplibre-react-native';
 import { useAppFeed, toFeatureCollection } from '@/api/appFeed';
-import { DEFAULT_CITY } from '@/lib/regionVal';
-
-// Samma stil som webben utgår från (v2MapBaseStyles.STREETS_STYLE_URL).
-const STYLE_URL = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+import { useRegion } from '@/lib/useRegion';
+import { BOOTSTRAP_STYLE, fetchThemeParkStyle, STREETS_STYLE_URL, type StyleJson } from '@/lib/themeParkStyle';
+import { BRICKA_IMAGES, BRICKA_ICON_EXPRESSION, BRICKA_ICON_SIZE } from '@/lib/brickor';
 
 export default function KartScreen() {
-    const region = DEFAULT_CITY.region;
+    const { city, region, fromGps } = useRegion();
     const feed = useAppFeed(region);
     const events = feed.data?.events ?? [];
 
+    // Nöjesfälts-stilen hämtas async; tills dess den enfärgade bootstrap-
+    // plattan (samma land-grön → bytet tonar in). Nätfel → rå Voyager-URL,
+    // webbens reservväg.
+    const [mapStyle, setMapStyle] = useState<StyleJson | string>(BOOTSTRAP_STYLE);
+    useEffect(() => {
+        let aktiv = true;
+        fetchThemeParkStyle()
+            .then(s => { if (aktiv) setMapStyle(s); })
+            .catch(() => { if (aktiv) setMapStyle(STREETS_STYLE_URL); });
+        return () => { aktiv = false; };
+    }, []);
+
+    // GPS-staden kommer efter mount. Kart-ui-arvet: kartan öppnar stilla i
+    // startstaden och GPS-svaret gör ETT hopp hem — via ref, inte via
+    // kontrollerade Camera-props (en stop-prop som återappliceras vid varje
+    // flödesrender skulle slåss med användarens panorering).
+    const cameraRef = useRef<CameraRef>(null);
+    useEffect(() => {
+        if (fromGps) cameraRef.current?.flyTo({ center: [city.lng, city.lat], zoom: 11, duration: 1500 });
+    }, [fromGps, city.lng, city.lat]);
+
     return (
         <View style={styles.root}>
-            <Map style={styles.map} mapStyle={STYLE_URL}>
+            <Map style={styles.map} mapStyle={mapStyle as StyleSpecification | string}>
                 <Camera
+                    ref={cameraRef}
                     initialViewState={{
-                        center: [DEFAULT_CITY.lng, DEFAULT_CITY.lat],
+                        center: [city.lng, city.lat],
                         zoom: 11,
                     }}
                 />
+                <Images images={BRICKA_IMAGES} />
                 {events.length > 0 && (
                     <GeoJSONSource id="events" data={toFeatureCollection(events)}>
                         <Layer
-                            type="circle"
-                            id="event-dots"
+                            type="symbol"
+                            id="event-brickor"
                             style={{
-                                circleRadius: 5,
-                                circleColor: '#33628f',
-                                circleStrokeWidth: 1.5,
-                                circleStrokeColor: '#ffffff',
+                                iconImage: BRICKA_ICON_EXPRESSION as Expression,
+                                iconSize: BRICKA_ICON_SIZE,
+                                iconAnchor: 'bottom',
+                                iconAllowOverlap: true,
+                                iconIgnorePlacement: true,
                             }}
                         />
                     </GeoJSONSource>
@@ -48,7 +73,7 @@ export default function KartScreen() {
                 <Text style={styles.badgeText}>
                     {feed.isLoading ? 'Hämtar event …'
                         : feed.isError ? 'Flödet nås inte just nu'
-                        : `${events.length} event · ${DEFAULT_CITY.name}s län · 14 dagar`}
+                        : `${events.length} event · ${city.name}${fromGps ? '' : ' (standard)'} · 14 dagar`}
                 </Text>
             </View>
         </View>
