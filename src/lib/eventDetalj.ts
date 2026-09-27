@@ -43,6 +43,21 @@ export function withRecoveredLineBreaks(text: string): string {
         .replace(/(\d)(?=[A-ZÅÄÖ])/g, '$1\n');
 }
 
+const ärHttpUrl = (s: unknown): s is string => typeof s === 'string' && /^https?:\/\//i.test(s);
+
+/**
+ * Utlänken bakom ANMÄL: detaljsvarets `url` när den finns (för Ticketmaster
+ * är det affiliate-redirecten - den får inte tappas bort till förmån för den
+ * rena adressen i id:t), annars id:t självt - url ÄR primärnyckeln för
+ * skrapade event. Bara http(s) släpps igenom. (Kopia av webbens
+ * utils/eventExpand.eventOutlink.)
+ */
+export function eventOutlink(id: string, url?: string | null): string | null {
+    if (ärHttpUrl(url)) return url;
+    if (ärHttpUrl(id)) return id;
+    return null;
+}
+
 /** Vad beskrivningsstycket visar: texten, "hämtar" medan API-svaret väntas,
  *  annars "ingen beskrivning". Samma ordalydelser som webben. */
 export function descriptionText(text: string | null | undefined, pending: boolean): string {

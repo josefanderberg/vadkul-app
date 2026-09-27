@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { descriptionText, hostLabelFor, withRecoveredLineBreaks } from './eventDetalj';
+import { descriptionText, eventOutlink, hostLabelFor, withRecoveredLineBreaks } from './eventDetalj';
+
+describe('eventOutlink', () => {
+    it('föredrar detaljsvarets url (affiliate-redirecten)', () => {
+        expect(eventOutlink('https://kalla.se/x', 'https://redirect.se/y')).toBe('https://redirect.se/y');
+    });
+    it('faller tillbaka på id:t när det är en url', () => {
+        expect(eventOutlink('https://kalla.se/x', undefined)).toBe('https://kalla.se/x');
+        expect(eventOutlink('http://kalla.se/x', null)).toBe('http://kalla.se/x');
+    });
+    it('ger null när varken url eller id är http(s)', () => {
+        expect(eventOutlink('user-doc-id', undefined)).toBeNull();
+        expect(eventOutlink('user-doc-id', 'ftp://x')).toBeNull();
+    });
+});
 
 describe('hostLabelFor', () => {
     it('föredrar hostName när det finns', () => {
