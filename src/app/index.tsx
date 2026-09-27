@@ -192,7 +192,7 @@ export default function KartScreen() {
                 </View>
             </View>
 
-            {valt && <EventKort event={valt} onClose={() => setValt(null)} />}
+            {valt && <EventKort event={valt} onClose={() => setValt(null)} alla={events} onVälj={setValt} />}
         </View>
     );
 }

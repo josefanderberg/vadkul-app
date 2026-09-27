@@ -85,7 +85,7 @@ export default function StadScreen() {
                     );
                 }}
             />
-            {valt && <EventKort event={valt} onClose={() => setValt(null)} />}
+            {valt && <EventKort event={valt} onClose={() => setValt(null)} alla={iOrten} onVälj={setValt} />}
         </View>
     );
 }

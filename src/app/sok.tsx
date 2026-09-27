@@ -67,7 +67,9 @@ export default function SokScreen() {
                     );
                 }}
             />
-            {valt && <EventKort event={valt} onClose={() => setValt(null)} />}
+            {valt && (
+                <EventKort event={valt} onClose={() => setValt(null)} alla={feed.data?.events ?? []} onVälj={setValt} />
+            )}
         </View>
     );
 }
