@@ -9,7 +9,13 @@ export default function RootLayout() {
     return (
         <QueryClientProvider client={queryClient}>
             <RegionProvider>
-                <Stack screenOptions={{ headerShown: false }} />
+                <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="index" />
+                    <Stack.Screen name="sok" options={{ presentation: 'modal' }} />
+                    <Stack.Screen name="stader" options={{ presentation: 'modal' }} />
+                    <Stack.Screen name="profil" options={{ presentation: 'modal' }} />
+                    <Stack.Screen name="stad/[slug]" />
+                </Stack>
             </RegionProvider>
         </QueryClientProvider>
     );

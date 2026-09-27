@@ -1,37 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { dagKey, eventPåDag, kommandeDagar } from './dagar';
+import { eventIPeriod, periodLabel } from './dagar';
 
-const NU = new Date(2026, 8, 27, 14, 0); // lör 27 sep 2026, lokal tid
+const NU = new Date(2026, 8, 27, 14, 0); // sön 27 sep 2026, lokal tid
+const iso = (d: Date) => d.toISOString();
 
-describe('dagKey', () => {
-    it('ger lokal YYYY-MM-DD, inte UTC', () => {
-        expect(dagKey(new Date(2026, 8, 27, 0, 30))).toBe('2026-09-27');
-        expect(dagKey(new Date(2026, 8, 27, 23, 30))).toBe('2026-09-27');
-    });
-});
-
-describe('kommandeDagar', () => {
-    it('börjar med Idag och Imorgon, sen veckodag', () => {
-        const dagar = kommandeDagar(4, NU);
-        expect(dagar[0]).toEqual({ key: '2026-09-27', label: 'Idag' });
-        expect(dagar[1]).toEqual({ key: '2026-09-28', label: 'Imorgon' });
-        expect(dagar[2]).toEqual({ key: '2026-09-29', label: 'tis 29 sep' });
-        expect(dagar).toHaveLength(4);
+describe('periodLabel - dag', () => {
+    it('Idag, Imorgon, sen veckodag med datum', () => {
+        expect(periodLabel(0, 1, NU)).toBe('Idag');
+        expect(periodLabel(1, 1, NU)).toBe('Imorgon');
+        expect(periodLabel(2, 1, NU)).toBe('tis 29 sep');
     });
     it('kliver över månadsskiften', () => {
-        const dagar = kommandeDagar(5, NU);
-        expect(dagar[4].key).toBe('2026-10-01');
-        expect(dagar[4].label).toBe('tors 1 okt');
+        expect(periodLabel(4, 1, NU)).toBe('tors 1 okt');
     });
 });
 
-describe('eventPåDag', () => {
-    it('matchar på lokal startdag', () => {
-        const iso = new Date(2026, 8, 28, 19, 0).toISOString();
-        expect(eventPåDag(iso, '2026-09-28')).toBe(true);
-        expect(eventPåDag(iso, '2026-09-27')).toBe(false);
+describe('periodLabel - vecka', () => {
+    it('Hela veckan bara på offset 0', () => {
+        expect(periodLabel(0, 7, NU)).toBe('Hela veckan');
+    });
+    it('annars datumspannet, sju dagar inklusive start', () => {
+        expect(periodLabel(1, 7, NU)).toBe('28 sep-4 okt');
+    });
+});
+
+describe('eventIPeriod', () => {
+    it('startdagen räknas från lokal midnatt, slutet är exklusivt', () => {
+        const idagKväll = iso(new Date(2026, 8, 27, 23, 30));
+        const imorgonBitti = iso(new Date(2026, 8, 28, 0, 30));
+        expect(eventIPeriod(idagKväll, 0, 1, NU)).toBe(true);
+        expect(eventIPeriod(imorgonBitti, 0, 1, NU)).toBe(false);
+        expect(eventIPeriod(imorgonBitti, 1, 1, NU)).toBe(true);
+    });
+    it('veckofönstret täcker sju dagar', () => {
+        const omSexDagar = iso(new Date(2026, 9, 3, 12, 0));
+        const omSjuDagar = iso(new Date(2026, 9, 4, 12, 0));
+        expect(eventIPeriod(omSexDagar, 0, 7, NU)).toBe(true);
+        expect(eventIPeriod(omSjuDagar, 0, 7, NU)).toBe(false);
     });
     it('tål trasiga tider', () => {
-        expect(eventPåDag('inte-en-tid', '2026-09-27')).toBe(false);
+        expect(eventIPeriod('inte-en-tid', 0, 1, NU)).toBe(false);
     });
 });

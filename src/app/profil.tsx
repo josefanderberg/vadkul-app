@@ -6,21 +6,27 @@
  * HÅRD REGEL (CLAUDE.md): appen säljer ingenting - ingen boost, inga priser.
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useRegionVal } from '@/lib/regionContext';
 
 export default function ProfilScreen() {
     const { city, fromGps, manuell } = useRegionVal();
-    const källa = manuell ? 'vald i Städer-fliken' : fromGps ? 'via din plats' : 'standard';
+    const källa = manuell ? 'vald via stadssidan' : fromGps ? 'via din plats' : 'standard';
 
     return (
         <View style={styles.root}>
-            <Text style={styles.rubrik}>Profil</Text>
+            <View style={styles.huvud}>
+                <Text style={styles.rubrik}>Profil</Text>
+                <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stangKnapp} accessibilityLabel="Stäng">
+                    <Text style={styles.stangText}>✕</Text>
+                </Pressable>
+            </View>
 
             <View style={styles.kort}>
                 <Text style={styles.kortRubrik}>Din stad</Text>
                 <Text style={styles.kortText}>{city.name} ({källa})</Text>
-                <Text style={styles.kortHjalp}>Byt stad i Städer-fliken - kartan och flödet följer med.</Text>
+                <Text style={styles.kortHjalp}>Byt stad via plattan uppe på kartan - kartan och flödet följer med.</Text>
             </View>
 
             <View style={styles.kort}>
@@ -45,7 +51,17 @@ export default function ProfilScreen() {
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 64, paddingHorizontal: 16 },
+    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 24, paddingHorizontal: 16 },
+    huvud: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    stangKnapp: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: '#e2e8f0',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    stangText: { fontSize: 13, fontWeight: '700', color: '#475569' },
     rubrik: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
     kort: {
         backgroundColor: '#ffffff',

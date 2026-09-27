@@ -1,44 +1,40 @@
 /**
- * Dagväljarens rena logik. Kart-ui-arvet från webben: kartan visar EN dag i
- * taget, väljaren bor fast i botten, valt läge är en vit platta (aldrig guld -
- * guld betyder boost). Flödet bär 14 dagar; dagfiltreringen går på STARTDAGEN,
- * precis som webben (flerdagars-event visas på sin första dag).
+ * Dag/vecka-väljarens rena logik. Kart-ui-arvet från webben: EN dag eller
+ * HELA VECKAN i taget, pilarna stegar EN dag i BÅDA lägena (veckohoppet till
+ * nästa måndag byggdes och revs på webben 31/8 - återinför det inte), "Hela
+ * veckan" bara på offset 0, annars datumspannet. Dagfiltret går på
+ * STARTDAGEN, precis som webben.
  */
 import { MANADER, VECKODAGAR } from './eventTid';
 
-export interface Dag {
-    /** Lokal YYYY-MM-DD - nyckeln filtreringen matchar på. */
-    key: string;
-    /** "Idag", "Imorgon", "ons 30 sep" … */
-    label: string;
+/** Lokal midnatt `offset` dagar fram. */
+export function dagStart(nu: Date, offset: number): Date {
+    const d = new Date(nu);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + offset);
+    return d;
 }
 
-/** Lokal YYYY-MM-DD för ett datum (INTE toISOString - den är UTC). */
-export function dagKey(d: Date): string {
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const dag = String(d.getDate()).padStart(2, '0');
-    return `${d.getFullYear()}-${m}-${dag}`;
-}
+const kortDatum = (d: Date) => `${d.getDate()} ${MANADER[d.getMonth()]}`;
 
-/** Väljarens dagar: idag och `antal - 1` dagar framåt. */
-export function kommandeDagar(antal: number, nu: Date = new Date()): Dag[] {
-    const dagar: Dag[] = [];
-    for (let i = 0; i < antal; i++) {
-        const d = new Date(nu);
-        d.setDate(d.getDate() + i);
-        const label = i === 0
-            ? 'Idag'
-            : i === 1
-            ? 'Imorgon'
-            : `${VECKODAGAR[d.getDay()]} ${d.getDate()} ${MANADER[d.getMonth()]}`;
-        dagar.push({ key: dagKey(d), label });
+/**
+ * Väljarens etikett. Dag: "Idag", "Imorgon", "ons 30 sep". Vecka:
+ * "Hela veckan" på offset 0, annars spannet "28 sep-4 okt".
+ */
+export function periodLabel(offset: number, längd: 1 | 7, nu: Date = new Date()): string {
+    const start = dagStart(nu, offset);
+    if (längd === 1) {
+        if (offset === 0) return 'Idag';
+        if (offset === 1) return 'Imorgon';
+        return `${VECKODAGAR[start.getDay()]} ${kortDatum(start)}`;
     }
-    return dagar;
+    if (offset === 0) return 'Hela veckan';
+    return `${kortDatum(start)}-${kortDatum(dagStart(nu, offset + 6))}`;
 }
 
-/** Startar eventet på den valda dagen? (Lokal dag ur ISO-tiden.) */
-export function eventPåDag(timeIso: string, key: string): boolean {
-    const t = new Date(timeIso);
-    if (Number.isNaN(t.getTime())) return false;
-    return dagKey(t) === key;
+/** Startar eventet i perioden [offset, offset + längd) dagar från nu? */
+export function eventIPeriod(timeIso: string, offset: number, längd: number, nu: Date = new Date()): boolean {
+    const t = new Date(timeIso).getTime();
+    if (Number.isNaN(t)) return false;
+    return t >= dagStart(nu, offset).getTime() && t < dagStart(nu, offset + längd).getTime();
 }

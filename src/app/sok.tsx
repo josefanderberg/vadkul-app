@@ -5,6 +5,7 @@
  */
 import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useAppFeed } from '@/api/appFeed';
 import { EventKort } from '@/components/EventKort';
@@ -23,8 +24,14 @@ export default function SokScreen() {
 
     return (
         <View style={styles.root}>
-            <Text style={styles.rubrik}>Sök event</Text>
+            <View style={styles.huvud}>
+                <Text style={styles.rubrik}>Sök event</Text>
+                <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stangKnapp} accessibilityLabel="Stäng">
+                    <Text style={styles.stangText}>✕</Text>
+                </Pressable>
+            </View>
             <TextInput
+                autoFocus
                 style={styles.falt}
                 placeholder={`Sök bland ${feed.data?.events.length ?? 0} event i ${city.name}s län …`}
                 placeholderTextColor="#94a3b8"
@@ -66,8 +73,18 @@ export default function SokScreen() {
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 64 },
-    rubrik: { fontSize: 22, fontWeight: '800', color: '#0f172a', paddingHorizontal: 16 },
+    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 24 },
+    huvud: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 },
+    stangKnapp: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: '#e2e8f0',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    stangText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+    rubrik: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
     falt: {
         margin: 16,
         marginBottom: 8,

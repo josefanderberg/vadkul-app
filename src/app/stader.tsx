@@ -1,6 +1,7 @@
 /**
- * Städer - appens motsvarighet till webbens stadssidor: välj stad, kartan
- * hoppar dit och flödet byter till stadens län. Manuellt val vinner över
+ * Städer (modal från stadsplattan) - listan in till stadssidorna
+ * (/stad/<slug>, appens motsvarighet till webbens /evenemang/<stad>).
+ * Manuellt kartval görs på stadssidan ("Visa på kartan") och vinner över
  * GPS tills det nollställs (RegionProvider). Stadslistan är kontraktets
  * CITIES - samma lista som regionvalet och scraperns flödesbygge.
  */
@@ -11,23 +12,29 @@ import { CITIES, type City } from '@vadkul/kontrakt';
 import { useRegionVal } from '@/lib/regionContext';
 
 export default function StaderScreen() {
-    const { city, manuell, väljStad, tillGpsStad } = useRegionVal();
+    const { city, manuell, tillGpsStad } = useRegionVal();
     const [filter, setFilter] = useState('');
 
     const q = filter.toLowerCase().trim();
     const städer = q ? CITIES.filter(c => c.name.toLowerCase().includes(q)) : CITIES;
 
     const välj = (c: City) => {
-        väljStad(c);
-        router.navigate('/');
+        router.push(`/stad/${c.slug}`);
     };
 
     return (
         <View style={styles.root}>
-            <Text style={styles.rubrik}>Städer</Text>
-            <Text style={styles.underRubrik}>
-                Vald stad: {city.name}{manuell ? '' : ' (via din plats)'}
-            </Text>
+            <View style={styles.huvud}>
+                <View style={styles.huvudText}>
+                    <Text style={styles.rubrik}>Städer</Text>
+                    <Text style={styles.underRubrik}>
+                        Kartans stad: {city.name}{manuell ? '' : ' (via din plats)'}
+                    </Text>
+                </View>
+                <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stangKnapp} accessibilityLabel="Stäng">
+                    <Text style={styles.stangText}>✕</Text>
+                </Pressable>
+            </View>
             <TextInput
                 style={styles.falt}
                 placeholder="Filtrera städer …"
@@ -64,9 +71,20 @@ export default function StaderScreen() {
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 64 },
-    rubrik: { fontSize: 22, fontWeight: '800', color: '#0f172a', paddingHorizontal: 16 },
-    underRubrik: { marginTop: 4, fontSize: 13, color: '#475569', paddingHorizontal: 16 },
+    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 24 },
+    huvud: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16 },
+    huvudText: { flex: 1 },
+    stangKnapp: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: '#e2e8f0',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    stangText: { fontSize: 13, fontWeight: '700', color: '#475569' },
+    rubrik: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
+    underRubrik: { marginTop: 4, fontSize: 13, color: '#475569' },
     falt: {
         margin: 16,
         marginBottom: 8,
