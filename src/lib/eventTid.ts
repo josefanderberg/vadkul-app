@@ -4,8 +4,8 @@
  * dagen men inte klockslaget" (visas utan tid, precis som webben).
  */
 
-const VECKODAGAR = ['sön', 'mån', 'tis', 'ons', 'tors', 'fre', 'lör'];
-const MANADER = ['jan', 'feb', 'mars', 'april', 'maj', 'juni', 'juli', 'aug', 'sep', 'okt', 'nov', 'dec'];
+export const VECKODAGAR = ['sön', 'mån', 'tis', 'ons', 'tors', 'fre', 'lör'];
+export const MANADER = ['jan', 'feb', 'mars', 'april', 'maj', 'juni', 'juli', 'aug', 'sep', 'okt', 'nov', 'dec'];
 
 const sammaDag = (a: Date, b: Date) =>
     a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
