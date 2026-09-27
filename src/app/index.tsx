@@ -145,8 +145,8 @@ export default function KartScreen() {
                     <Text style={styles.växlaText}>TRYCK FÖR ATT VÄXLA</Text>
                 </View>
                 <View style={styles.väljarRad}>
-                    {/* Nollställaren hoppar ut till vänster om plattan
-                        (webbens -left-9) - absolut, så väljaren står still. */}
+                    {/* Nollställaren svävar UPPE till vänster om plattan
+                        (webbens placering) - absolut, så väljaren står still. */}
                     {offset > 0 ? (
                         <Pressable style={styles.nollKnapp} onPress={() => setOffset(0)} accessibilityLabel="Till idag">
                             <Text style={styles.nollText}>↺</Text>
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         left: 0,
         right: 0,
-        bottom: 26,
+        bottom: 72,
         alignItems: 'center',
         gap: 6,
     },
@@ -275,17 +275,21 @@ const styles = StyleSheet.create({
     väljarRad: { flexDirection: 'row', alignItems: 'center' },
     nollKnapp: {
         position: 'absolute',
-        left: -46,
-        top: '50%',
-        marginTop: -19,
-        width: 38,
-        height: 38,
-        borderRadius: 19,
+        left: 4,
+        top: -58,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         backgroundColor: MÖRK,
         alignItems: 'center',
         justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 5,
     },
-    nollText: { fontSize: 18, color: '#ffffff', fontWeight: '700' },
+    nollText: { fontSize: 20, color: '#ffffff', fontWeight: '700' },
     mörkPlatta: {
         flexDirection: 'row',
         alignItems: 'center',
