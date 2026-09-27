@@ -145,6 +145,8 @@ export default function KartScreen() {
                     <Text style={styles.växlaText}>TRYCK FÖR ATT VÄXLA</Text>
                 </View>
                 <View style={styles.väljarRad}>
+                    {/* Nollställaren hoppar ut till vänster om plattan
+                        (webbens -left-9) - absolut, så väljaren står still. */}
                     {offset > 0 ? (
                         <Pressable style={styles.nollKnapp} onPress={() => setOffset(0)} accessibilityLabel="Till idag">
                             <Text style={styles.nollText}>↺</Text>
@@ -270,8 +272,12 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
     },
     växlaText: { fontSize: 10, fontWeight: '700', color: '#e2e8f0', letterSpacing: 1.2 },
-    väljarRad: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    väljarRad: { flexDirection: 'row', alignItems: 'center' },
     nollKnapp: {
+        position: 'absolute',
+        left: -46,
+        top: '50%',
+        marginTop: -19,
         width: 38,
         height: 38,
         borderRadius: 19,
