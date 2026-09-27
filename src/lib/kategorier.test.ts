@@ -7,6 +7,7 @@ describe('kategoriFor', () => {
         for (const key of EVENT_CATEGORY_KEYS) {
             const k = kategoriFor(key);
             expect(k.label.length).toBeGreaterThan(0);
+            expect(k.kort.length).toBeGreaterThan(0);
             expect(k.emoji.length).toBeGreaterThan(0);
             expect(k.hex).toMatch(/^#[0-9a-f]{6}$/i);
         }

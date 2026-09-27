@@ -6,6 +6,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import type { AppFeedPayload, AppFeedEvent } from '@vadkul/kontrakt';
+import { kategoriFor } from '@/lib/kategorier';
 
 const BASE = 'https://vadkul.se/api/events';
 
@@ -41,6 +42,8 @@ export function toFeatureCollection(events: AppFeedEvent[]): GeoJSON.FeatureColl
                 category: e.category,
                 emoji: e.emoji ?? '',
                 pop: e.pop === true,
+                /** Kategoritexten under brickan (webbens "Konst"/"Scen"). */
+                label: kategoriFor(String(e.category)).kort,
             },
         })),
     };
