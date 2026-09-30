@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "vadkul-app",
+    "name": "VADKUL",
     "slug": "vadkul-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,10 +9,12 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "se.vadkul.app",
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "VADKUL använder din plats för att visa event nära dig och välja rätt län för eventflödet."
-      }
+      },
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "usesAppleSignIn": true
     },
     "android": {
       "package": "se.vadkul.app",
@@ -21,12 +23,13 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#006aa7",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -38,9 +41,21 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#006aa7",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 180
+        }
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      "@react-native-google-signin/google-signin",
+      "expo-apple-authentication",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "dynamic"
+          }
         }
       ]
     ],

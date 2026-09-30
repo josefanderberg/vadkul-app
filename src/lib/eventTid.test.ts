@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatEventTid } from './eventTid';
+import { formatEventTid, formatTidSpann } from './eventTid';
 
 // Lokala ISO-strängar utan zon — tolkas i testmiljöns lokala tid, samma som
 // new Date(...) i appen gör.
@@ -20,5 +20,18 @@ describe('formatEventTid', () => {
     });
     it('trasig tid ger tom sträng', () => {
         expect(formatEventTid('inte-en-tid', true, NU)).toBe('');
+    });
+});
+
+describe('formatTidSpann', () => {
+    it('samma dag: klockslag till klockslag', () => {
+        expect(formatTidSpann('2026-09-25T19:00:00', true, '2026-09-25T21:30:00', NU)).toBe('Idag · 19:00-21:30');
+    });
+    it('flera dagar: till slutdagen', () => {
+        expect(formatTidSpann('2026-09-25T10:00:00', true, '2026-09-27T16:00:00', NU)).toBe('Idag · 10:00 - sön 27 sep');
+    });
+    it('utan slut eller med trasigt slut: bara start', () => {
+        expect(formatTidSpann('2026-09-25T19:00:00', true, undefined, NU)).toBe('Idag · 19:00');
+        expect(formatTidSpann('2026-09-25T19:00:00', true, '2026-09-25T19:00:00', NU)).toBe('Idag · 19:00');
     });
 });

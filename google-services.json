@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "888495806926",
+    "project_id": "vadkul-f2cb2",
+    "storage_bucket": "vadkul-f2cb2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:888495806926:android:0576fefa5ae7eed361739f",
+        "android_client_info": {
+          "package_name": "se.vadkul.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "888495806926-uj2bn4r5cpth2f2vfl561mi9equ7rcce.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAHyPbP0cmCK2VSJIETgw1APKVEf7eLC4A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "888495806926-uj2bn4r5cpth2f2vfl561mi9equ7rcce.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "888495806926-us8nv8093lao9ujdi0ui93hblgqhhp9o.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "se.vadkul.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

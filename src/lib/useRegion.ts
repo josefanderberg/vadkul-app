@@ -20,32 +20,43 @@ export interface RegionVal {
     region: string;
     /** true när staden kommer ur en riktig GPS-fix (inte fallbacken). */
     fromGps: boolean;
+    /** Första fixen - kortets "från dig"-avstånd. null utan behörighet. */
+    pos: { lat: number; lng: number } | null;
 }
 
-export function useRegion(): RegionVal {
+/**
+ * `fråga` = får behörighetsfrågan ställas nu? Introt ställer den på sin egen
+ * sida ("Var är du?") i stället för att en systemdialog ska dyka upp över
+ * välkomsttexten; efter introt frågar appen direkt vid start (en redan
+ * given behörighet ger ingen dialog).
+ */
+export function useRegion(fråga = true): RegionVal {
     const [granted, setGranted] = useState(false);
     const [val, setVal] = useState<RegionVal>({
         city: DEFAULT_CITY,
         region: DEFAULT_CITY.region,
         fromGps: false,
+        pos: null,
     });
     const lockedRef = useRef(false);
 
     useEffect(() => {
+        if (!fråga) return;
         let aktiv = true;
         LocationManager.requestPermissions()
             .then(ok => { if (aktiv) setGranted(ok); })
             .catch(() => { /* nekad/fel → fallbacken står kvar */ });
         return () => { aktiv = false; };
-    }, []);
+    }, [fråga]);
 
     const pos = useCurrentPosition({ enabled: granted && !lockedRef.current });
 
     useEffect(() => {
         if (!pos || lockedRef.current) return;
         lockedRef.current = true;
-        const city = nearestCity(pos.coords.latitude, pos.coords.longitude);
-        setVal({ city, region: city.region, fromGps: true });
+        const { latitude: lat, longitude: lng } = pos.coords;
+        const city = nearestCity(lat, lng);
+        setVal({ city, region: city.region, fromGps: true, pos: { lat, lng } });
     }, [pos]);
 
     return val;

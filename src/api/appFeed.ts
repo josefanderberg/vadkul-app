@@ -5,8 +5,7 @@
  * react-query får försöka igen, inte krascha.
  */
 import { useQuery } from '@tanstack/react-query';
-import type { AppFeedPayload, AppFeedEvent } from '@vadkul/kontrakt';
-import { kategoriFor } from '@/lib/kategorier';
+import type { AppFeedPayload } from '@vadkul/kontrakt';
 
 const BASE = 'https://vadkul.se/api/events';
 
@@ -26,25 +25,4 @@ export function useAppFeed(region: string) {
         staleTime: 60 * 60 * 1000,
         retry: 2,
     });
-}
-
-/** Kartans källformat: flödet som GeoJSON-punkter (id = käll-URL:en). */
-export function toFeatureCollection(events: AppFeedEvent[]): GeoJSON.FeatureCollection {
-    return {
-        type: 'FeatureCollection',
-        features: events.map((e) => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [e.lng, e.lat] },
-            properties: {
-                id: e.id,
-                title: e.title,
-                time: e.time,
-                category: e.category,
-                emoji: e.emoji ?? '',
-                pop: e.pop === true,
-                /** Kategoritexten under brickan (webbens "Konst"/"Scen"). */
-                label: kategoriFor(String(e.category)).kort,
-            },
-        })),
-    };
 }
