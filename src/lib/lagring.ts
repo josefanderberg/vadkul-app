@@ -13,6 +13,7 @@ export const NYCKEL = {
     startstad: 'vadkul.startstad',
     optIn: 'vadkul.optIn',
     sparade: 'vadkul.sparade',
+    rsvp: 'vadkul.rsvp',
     växlaHintKlar: 'vadkul.vaxlaHintKlar',
     välkomstKlar: 'vadkul.valkomstKlar',
     sverigeTipsKlar: 'vadkul.sverigeTipsKlar',

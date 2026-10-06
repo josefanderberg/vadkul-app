@@ -413,6 +413,8 @@ export default function KartScreen() {
                         : null}
                     lista={iRutan}
                     listaFrånOffset={offset}
+                    flöde={filtrerade}
+                    stad={{ slug: city.slug, name: city.name }}
                     onVälj={väljUrLista}
                     nav={nav}
                     onClose={stängKort}

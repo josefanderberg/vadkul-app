@@ -105,7 +105,18 @@ export default function StadScreen() {
                 renderSectionHeader={({ section }) => <Text style={styles.dagRubrik}>{section.label}</Text>}
                 renderItem={({ item }) => <EventRad event={item} onPress={() => setValt(item)} />}
             />
-            {valt ? <EventKort event={valt} grupp={[valt]} onClose={() => setValt(null)} /> : null}
+            {/* flöde = ortens event för arrangörsraden; ingen stad-länk (man
+                är redan här) och ingen lista (sidan ÄR listan). Raden byter
+                event via onVäljIGrupp - samma kort, nytt val. */}
+            {valt ? (
+                <EventKort
+                    event={valt}
+                    grupp={[valt]}
+                    flöde={iOrten}
+                    onVäljIGrupp={e => setValt(e)}
+                    onClose={() => setValt(null)}
+                />
+            ) : null}
         </View>
     );
 }

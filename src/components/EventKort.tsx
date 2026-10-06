@@ -11,12 +11,23 @@
  *    tar en dit igen så länge man står kvar i gruppen.
  *  - NAVRADEN: Bakåt · "1/3 →" (samma plats) · NÄSTA (event i bild, sedan
  *    nästa dag - kameran rör sig aldrig, kart-ui 2/9).
- *  - Hjärtat sparar på enheten (lib/sparadeContext), Dela delar /e/<slug>,
- *    ANMÄL öppnar källan - BOKA i guld för Ticketmaster (ägarbeslut 1/9) med
- *    webbens "Annons"-märkning under.
+ *  - Hjärtat sparar på enheten (lib/sparadeContext), ANMÄL öppnar källan -
+ *    BOKA i guld för Ticketmaster (ägarbeslut 1/9) med webbens
+ *    "Annons"-märkning under. DELA-KNAPPEN ÄR RIVEN (webben 7/10) - Bjud med
+ *    i footern delar.
+ *  - KOMMER/INTRESSERAD-FOOTERN (6/10, spår 3): fast platta i botten när ett
+ *    event är valt (components/RsvpFooter) - göms i väljarlistan. Footern
+ *    ligger i arket men counter-translaterar mot skärmens botten (arket ritas
+ *    i takets höjd och skjuts ner).
+ *  - KORTSÖKET bakom sök/filter-ikonen längst till vänster i knappraden
+ *    (6/10 + 7/10 ihopfällningen): fält + kategorichipsen (samma KategoriRad
+ *    som sökpanelen - ett val smalnar listan OCH kartan bakom via det delade
+ *    filtret). Första tecknet visar listan direkt (bild/beskrivning göms),
+ *    termen lever kvar vid eventbyte och nollas när kortet stängs.
  *  - Bildtryck = helskärm (ägarbeslut 14/9).
- *  - Under beskrivningen: Månaden · 🔥 Populärt, dag för dag i kartans ruta
- *    från visad dag och framåt (Josef 23-24/9).
+ *  - Under beskrivningen: FLER FRÅN SAMMA ARRANGÖR + stadssidelänken
+ *    (components/FlerFran, 6/10) och Månaden · 🔥 Populärt, dag för dag i
+ *    kartans ruta från visad dag och framåt (Josef 23-24/9).
  *
  * HÅRD REGEL (CLAUDE.md): appen säljer ingenting - ingen boost, inga priser.
  */
@@ -26,9 +37,9 @@ import {
     PanResponder,
     Pressable,
     ScrollView,
-    Share,
     StyleSheet,
     Text,
+    TextInput,
     useWindowDimensions,
     View,
 } from 'react-native';
@@ -37,13 +48,19 @@ import * as WebBrowser from 'expo-web-browser';
 import { eventShareSlug, type AppFeedEvent } from '@vadkul/kontrakt';
 import { useEventDetalj } from '@/api/eventDetalj';
 import { EventRad } from '@/components/EventRad';
+import { FlerFran } from '@/components/FlerFran';
 import { HelskarmsBild } from '@/components/HelskarmsBild';
+import { KategoriRad } from '@/components/KategoriRad';
+import { RsvpFooter } from '@/components/RsvpFooter';
+import { arrangörsRad } from '@/lib/arrangorsRad';
 import { periodLabel } from '@/lib/dagar';
 import { descriptionText, eventOutlink, hostLabelFor } from '@/lib/eventDetalj';
 import { formatTidSpann } from '@/lib/eventTid';
+import { useFilter } from '@/lib/filterContext';
 import { formatKm } from '@/lib/flerEvent';
 import { isEventPast } from '@/lib/harVarit';
 import { kategoriFor } from '@/lib/kategorier';
+import { matcharKortSök } from '@/lib/kortSok';
 import { useRegionVal } from '@/lib/regionContext';
 import { distanceKm } from '@/lib/regionVal';
 import { landning, sheetStops } from '@/lib/sheetSnap';
@@ -77,6 +94,8 @@ export function EventKort({
     onTillbakaTillLista,
     lista = [],
     listaFrånOffset = 0,
+    flöde = [],
+    stad = null,
     onVälj,
     nav,
     onClose,
@@ -92,6 +111,11 @@ export function EventKort({
     lista?: AppFeedEvent[];
     /** Visad dag - listorna börjar här. */
     listaFrånOffset?: number;
+    /** HELA det filtrerade flödet (alla dagar) - arrangörsradens underlag,
+     *  som webbens cardOrganizerRow räknar över alla laddade dagar. */
+    flöde?: readonly AppFeedEvent[];
+    /** Stadssidelänken under arrangörsraden - utelämnas på stadsskärmen. */
+    stad?: { slug: string; name: string } | null;
     onVälj?: (e: AppFeedEvent) => void;
     nav?: KortNav;
     onClose: () => void;
@@ -110,6 +134,25 @@ export function EventKort({
     const stäng = useRef(onClose);
     stäng.current = onClose;
     const scrollRef = useRef<ScrollView>(null);
+
+    // Kortsöket (6/10 + 7/10): termen lever kvar vid eventbyte och nollas
+    // när kortet stängs (EventKort avmonteras). Första tecknet lägger
+    // scrollen i topp så träffarna syns direkt (webbens listvy-växling).
+    const [sökÖppen, setSökÖppen] = useState(false);
+    const [sök, setSök] = useState('');
+    const sökFältRef = useRef<TextInput>(null);
+    const handleSök = (v: string) => {
+        if (v.trim() && !sök.trim()) scrollRef.current?.scrollTo({ y: 0, animated: false });
+        setSök(v);
+    };
+    const växlaSök = () => {
+        setSökÖppen(ö => {
+            const nästa = !ö;
+            if (!nästa) setSök('');
+            else setTimeout(() => sökFältRef.current?.focus(), 80);
+            return nästa;
+        });
+    };
 
     const gåTill = (h: number) => {
         höjdRef.current = h;
@@ -156,6 +199,14 @@ export function EventKort({
                     onTillbakaTillLista={onTillbakaTillLista ?? null}
                     lista={lista}
                     listaFrånOffset={listaFrånOffset}
+                    flöde={flöde}
+                    stad={stad}
+                    sök={sök}
+                    sökÖppen={sökÖppen}
+                    onSök={handleSök}
+                    onVäxlaSök={växlaSök}
+                    sökFältRef={sökFältRef}
+                    footerSkjut={translate}
                     onVälj={onVälj}
                     nav={nav}
                     onClose={onClose}
@@ -229,6 +280,14 @@ function EventInnehåll({
     onTillbakaTillLista,
     lista,
     listaFrånOffset,
+    flöde,
+    stad,
+    sök,
+    sökÖppen,
+    onSök,
+    onVäxlaSök,
+    sökFältRef,
+    footerSkjut,
     onVälj,
     nav,
     onClose,
@@ -242,6 +301,15 @@ function EventInnehåll({
     onTillbakaTillLista: (() => void) | null;
     lista: AppFeedEvent[];
     listaFrånOffset: number;
+    flöde: readonly AppFeedEvent[];
+    stad: { slug: string; name: string } | null;
+    sök: string;
+    sökÖppen: boolean;
+    onSök: (v: string) => void;
+    onVäxlaSök: () => void;
+    sökFältRef: React.RefObject<TextInput | null>;
+    /** Arkets translateY - footern counter-translaterar mot skärmens botten. */
+    footerSkjut: Animated.Value;
     onVälj?: (e: AppFeedEvent) => void;
     nav?: KortNav;
     onClose: () => void;
@@ -251,6 +319,7 @@ function EventInnehåll({
 }) {
     const { minPos } = useRegionVal();
     const { ärSparad, växla } = useSparade();
+    const filter = useFilter();
     const detalj = useEventDetalj(event.id);
     const [helskärm, setHelskärm] = useState<string | null>(null);
 
@@ -274,8 +343,15 @@ function EventInnehåll({
         ? { text: `${gruppIndex + 1}/${grupp.length}`, nästa: grupp[(gruppIndex + 1) % grupp.length] }
         : null;
 
-    const dela = () =>
-        Share.share({ title: event.title, message: `${event.title} - ${eventUrl(event)}`, url: eventUrl(event) });
+    const söker = sök.trim().length > 0;
+    // "Fler från samma arrangör" (6/10) - värdnamnet kommer med detaljsvaret,
+    // raden räknas om när det landat (namn + sidlänk).
+    const flerFrån = useMemo(
+        () => arrangörsRad(event, detalj.data?.hostName ?? null, flöde, nu),
+        // nu tickar per render - raden ändras bara med event/detalj/flöde
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [event, detalj.data?.hostName, flöde],
+    );
 
     return (
         <>
@@ -343,18 +419,24 @@ function EventInnehåll({
                     </View>
                 ) : null}
                 <View style={styles.knappRad}>
+                    {/* Sök/filter-ikonen längst till vänster (7/10) - blå när
+                        blocket är öppet eller kartfiltret är på. Dela-knappen
+                        som stod här är RIVEN (Bjud med i footern delar). */}
+                    {lista.length > 0 ? (
+                        <Pressable
+                            style={({ pressed }) => [styles.knapp, styles.sökKnapp, (sökÖppen || filter.aktivt) && styles.sökKnappPå, pressed && styles.knappTryckt]}
+                            onPress={onVäxlaSök}
+                            accessibilityLabel="Sök och filtrera i listan"
+                        >
+                            <Text style={styles.sökIkon}>🔍</Text>
+                        </Pressable>
+                    ) : null}
                     <Pressable
                         style={({ pressed }) => [styles.knapp, styles.hjärtKnapp, sparad && styles.hjärtSparad, pressed && styles.knappTryckt]}
                         onPress={() => växla(event)}
                         accessibilityLabel={sparad ? 'Ta bort från sparade' : 'Spara'}
                     >
                         <Text style={[styles.hjärtText, sparad && styles.hjärtTextSparad]}>{sparad ? '♥' : '♡'}</Text>
-                    </Pressable>
-                    <Pressable
-                        style={({ pressed }) => [styles.knapp, styles.delaKnapp, pressed && styles.knappTryckt]}
-                        onPress={dela}
-                    >
-                        <Text style={styles.delaText}>Dela</Text>
                     </Pressable>
                     {utlänk ? (
                         <Pressable
@@ -366,50 +448,100 @@ function EventInnehåll({
                     ) : null}
                 </View>
                 {annons ? <Text style={styles.annons}>{AFFILIATE_DISCLOSURE}</Text> : null}
-            </View>
-            <ScrollView ref={scrollRef} style={styles.innehåll} contentContainerStyle={styles.innehållInre}>
-                {event.img ? (
-                    <Pressable onPress={() => setHelskärm(event.img ?? null)} accessibilityLabel="Visa bilden i helskärm">
-                        <Image source={{ uri: event.img }} style={styles.bild} contentFit="cover" transition={150} />
-                    </Pressable>
+                {sökÖppen ? (
+                    <View style={styles.sökBlock}>
+                        <TextInput
+                            ref={sökFältRef}
+                            value={sök}
+                            onChangeText={onSök}
+                            placeholder="Sök event eller plats …"
+                            placeholderTextColor="#64748b"
+                            autoCorrect={false}
+                            returnKeyType="search"
+                            style={styles.sökFält}
+                        />
+                        {/* Kategorichipsen direkt under sökfältet (6/10) -
+                            samma rad som sökpanelen, delat filter: ett val
+                            smalnar listan i kortet OCH kartan bakom. */}
+                        <KategoriRad events={lista} />
+                    </View>
                 ) : null}
-                <Text style={styles.beskrivning}>{beskrivning}</Text>
-                {onVälj ? (
-                    <FlerEvent lista={lista} valtId={event.id} frånOffset={listaFrånOffset} onVälj={onVälj} />
+            </View>
+            <ScrollView ref={scrollRef} style={styles.innehåll} contentContainerStyle={styles.innehållMedFooter}>
+                {/* Under sökning visas listan direkt (webbens listvy-växling). */}
+                {!söker ? (
+                    <>
+                        {event.img ? (
+                            <Pressable onPress={() => setHelskärm(event.img ?? null)} accessibilityLabel="Visa bilden i helskärm">
+                                <Image source={{ uri: event.img }} style={styles.bild} contentFit="cover" transition={150} />
+                            </Pressable>
+                        ) : null}
+                        <Text style={styles.beskrivning}>{beskrivning}</Text>
+                        <FlerFran
+                            rad={flerFrån}
+                            stad={stad}
+                            onVälj={e => (onVälj ?? onVäljIGrupp)?.(e)}
+                        />
+                    </>
+                ) : null}
+                {onVälj && lista.length > 0 ? (
+                    <FlerEvent lista={lista} valtId={event.id} frånOffset={listaFrånOffset} sök={sök} onVälj={onVälj} />
                 ) : null}
             </ScrollView>
+            {/* Footern pinnas mot skärmens botten: arket är tak-högt och
+                nedskjutet, så arkets botten ligger under skärmkanten - footern
+                skjuts lika långt åt andra hållet. */}
+            <Animated.View
+                style={[styles.footerHållare, { transform: [{ translateY: Animated.multiply(footerSkjut, -1) }] }]}
+                pointerEvents="box-none"
+            >
+                <RsvpFooter
+                    event={event}
+                    delningsUrl={eventUrl(event)}
+                    cta={utlänk ? { url: utlänk, label: tm ? 'BOKA' : 'ANMÄL', guld: tm } : null}
+                />
+            </Animated.View>
             <HelskarmsBild uri={helskärm} onClose={() => setHelskärm(null)} />
         </>
     );
 }
 
-/** Månaden · 🔥 Populärt - dag för dag i kartans ruta (webbens popularList). */
+/** Månaden · 🔥 Populärt - dag för dag i kartans ruta (webbens popularList).
+ *  `sök` = kortsökets term (6/10): smalnar båda flikarna (lib/kortSok). */
 function FlerEvent({
     lista,
     valtId,
     frånOffset,
+    sök = '',
     onVälj,
 }: {
     lista: AppFeedEvent[];
     valtId: string;
     frånOffset: number;
+    sök?: string;
     onVälj: (e: AppFeedEvent) => void;
 }) {
     const { minPos } = useRegionVal();
     const [flik, setFlik] = useState<ListFlik>('månaden');
     const [antal, setAntal] = useState(SIDA);
-    useEffect(() => setAntal(SIDA), [flik, frånOffset]);
+    useEffect(() => setAntal(SIDA), [flik, frånOffset, sök]);
+
+    const söker = sök.trim().length > 0;
+    const underlag = useMemo(
+        () => (söker ? lista.filter(e => matcharKortSök(e, sök)) : lista),
+        [lista, sök, söker],
+    );
 
     const nu = new Date();
     const nuMs = nu.getTime();
     const harVarit = (e: AppFeedEvent) => isEventPast(e, nuMs) || e.id === valtId;
-    const alla = useMemo(() => eventDagar(lista, frånOffset, nu, harVarit),
+    const alla = useMemo(() => eventDagar(underlag, frånOffset, nu, harVarit),
         // nu/harVarit räknas om med listan
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [lista, frånOffset, valtId]);
-    const populära = useMemo(() => eventDagar(lista, frånOffset, nu, harVarit, e => e.pop === true),
+        [underlag, frånOffset, valtId]);
+    const populära = useMemo(() => eventDagar(underlag, frånOffset, nu, harVarit, e => e.pop === true),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [lista, frånOffset, valtId]);
+        [underlag, frånOffset, valtId]);
     const dagar = flik === 'månaden' ? alla : populära;
     const totalt = (d: typeof alla) => d.reduce((n, x) => n + x.events.length, 0);
 
@@ -426,9 +558,11 @@ function FlerEvent({
 
     return (
         <>
-            <View style={styles.scrollaPill}>
-                <Text style={styles.scrollaText}>Fler event nedanför ⌄</Text>
-            </View>
+            {!söker ? (
+                <View style={styles.scrollaPill}>
+                    <Text style={styles.scrollaText}>Fler event nedanför ⌄</Text>
+                </View>
+            ) : null}
             <View style={styles.flerChipRad}>
                 <Pressable onPress={() => setFlik('månaden')} style={[styles.flerChip, flik === 'månaden' && styles.flerChipVald]}>
                     <Text style={[styles.flerChipText, flik === 'månaden' && styles.flerChipTextVald]}>
@@ -462,7 +596,9 @@ function FlerEvent({
             ) : (
                 <Text style={styles.flerTomt}>
                     {dagar.length === 0
-                        ? flik === 'populärt' ? 'Inga populära event här just nu.' : 'Inga fler event här just nu.'
+                        ? söker
+                            ? `Inget här matchar "${sök.trim()}".`
+                            : flik === 'populärt' ? 'Inga populära event här just nu.' : 'Inga fler event här just nu.'
                         : 'Det var de närmaste två veckorna.'}
                 </Text>
             )}
@@ -539,17 +675,33 @@ const styles = StyleSheet.create({
     knappRad: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
     knapp: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
     knappTryckt: { opacity: 0.85 },
+    sökKnapp: { width: 48, backgroundColor: MÖRK_RAD },
+    sökKnappPå: { backgroundColor: '#006AA7' },
+    sökIkon: { fontSize: 17 },
     hjärtKnapp: { width: 48, backgroundColor: MÖRK_RAD },
     hjärtSparad: { backgroundColor: '#ffffff' },
     hjärtText: { fontSize: 20, color: '#e2e8f0', marginTop: -2 },
     hjärtTextSparad: { color: '#e11d48' },
-    anmälKnapp: { flex: 1.4, backgroundColor: '#2563eb' },
+    anmälKnapp: { flex: 1, backgroundColor: '#2563eb' },
     anmälText: { color: '#ffffff', fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
-    bokaKnapp: { flex: 1.4, backgroundColor: GULD },
+    bokaKnapp: { flex: 1, backgroundColor: GULD },
     bokaText: { color: '#451a03', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
-    delaKnapp: { flex: 1, backgroundColor: MÖRK_RAD },
-    delaText: { color: '#e2e8f0', fontSize: 15, fontWeight: '700' },
     annons: { marginTop: -6, marginBottom: 8, textAlign: 'center', fontSize: 10, fontWeight: '600', color: '#64748b' },
+    sökBlock: { paddingBottom: 10 },
+    sökFält: {
+        marginHorizontal: 16,
+        marginBottom: 2,
+        borderRadius: 12,
+        backgroundColor: MÖRK_RAD,
+        borderWidth: 1,
+        borderColor: '#3f4650',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#e2e8f0',
+    },
+    footerHållare: { position: 'absolute', left: 0, right: 0, bottom: 0 },
     väljarPill: {
         alignSelf: 'flex-start',
         marginHorizontal: 16,
@@ -563,6 +715,8 @@ const styles = StyleSheet.create({
     väljarPillText: { fontSize: 12, fontWeight: '800', color: '#cbd5e1', letterSpacing: 0.6 },
     innehåll: { flex: 1 },
     innehållInre: { paddingBottom: 48 },
+    /** Infovyn: luft så footern inte täcker sista raden på takhöjden. */
+    innehållMedFooter: { paddingBottom: 132 },
     bild: { width: '100%', height: 200 },
     beskrivning: { paddingHorizontal: 16, paddingTop: 12, fontSize: 14, lineHeight: 21, color: '#e2e8f0' },
     scrollaPill: {
