@@ -20,9 +20,11 @@ import { KÄLLOR } from '@/lib/kartFilter';
 import { useKonto } from '@/lib/kontoContext';
 import { felText } from '@/lib/kontoFel';
 import { useRegionVal } from '@/lib/regionContext';
+import { useModalTopp } from '@/lib/useModalTopp';
 import { useSparade } from '@/lib/sparadeContext';
 
 export default function ProfilScreen() {
+    const modalTopp = useModalTopp();
     const { city, fromGps, manuell } = useRegionVal();
     const { sparade, växla } = useSparade();
     const filter = useFilter();
@@ -47,7 +49,7 @@ export default function ProfilScreen() {
     const nu = Date.now();
 
     return (
-        <View style={styles.root}>
+        <View style={[styles.root, { paddingTop: modalTopp }]}>
             <View style={styles.huvud}>
                 <Text style={styles.rubrik}>Profil</Text>
                 <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stangKnapp} accessibilityLabel="Stäng">
@@ -150,7 +152,7 @@ export default function ProfilScreen() {
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 24 },
+    root: { flex: 1, backgroundColor: '#f8fafc' },
     huvud: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 },
     innehåll: { paddingBottom: 48 },
     stangKnapp: {

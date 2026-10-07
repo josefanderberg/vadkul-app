@@ -27,12 +27,14 @@ import { CITIES, KÖN, valideraMeProfilIn, type Kön } from '@vadkul/kontrakt';
 import { useKonto } from '@/lib/kontoContext';
 import { felText, ärAvbrutet } from '@/lib/kontoFel';
 import { useRegionVal } from '@/lib/regionContext';
+import { useModalTopp } from '@/lib/useModalTopp';
 
 type Läge = 'skapa' | 'logga-in' | 'om-dig' | 'glömt';
 
 const KÖN_TEXT: Record<Kön, string> = { kvinna: 'Kvinna', man: 'Man', annat: 'Annat', vill_ej_ange: 'Vill inte ange' };
 
 export default function KontoScreen() {
+    const modalTopp = useModalTopp();
     const { lage } = useLocalSearchParams<{ lage?: string }>();
     const konto = useKonto();
     const [läge, setLäge] = useState<Läge>(
@@ -62,7 +64,7 @@ export default function KontoScreen() {
     };
 
     return (
-        <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={[styles.root, { paddingTop: modalTopp }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={styles.huvud}>
                 <Text style={styles.rubrik}>
                     {läge === 'skapa' ? 'Skapa konto' : läge === 'logga-in' ? 'Logga in' : läge === 'glömt' ? 'Glömt lösenordet' : 'Om dig'}
@@ -281,7 +283,7 @@ function OmDig({ upptagen, kör }: { upptagen: boolean; kör: Kör }) {
 const BLÅ = '#006aa7';
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 24 },
+    root: { flex: 1, backgroundColor: '#f8fafc' },
     huvud: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
     rubrik: { fontSize: 24, fontWeight: '900', color: '#0f172a' },
     stangKnapp: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#e2e8f0', alignItems: 'center', justifyContent: 'center' },

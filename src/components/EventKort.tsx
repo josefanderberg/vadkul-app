@@ -31,9 +31,10 @@
  *
  * HÅRD REGEL (CLAUDE.md): appen säljer ingenting - ingen boost, inga priser.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Animated,
+    BackHandler,
     PanResponder,
     Pressable,
     ScrollView,
@@ -44,6 +45,7 @@ import {
     View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { useFocusEffect } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { eventShareSlug, type AppFeedEvent } from '@vadkul/kontrakt';
 import { useEventDetalj } from '@/api/eventDetalj';
@@ -134,6 +136,17 @@ export function EventKort({
     const stäng = useRef(onClose);
     stäng.current = onClose;
     const scrollRef = useRef<ScrollView>(null);
+
+    // Androids bakåtknapp stänger kortet i stället för appen. Bara medan
+    // skärmen under har fokus - ett kort på kartan bakom en öppen modal ska
+    // inte äta modalens bakåttryck.
+    useFocusEffect(useCallback(() => {
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            stäng.current();
+            return true;
+        });
+        return () => sub.remove();
+    }, []));
 
     // Kortsöket (6/10 + 7/10): termen lever kvar vid eventbyte och nollas
     // när kortet stängs (EventKort avmonteras). Första tecknet lägger

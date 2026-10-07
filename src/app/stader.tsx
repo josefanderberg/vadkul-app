@@ -10,8 +10,10 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { router } from 'expo-router';
 import { CITIES, type City } from '@vadkul/kontrakt';
 import { useRegionVal } from '@/lib/regionContext';
+import { useModalTopp } from '@/lib/useModalTopp';
 
 export default function StaderScreen() {
+    const modalTopp = useModalTopp();
     const { city, manuell, tillGpsStad } = useRegionVal();
     const [filter, setFilter] = useState('');
 
@@ -23,7 +25,7 @@ export default function StaderScreen() {
     };
 
     return (
-        <View style={styles.root}>
+        <View style={[styles.root, { paddingTop: modalTopp }]}>
             <View style={styles.huvud}>
                 <View style={styles.huvudText}>
                     <Text style={styles.rubrik}>Städer</Text>
@@ -71,7 +73,7 @@ export default function StaderScreen() {
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 24 },
+    root: { flex: 1, backgroundColor: '#f8fafc' },
     huvud: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16 },
     huvudText: { flex: 1 },
     stangKnapp: {

@@ -19,10 +19,12 @@ import { useFilter } from '@/lib/filterContext';
 import { isEventPast } from '@/lib/harVarit';
 import { matcharFilter } from '@/lib/kartFilter';
 import { useRegionVal } from '@/lib/regionContext';
+import { useModalTopp } from '@/lib/useModalTopp';
 import { distanceKm } from '@/lib/regionVal';
 import { normalizeSearchQuery, searchCities, sokEvent, splitCityFromQuery } from '@/lib/sok';
 
 export default function SokScreen() {
+    const modalTopp = useModalTopp();
     const { city, region, väljStad, minPos } = useRegionVal();
     const filter = useFilter();
     const [fråga, setFråga] = useState('');
@@ -48,7 +50,7 @@ export default function SokScreen() {
     };
 
     return (
-        <View style={styles.root}>
+        <View style={[styles.root, { paddingTop: modalTopp }]}>
             <View style={styles.huvud}>
                 <Text style={styles.rubrik}>Sök</Text>
                 <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stangKnapp} accessibilityLabel="Stäng">
@@ -123,7 +125,7 @@ export default function SokScreen() {
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: '#f8fafc', paddingTop: 24 },
+    root: { flex: 1, backgroundColor: '#f8fafc' },
     huvud: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 },
     stangKnapp: {
         width: 30,

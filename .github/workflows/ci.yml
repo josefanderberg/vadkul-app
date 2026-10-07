@@ -1,0 +1,21 @@
+# Typecheck + tester på varje push och PR - samma kontroller som CLAUDE.md
+# kräver före "klart". Fångar t.ex. ett kontrakt som inte publicerats.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  kontroll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test

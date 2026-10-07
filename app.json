@@ -14,7 +14,10 @@
         "NSLocationWhenInUseUsageDescription": "VADKUL använder din plats för att visa event nära dig och välja rätt län för eventflödet."
       },
       "googleServicesFile": "./GoogleService-Info.plist",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "se.vadkul.app",

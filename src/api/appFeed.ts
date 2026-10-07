@@ -24,5 +24,7 @@ export function useAppFeed(region: string) {
         queryFn: () => fetchAppFeed(region),
         staleTime: 60 * 60 * 1000,
         retry: 2,
+        // Stadssidan med okänd slug har ingen region - fråga inte efter "app-".
+        enabled: region !== '',
     });
 }
