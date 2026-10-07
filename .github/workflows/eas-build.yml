@@ -1,0 +1,48 @@
+# Molnbygget i EAS, startat för hand (Actions → EAS-bygge → Run workflow).
+# Kräver repohemligheten EXPO_TOKEN (expo.dev → Access tokens) och att
+# signeringsnycklarna redan finns i EAS (första bygget per plattform körs
+# lokalt med `npx eas-cli@latest build`). --no-wait: jobbet lämnar över till
+# EAS och slutar, så Actions-minuterna inte går åt till att vänta.
+name: EAS-bygge
+
+on:
+  workflow_dispatch:
+    inputs:
+      plattform:
+        description: Plattform
+        type: choice
+        options: [all, ios, android]
+        default: all
+      profil:
+        description: Byggprofil i eas.json
+        type: choice
+        options: [preview, production]
+        default: production
+      skicka:
+        description: Skicka till TestFlight / Play internt test när bygget är klart
+        type: boolean
+        default: false
+
+jobs:
+  bygg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: >-
+          eas build
+          --platform ${{ inputs.plattform }}
+          --profile ${{ inputs.profil }}
+          --non-interactive
+          --no-wait
+          ${{ inputs.skicka && '--auto-submit' || '' }}

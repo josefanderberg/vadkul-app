@@ -79,9 +79,13 @@ export default function KartScreen() {
         () => (feed.data?.events ?? []).filter(e => matcharFilter(e, filter)),
         [feed.data, filter],
     );
+    // Dagen som nyckel: efter midnatt (eller när appen väcks nästa dag) ska
+    // "Idag" räknas om även om flödet och filtret står still.
+    const dagNyckel = new Date(nuMs).toDateString();
     const iPeriod = useMemo(
         () => filtrerade.filter(e => eventIPeriod(e.time, offset, längd)),
-        [filtrerade, offset, längd],
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [filtrerade, offset, längd, dagNyckel],
     );
     const iRutan = useMemo(
         () => (ruta ? filtrerade.filter(e => iBild(e.lat, e.lng, ruta)) : []),
@@ -90,8 +94,10 @@ export default function KartScreen() {
     const räkna = (o: number, l: number) => iRutan.filter(e => eventIPeriod(e.time, o, l));
     const antalDag = ruta && feed.data ? räkna(offset, 1).length : null;
     const antalVecka = ruta && feed.data ? räkna(offset, 7).length : null;
-    const idagIRutan = useMemo(() => iRutan.filter(e => eventIPeriod(e.time, 0, 1)), [iRutan]);
-    const imorgonIRutan = useMemo(() => iRutan.filter(e => eventIPeriod(e.time, 1, 1)), [iRutan]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const idagIRutan = useMemo(() => iRutan.filter(e => eventIPeriod(e.time, 0, 1)), [iRutan, dagNyckel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const imorgonIRutan = useMemo(() => iRutan.filter(e => eventIPeriod(e.time, 1, 1)), [iRutan, dagNyckel]);
     const hemmadag = shouldAutoBumpDay(idagIRutan, imorgonIRutan, nuMs) ? 1 : 0;
 
     // ── Stilen: bootstrap-plattan tills nöjesfältet hämtats, Voyager vid fel.
@@ -111,12 +117,18 @@ export default function KartScreen() {
     const cameraRef = useRef<CameraRef>(null);
     const förstaRef = useRef(true);
     const landningRef = useRef<string | null>(city.slug);
+    const förraRef = useRef({ slug: city.slug, manuell });
     useEffect(() => {
         if (!klar) return;
+        const förra = förraRef.current;
+        förraRef.current = { slug: city.slug, manuell };
         if (förstaRef.current) {
             förstaRef.current = false;
             return;
         }
+        // GPS-svaret landade i samma stad som startstaden: inget hopp - man
+        // kan redan ha panorerat. Tillbaka från ett eget val flyger dock.
+        if (city.slug === förra.slug && !manuell && !förra.manuell) return;
         landningRef.current = city.slug;
         cameraRef.current?.flyTo({ center: [city.lng, city.lat], zoom: 11, duration: 1500 });
     }, [klar, city.slug, city.lng, city.lat, fromGps, manuell]);
@@ -367,7 +379,7 @@ export default function KartScreen() {
                             <ActivityIndicator size="small" color="#ffffff" />
                             <Text style={styles.laddText}>Hämtar event …</Text>
                         </View>
-                    ) : feed.isError ? (
+                    ) : feed.isError && !feed.data ? (
                         <Pressable style={styles.laddPill} onPress={() => feed.refetch()}>
                             <Text style={styles.laddText}>Kunde inte hämta event - tryck för att försöka igen</Text>
                         </Pressable>
