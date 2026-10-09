@@ -21,7 +21,6 @@
       "googleServicesFile": "./GoogleService-Info.plist",
       "usesAppleSignIn": true,
       "associatedDomains": [
-        "applinks:vadkul.se",
         "applinks:vadkul.se"
       ],
       "entitlements": {
