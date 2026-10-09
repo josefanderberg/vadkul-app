@@ -32,6 +32,7 @@ import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
 import { byggBrickor } from '@/lib/kartlager';
 import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
+import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kartBanner';
 import { kartPrompt, type PromptÅtgärd } from '@/lib/kartPrompt';
 import { kategoriFor } from '@/lib/kategorier';
 import { useRegionVal } from '@/lib/regionContext';
@@ -58,6 +59,23 @@ interface HistorikPost {
 const BADGE_X = 20 * Math.SQRT1_2 + 4;
 const BADGE_Y = 7 + 20 * Math.SQRT2 + 20 * Math.SQRT1_2 + 5;
 const GRUPP_FILTER: FilterSpecification = ['>', ['get', 'antal'], 1];
+
+/** Passerade grupper får ingen text (en etikett över en släckt bricka svävar). */
+const ETIKETT_FILTER: FilterSpecification = ['all', ['!', ['get', 'past']], ['!', ['get', 'vald']]];
+const VALD_FILTER: FilterSpecification = ['==', ['get', 'vald'], true];
+const ETIKETT_STIL = {
+    textFont: ['Montserrat Medium', 'Open Sans Bold'],
+    textSize: ['interpolate', ['linear'], ['zoom'], 9, 11, 13, 12.5, 16, 13.5] as unknown as Expression,
+    // Spetsen står på koordinaten → texten börjar strax under den.
+    textAnchor: 'top' as const,
+    textOffset: [0, 0.35],
+    textMaxWidth: 12,
+    // Lägst placeras först och vinner kollisionen.
+    symbolSortKey: ['get', 'etikettPrio'] as unknown as Expression,
+    textColor: '#ffffff',
+    textHaloColor: 'rgba(51,65,85,0.8)',
+    textHaloWidth: 2,
+};
 
 export default function KartScreen() {
     const { city, region, fromGps, manuell, klar, introKlar } = useRegionVal();
@@ -131,8 +149,11 @@ export default function KartScreen() {
         if (offset === 0 && hemmadag === 1) setOffset(1);
     }, [city.slug, city.lat, city.lng, ruta, feed.data, offset, hemmadag]);
 
+    const [zoom, setZoom] = useState<number | null>(null);
     const läsRuta = useCallback(() => {
-        mapRef.current?.getBounds().then(b => setRuta(b)).catch(() => { /* kartan inte klar */ });
+        mapRef.current?.getViewState()
+            .then(v => { setRuta(v.bounds); setZoom(v.zoom); })
+            .catch(() => { /* kartan inte klar */ });
     }, []);
 
     // ── Kortet: val, väljarlista, Nästa/Bakåt ─────────────────────────────
@@ -305,6 +326,37 @@ export default function KartScreen() {
         else setOffset(1);
     };
 
+    // ── Bannrarna (Veckans populära / Zooma in) - samma slot, efter prompten.
+    // Stängs per STAD med ✕ eller ett tryck på kartan.
+    const [stängdaBanners, setStängdaBanners] = useState<ReadonlySet<string>>(new Set());
+    // N = veckoradens tal EFTER trycket (🔥 släpper även igenom användarskapade
+    // och veckans passerade); grinden räknar bara kommande populära.
+    const veckaMedPopulärt = useMemo(
+        () => iRutan.filter(e => eventIPeriod(e.time, offset, 7) && matcharFilter(e, { ...filter, populärt: true })),
+        [iRutan, offset, filter],
+    );
+    const banner = !kort && !prompt && feed.data
+        ? kartBanner({
+            populäraKommande: veckaMedPopulärt.filter(e => e.pop === true && !isEventPast(e, nuMs)).length,
+            populäraIVeckan: veckaMedPopulärt.length,
+            populärtPå: filter.populärt,
+            annatFilter: filter.källa !== null,
+            zoom,
+            stängd: stängdaBanners.has(city.slug),
+        })
+        : null;
+    const stängBanner = () => setStängdaBanners(s => new Set(s).add(city.slug));
+    const bannerTryck = (b: KartBanner) => {
+        if (b.typ === 'populärVecka') {
+            setLängd(7);
+            if (!filter.populärt) filter.växlaPopulärt();
+            return;
+        }
+        const kommande = iPeriod.filter(e => !isEventPast(e, nuMs));
+        const mitt = zoomInMitt(kommande.length > 0 ? kommande : iPeriod, city);
+        cameraRef.current?.flyTo({ center: [mitt.lng, mitt.lat], zoom: ZOOM_IN_MÅL, duration: 1200 });
+    };
+
     const skapa = () =>
         WebBrowser.openBrowserAsync(`https://vadkul.se/?plats=${city.lat},${city.lng},13&skapa=1`);
 
@@ -316,7 +368,11 @@ export default function KartScreen() {
                     style={styles.map}
                     mapStyle={mapStyle as StyleSpecification | string}
                     onDidFinishLoadingMap={läsRuta}
-                    onRegionDidChange={ev => setRuta(ev.nativeEvent.bounds)}
+                    onRegionDidChange={ev => {
+                        setRuta(ev.nativeEvent.bounds);
+                        setZoom(ev.nativeEvent.zoom);
+                    }}
+                    onPress={() => { if (banner) stängBanner(); }}
                 >
                     <Camera ref={cameraRef} initialViewState={{ center: [city.lng, city.lat], zoom: 11 }} />
                     <Images images={BRICKA_IMAGES} />
@@ -325,6 +381,30 @@ export default function KartScreen() {
                         data={brickor}
                         onPress={ev => trycktBricka(ev.nativeEvent.features[0]?.properties?.id as string | undefined)}
                     >
+                        {/* Etiketterna (webbens LABEL_LAYER_IDS): TITEL FÖRE
+                            KATEGORI NÄR DEN FÅR PLATS, annars kategorin, annars
+                            inget. Båda ligger UNDER brickorna (en etikett får
+                            aldrig skymma en bricka). MapLibre placerar
+                            uppifrån och ner - titellagret tar plats först, och
+                            kategorin för SAMMA bricka krockar med sin egen
+                            titel och syns bara när titeln inte fick plats.
+                            Inom lagret går de populäraste först (etikettPrio).
+                            INGEN zoomgräns, till skillnad från webbens
+                            LABEL_CAT_MIN_ZOOM 9 (Josef 9/10: "så man alltid
+                            ser något på avstånd iallafall") - kollisionen
+                            gallrar, appflödet är ändå bara ett län. */}
+                        <Layer
+                            type="symbol"
+                            id="etikett-kategori"
+                            filter={ETIKETT_FILTER}
+                            style={{ ...ETIKETT_STIL, textField: ['get', 'label'] as unknown as Expression }}
+                        />
+                        <Layer
+                            type="symbol"
+                            id="etikett-titel"
+                            filter={ETIKETT_FILTER}
+                            style={{ ...ETIKETT_STIL, textField: ['get', 'titel'] as unknown as Expression }}
+                        />
                         <Layer
                             type="symbol"
                             id="event-brickor"
@@ -336,43 +416,35 @@ export default function KartScreen() {
                                 iconIgnorePlacement: true,
                                 iconOpacity: ['case', ['get', 'past'], 0.45, 1] as unknown as Expression,
                                 symbolSortKey: ['get', 'sort'] as unknown as Expression,
-                                // Kategoritexten under brickan - webbens "Konst"/"Scen".
-                                textField: ['get', 'label'] as unknown as Expression,
-                                textFont: ['Montserrat Medium', 'Open Sans Bold'],
-                                textSize: 12,
-                                textAnchor: 'top',
-                                textOffset: [0, 0.35],
-                                textColor: '#ffffff',
-                                textHaloColor: 'rgba(36,42,51,0.9)',
-                                textHaloWidth: 1.4,
-                                textOptional: true,
-                                textOpacity: ['case', ['get', 'past'], 0.5, 1] as unknown as Expression,
                             }}
                         />
-                        {/* "+N" på grupper - vit pill i brickans övre högra hörn. */}
-                        <Layer
-                            type="circle"
-                            id="event-antal-bakgrund"
-                            filter={GRUPP_FILTER}
-                            style={{
-                                circleRadius: 10,
-                                circleColor: '#ffffff',
-                                circleTranslate: [BADGE_X, -BADGE_Y],
-                                circleOpacity: ['case', ['get', 'past'], 0.6, 1] as unknown as Expression,
-                            }}
-                        />
+                        {/* "+N" på grupper: vit pill + siffra som EN bakad bild
+                            (antal-N), så en grannbadges siffra aldrig ritas
+                            ovanpå en annan badges cirkel. Det gamla cirkel- +
+                            textlagret ritade alla siffror sist, i hög. */}
                         <Layer
                             type="symbol"
                             id="event-antal"
                             filter={GRUPP_FILTER}
                             style={{
-                                textField: ['case', ['>', ['get', 'antal'], 99], '99+', ['to-string', ['get', 'antal']]] as unknown as Expression,
-                                textFont: ['Montserrat Medium', 'Open Sans Bold'],
-                                textSize: 12,
-                                textColor: '#0f172a',
-                                textTranslate: [BADGE_X, -BADGE_Y],
+                                iconImage: ['get', 'antalIkon'] as unknown as Expression,
+                                iconSize: BRICKA_ICON_SIZE,
+                                iconTranslate: [BADGE_X, -BADGE_Y],
+                                iconAllowOverlap: true,
+                                iconIgnorePlacement: true,
+                                iconOpacity: ['case', ['get', 'past'], 0.6, 1] as unknown as Expression,
+                                symbolSortKey: ['get', 'sort'] as unknown as Expression,
+                            }}
+                        />
+                        {/* Den valda brickans titel - överst och alltid synlig. */}
+                        <Layer
+                            type="symbol"
+                            id="etikett-vald"
+                            filter={VALD_FILTER}
+                            style={{
+                                ...ETIKETT_STIL,
+                                textField: ['get', 'titel'] as unknown as Expression,
                                 textAllowOverlap: true,
-                                textIgnorePlacement: true,
                             }}
                         />
                     </GeoJSONSource>
@@ -440,6 +512,24 @@ export default function KartScreen() {
                                 <Text style={styles.promptKnappText}>{prompt.knapp.text}</Text>
                             </Pressable>
                         ) : null}
+                    </View>
+                </View>
+            ) : banner ? (
+                <View style={styles.promptYta} pointerEvents="box-none">
+                    <View style={styles.banner}>
+                        <Pressable style={styles.bannerTryck} onPress={() => bannerTryck(banner)}>
+                            <Text
+                                style={[styles.bannerText, banner.typ === 'populärVecka' ? styles.bannerEld : styles.bannerBlå]}
+                                numberOfLines={1}
+                            >
+                                {banner.typ === 'populärVecka'
+                                    ? `🔥 Visa alla ${banner.antal} populära event i veckan →`
+                                    : `🔍 Zooma in över ${city.name} →`}
+                            </Text>
+                        </Pressable>
+                        <Pressable style={styles.bannerStäng} onPress={stängBanner} hitSlop={8} accessibilityLabel="Stäng">
+                            <Text style={styles.bannerStängText}>✕</Text>
+                        </Pressable>
                     </View>
                 </View>
             ) : null}
@@ -571,4 +661,25 @@ const styles = StyleSheet.create({
     promptText: { fontSize: 14, fontWeight: '700', color: '#0f172a', textAlign: 'center' },
     promptKnapp: { backgroundColor: '#0f172a', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8 },
     promptKnappText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
+    /** Bannrarna: vit pill i prompt-slotten. Webbens vandrande gradient blir
+     *  här ren eldfärg resp. kartans blå. */
+    banner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ffffff',
+        borderRadius: 999,
+        paddingLeft: 16,
+        paddingRight: 6,
+        shadowColor: '#000',
+        shadowOpacity: 0.18,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 6,
+    },
+    bannerTryck: { flexShrink: 1, paddingVertical: 11 },
+    bannerText: { fontSize: 14, fontWeight: '800' },
+    bannerEld: { color: '#ea580c' },
+    bannerBlå: { color: '#006AA7' },
+    bannerStäng: { marginLeft: 6, width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    bannerStängText: { fontSize: 13, color: '#94a3b8', fontWeight: '700' },
 });
