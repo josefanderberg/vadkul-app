@@ -20,10 +20,11 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { CITIES, KÖN, valideraMeProfilIn, type Kön } from '@vadkul/kontrakt';
+import { KONTON_PÅ } from '@/lib/funktioner';
 import { useKonto } from '@/lib/kontoContext';
 import { felText, ärAvbrutet } from '@/lib/kontoFel';
 import { useRegionVal } from '@/lib/regionContext';
@@ -33,6 +34,13 @@ type Läge = 'skapa' | 'logga-in' | 'om-dig' | 'glömt';
 const KÖN_TEXT: Record<Kön, string> = { kvinna: 'Kvinna', man: 'Man', annat: 'Annat', vill_ej_ange: 'Vill inte ange' };
 
 export default function KontoScreen() {
+    // Kontona är avstängda i v1 (lib/funktioner). Skärmen är kvar och färdig,
+    // men ingen djuplänk ska kunna nå den så länge /v1/me är odeployat.
+    if (!KONTON_PÅ) return <Redirect href="/" />;
+    return <KontoInnehåll />;
+}
+
+function KontoInnehåll() {
     const { lage } = useLocalSearchParams<{ lage?: string }>();
     const konto = useKonto();
     const [läge, setLäge] = useState<Läge>(

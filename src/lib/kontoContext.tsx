@@ -1,30 +1,43 @@
 /**
- * Kontot i appen (plattformsplanens fas 3): Firebase Auth via
- * @react-native-firebase (sessionen ligger i nyckelringen/Keystore - aldrig
- * i AsyncStorage) och profilen via API:t v1. Samma konton som webben: ett
- * konto skapat här loggar in på vadkul.se och tvärtom.
+ * Kontot i appen: Firebase Auth via @react-native-firebase (sessionen ligger
+ * i nyckelringen/Keystore - aldrig i AsyncStorage) och profilen i
+ * users/{uid} DIREKT i Firestore sedan 8/10 2026 (data/anvandare, port av
+ * webbens AuthContext + userService). Samma konton som webben: ett konto
+ * skapat här loggar in på vadkul.se och tvärtom.
+ *
+ * ANONYM SESSION (webbens ensureTipIdentity): svar och tips kräver inget
+ * konto, bara ett uid. `säkerställIdentitet` skapar en anonym session vid
+ * behov; `användare` är ALLTID null för den, så varje kontogrind beter sig
+ * som förut. Skapar man sedan konto LÄNKAS den anonyma sessionen, så svar och
+ * tips följer med (samma räddning som webbens register/Google).
  *
  * Inloggningssätt (ägarbeslut 29/9): e-post + lösenord och Google överallt,
  * Sign in with Apple på iOS (Apples regel 4.8 när Google finns).
  *
  * Profilen är best-effort precis som webbens registrering: kontot ÄR skapat
- * när Firebase svarat, och ett API-hicka får inte få registreringen att se
- * misslyckad ut - kontoskärmen erbjuder "Om dig" igen när profilen saknas.
+ * när Firebase svarat, och ett Firestore-hicka får inte få registreringen att
+ * se misslyckad ut - kontoskärmen erbjuder "Om dig" igen när profilen saknas.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import {
     AppleAuthProvider,
     createUserWithEmailAndPassword,
+    deleteUser,
+    EmailAuthProvider,
+    getAdditionalUserInfo,
     getAuth,
-    getIdToken,
     GoogleAuthProvider,
+    linkWithCredential,
     onAuthStateChanged,
     sendPasswordResetEmail,
+    signInAnonymously,
     signInWithCredential,
     signInWithEmailAndPassword,
     signOut,
     updateProfile,
+    type AuthCredential,
+    type UserCredential,
     type User,
 } from '@react-native-firebase/auth';
 import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/google-signin';
@@ -32,7 +45,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MeProfil, MeProfilIn } from '@vadkul/kontrakt';
-import { hämtaProfil, raderaKontot, sparaProfil } from '@/api/konto';
+import { hämtaProfil, raderaAnvändarDoc, skapaGrundprofil, sparaProfil } from '@/data/anvandare';
 
 /** OAuth-webbklienten i Firebase-projektet - Android behöver den för att få
  *  ett idToken som Firebase godtar (publikt värde, står i google-services.json). */
@@ -47,8 +60,12 @@ export interface Användare {
 }
 
 export interface KontoState {
-    /** undefined = Firebase har inte svarat än; null = utloggad. */
+    /** undefined = Firebase har inte svarat än; null = utloggad ELLER anonym. */
     användare: Användare | null | undefined;
+    /** uid för svar/tips - inloggad eller anonym session, null om ingen finns. */
+    uid: string | null;
+    /** Ge mig ett uid utan att be om konto (anonym session vid behov). */
+    säkerställIdentitet: () => Promise<string>;
     profil: MeProfil | null;
     profilLaddar: boolean;
     /** Inloggad men profilen saknar namn - "Om dig"-steget ska erbjudas. */
@@ -72,24 +89,34 @@ const tillAnvändare = (u: User | null): Användare | null =>
 export function KontoProvider({ children }: { children: ReactNode }) {
     const auth = getAuth();
     const qc = useQueryClient();
-    const [användare, setAnvändare] = useState<Användare | null | undefined>(undefined);
+    // råAnvändare = vad Firebase har (kan vara anonym); `användare` nedan är
+    // den filtrerade vyn resten av appen ser.
+    const [råAnvändare, setRåAnvändare] = useState<User | null | undefined>(undefined);
+    const [namnSpegel, setNamnSpegel] = useState<string | null>(null);
     const [appleFinns, setAppleFinns] = useState(false);
 
-    useEffect(() => onAuthStateChanged(auth, u => setAnvändare(tillAnvändare(u))), [auth]);
+    useEffect(() => onAuthStateChanged(auth, u => { setRåAnvändare(u); setNamnSpegel(null); }), [auth]);
     useEffect(() => {
         if (Platform.OS !== 'ios') return;
         AppleAuthentication.isAvailableAsync().then(setAppleFinns).catch(() => setAppleFinns(false));
     }, []);
 
-    const token = useCallback(async () => {
-        const u = auth.currentUser;
-        if (!u) throw new Error('Inte inloggad');
-        return getIdToken(u);
+    const användare = useMemo<Användare | null | undefined>(() => {
+        if (råAnvändare === undefined) return undefined;
+        if (!råAnvändare || råAnvändare.isAnonymous) return null;
+        const a = tillAnvändare(råAnvändare)!;
+        // onAuthStateChanged fyrar före updateProfile hinner slå igenom - spegla namnet lokalt.
+        return namnSpegel && !a.displayName ? { ...a, displayName: namnSpegel } : a;
+    }, [råAnvändare, namnSpegel]);
+
+    const säkerställIdentitet = useCallback(async () => {
+        if (auth.currentUser) return auth.currentUser.uid;
+        return (await signInAnonymously(auth)).user.uid;
     }, [auth]);
 
     const profilQuery = useQuery({
         queryKey: ['me', användare?.uid ?? null],
-        queryFn: async () => hämtaProfil(await token()),
+        queryFn: async () => hämtaProfil(användare!.uid, användare!.email),
         enabled: !!användare,
         staleTime: 5 * 60 * 1000,
         retry: 1,
@@ -97,20 +124,62 @@ export function KontoProvider({ children }: { children: ReactNode }) {
     const profil = användare ? profilQuery.data ?? null : null;
 
     const spara = useCallback(async (input: MeProfilIn) => {
-        const ny = await sparaProfil(await token(), input);
-        qc.setQueryData(['me', ny.uid], ny);
-        if (input.displayName && auth.currentUser) setAnvändare(tillAnvändare(auth.currentUser));
-    }, [token, qc, auth]);
+        const u = auth.currentUser;
+        if (!u || u.isAnonymous) throw new Error('Inte inloggad');
+        await sparaProfil(u.uid, u.email, input);
+        if (input.displayName) {
+            await updateProfile(u, { displayName: input.displayName.trim() }).catch(() => {});
+            setNamnSpegel(input.displayName.trim());
+        }
+        await qc.invalidateQueries({ queryKey: ['me', u.uid] });
+    }, [auth, qc]);
+
+    /**
+     * Logga in med en credential. En pågående ANONYM session länkas i stället
+     * (svar och tips följer med); finns kontot redan loggar vi in på det -
+     * då blir det anonyma kvar hos sitt uid, samma avvägning som webben.
+     */
+    const medCredential = useCallback(async (cred: AuthCredential) => {
+        const anon = auth.currentUser?.isAnonymous ? auth.currentUser : null;
+        let res: UserCredential;
+        if (anon) {
+            try {
+                res = await linkWithCredential(anon, cred);
+            } catch (e) {
+                const code = String((e as { code?: unknown })?.code ?? '');
+                if (!code.includes('credential-already-in-use') && !code.includes('email-already-in-use')) throw e;
+                res = await signInWithCredential(auth, cred);
+            }
+        } else {
+            res = await signInWithCredential(auth, cred);
+        }
+        const länkad = !!anon && res.user.uid === anon.uid;
+        if (länkad || getAdditionalUserInfo(res)?.isNewUser) {
+            await skapaGrundprofil(res.user.uid, res.user.email, res.user.displayName).catch(() => {});
+        }
+        return res;
+    }, [auth]);
 
     const registrera = useCallback(async (namn: string, email: string, lösen: string) => {
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), lösen);
+        const anon = auth.currentUser?.isAnonymous ? auth.currentUser : null;
+        let user: User;
+        if (anon) {
+            try {
+                user = (await linkWithCredential(anon, EmailAuthProvider.credential(email.trim(), lösen))).user;
+            } catch {
+                user = (await createUserWithEmailAndPassword(auth, email.trim(), lösen)).user;
+            }
+        } else {
+            user = (await createUserWithEmailAndPassword(auth, email.trim(), lösen)).user;
+        }
         if (namn.trim()) {
-            await updateProfile(cred.user, { displayName: namn.trim() });
-            setAnvändare(tillAnvändare(cred.user));
+            await updateProfile(user, { displayName: namn.trim() });
+            setNamnSpegel(namn.trim());
         }
         // Best effort - kontot finns redan, "Om dig" tar igen det som saknas.
-        await spara({ displayName: namn.trim() || undefined }).catch(() => {});
-    }, [auth, spara]);
+        await skapaGrundprofil(user.uid, user.email, namn.trim() || null).catch(() => {});
+        await qc.invalidateQueries({ queryKey: ['me', user.uid] });
+    }, [auth, qc]);
 
     const loggaIn = useCallback(async (email: string, lösen: string) => {
         await signInWithEmailAndPassword(auth, email.trim(), lösen);
@@ -123,9 +192,9 @@ export function KontoProvider({ children }: { children: ReactNode }) {
         if (!isSuccessResponse(svar)) return false;
         const idToken = svar.data.idToken;
         if (!idToken) throw new Error('Google gav inget idToken');
-        await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+        await medCredential(GoogleAuthProvider.credential(idToken));
         return true;
-    }, [auth]);
+    }, [medCredential]);
 
     const loggaInApple = useCallback(async () => {
         // Nonce: Apple får hashen, Firebase råvärdet - så ingen kan återanvända
@@ -140,15 +209,16 @@ export function KontoProvider({ children }: { children: ReactNode }) {
             nonce: hashad,
         });
         if (!svar.identityToken) throw new Error('Apple gav ingen identityToken');
-        const cred = await signInWithCredential(auth, AppleAuthProvider.credential(svar.identityToken, råNonce));
+        const cred = await medCredential(AppleAuthProvider.credential(svar.identityToken, råNonce));
         // Apple skickar namnet BARA första gången - spara det direkt.
         const namn = [svar.fullName?.givenName, svar.fullName?.familyName].filter(Boolean).join(' ');
         if (namn && !cred.user.displayName) {
             await updateProfile(cred.user, { displayName: namn });
-            await spara({ displayName: namn }).catch(() => {});
+            setNamnSpegel(namn);
+            await sparaProfil(cred.user.uid, cred.user.email, { displayName: namn }).catch(() => {});
         }
         return true;
-    }, [auth, spara]);
+    }, [medCredential]);
 
     const glömtLösen = useCallback(async (email: string) => {
         await sendPasswordResetEmail(auth, email.trim());
@@ -160,15 +230,22 @@ export function KontoProvider({ children }: { children: ReactNode }) {
         qc.removeQueries({ queryKey: ['me'] });
     }, [auth, qc]);
 
-    // Servern raderar data OCH Auth-kontot (App Store 5.1.1) - här loggar vi
-    // bara ut sessionen som inte längre har något konto bakom sig.
+    // App Store 5.1.1: radering inifrån appen. Samma ordning som webbens
+    // profilpanel - users-dokumentet först (best effort), sedan Auth-kontot.
+    // Auth kan kasta auth/requires-recent-login; felText förklarar då.
     const raderaKonto = useCallback(async () => {
-        await raderaKontot(await token());
-        await loggaUt();
-    }, [token, loggaUt]);
+        const u = auth.currentUser;
+        if (!u || u.isAnonymous) throw new Error('Inte inloggad');
+        await raderaAnvändarDoc(u.uid).catch(() => {});
+        await deleteUser(u);
+        await GoogleSignin.signOut().catch(() => {});
+        qc.removeQueries({ queryKey: ['me'] });
+    }, [auth, qc]);
 
     const value = useMemo<KontoState>(() => ({
         användare,
+        uid: råAnvändare?.uid ?? null,
+        säkerställIdentitet,
         profil,
         profilLaddar: !!användare && profilQuery.isLoading,
         behöverProfil: !!användare && !profilQuery.isLoading && !profil?.displayName,
@@ -181,8 +258,8 @@ export function KontoProvider({ children }: { children: ReactNode }) {
         sparaProfil: spara,
         loggaUt,
         raderaKonto,
-    }), [användare, profil, profilQuery.isLoading, appleFinns, registrera, loggaIn, loggaInGoogle, loggaInApple,
-        glömtLösen, spara, loggaUt, raderaKonto]);
+    }), [användare, råAnvändare, säkerställIdentitet, profil, profilQuery.isLoading, appleFinns, registrera, loggaIn,
+        loggaInGoogle, loggaInApple, glömtLösen, spara, loggaUt, raderaKonto]);
 
     return <KontoContext.Provider value={value}>{children}</KontoContext.Provider>;
 }

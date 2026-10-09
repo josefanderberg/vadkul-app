@@ -10,7 +10,7 @@ import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { CITIES, type AppFeedEvent } from '@vadkul/kontrakt';
-import { useAppFeed } from '@/api/appFeed';
+import { useEvent } from '@/api/useEvent';
 import { EventKort } from '@/components/EventKort';
 import { EventRad } from '@/components/EventRad';
 import { KategoriRad } from '@/components/KategoriRad';
@@ -25,13 +25,13 @@ export default function StadScreen() {
     const stad = CITIES.find(c => c.slug === slug);
     const { väljStad } = useRegionVal();
     const filter = useFilter();
-    const feed = useAppFeed(stad?.region ?? '');
+    const feed = useEvent(stad?.region ?? '');
     const [valt, setValt] = useState<AppFeedEvent | null>(null);
 
     const iOrten = useMemo(() => {
         if (!stad) return [];
         const nu = Date.now();
-        return stadensEvent(feed.data?.events ?? [], stad).filter(e => !isEventPast(e, nu));
+        return stadensEvent(feed.data ?? [], stad).filter(e => !isEventPast(e, nu));
     }, [feed.data, stad]);
     const synliga = useMemo(() => iOrten.filter(e => matcharFilter(e, filter)), [iOrten, filter]);
     const sektioner = useMemo(() => grupperaPerDag(synliga), [synliga]);

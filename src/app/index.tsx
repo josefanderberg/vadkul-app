@@ -15,12 +15,13 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
 import type { CameraRef, Expression, FilterSpecification, MapRef, StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
-import { useAppFeed } from '@/api/appFeed';
+import { hittaAnvändarEvent, useEvent } from '@/api/useEvent';
+import { fetchEventSomFlöde } from '@/api/eventDetalj';
 import { DagValjare } from '@/components/DagValjare';
 import { EventKort, type KortNav } from '@/components/EventKort';
 import { FilterBricka } from '@/components/FilterBricka';
@@ -60,7 +61,7 @@ const GRUPP_FILTER: FilterSpecification = ['>', ['get', 'antal'], 1];
 
 export default function KartScreen() {
     const { city, region, fromGps, manuell, klar, introKlar } = useRegionVal();
-    const feed = useAppFeed(region);
+    const feed = useEvent(region);
     const filter = useFilter();
     const { ärSparad } = useSparade();
     const nuMs = useNu();
@@ -76,7 +77,7 @@ export default function KartScreen() {
 
     // ── Underlaget: filter → period → ruta ────────────────────────────────
     const filtrerade = useMemo(
-        () => (feed.data?.events ?? []).filter(e => matcharFilter(e, filter)),
+        () => (feed.data ?? []).filter(e => matcharFilter(e, filter)),
         [feed.data, filter],
     );
     const iPeriod = useMemo(
@@ -163,6 +164,42 @@ export default function KartScreen() {
         setHistorik([]);
         ankareRef.current = null;
     };
+
+    // ── Djuplänken ?event= (webbens djuplänk; universella länkar /e/<slug>
+    // och notiserna landar här via src/app/e). Eventet öppnas DIREKT, på sin
+    // dag, och kameran flyger dit - valet är redan gjort. Finns det inte i det
+    // laddade flödet (annat län, användarskapat) hämtas det via /api/event.
+    // ?inb=1&fran=<uid> = Bjud med-inbjudan: bannern i svarsraden tills man
+    // stänger den eller väljer ett annat event.
+    const länk = useLocalSearchParams<{ event?: string; inb?: string; fran?: string }>();
+    const [inbjudan, setInbjudan] = useState<{ eventId: string; fran: string | null } | null>(null);
+    useEffect(() => {
+        const id = länk.event;
+        if (!id) return;
+        let aktiv = true;
+        (async () => {
+            const e = (feed.data ?? []).find(x => x.id === id)
+                ?? hittaAnvändarEvent(id)
+                ?? await fetchEventSomFlöde(id).catch(() => null);
+            if (!aktiv) return;
+            router.setParams({ event: undefined, inb: undefined, fran: undefined });
+            if (!e) return;
+            setLängd(1);
+            setOffset(Math.max(0, Math.min(13, dagOffset(e.time))));
+            cameraRef.current?.flyTo({ center: [e.lng, e.lat], zoom: 14, duration: 900 });
+            ankareRef.current = e;
+            setBesökta(new Set());
+            setHistorik([]);
+            setKort({ event: e, grupp: [e], frånLista: false });
+            setInbjudan(länk.inb ? { eventId: e.id, fran: länk.fran ?? null } : null);
+        })();
+        return () => { aktiv = false; };
+        // Bara när länken byts - flödet läses i stunden.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [länk.event]);
+    useEffect(() => {
+        if (inbjudan && kort?.event?.id !== inbjudan.eventId) setInbjudan(null);
+    }, [kort, inbjudan]);
 
     // Nästa: närmaste obesökta i bild (ovanför kortet, inte passerat), sedan
     // nästa dag med event i bild - inget nytt varv, kameran står still.
@@ -344,22 +381,29 @@ export default function KartScreen() {
                 <View style={styles.bootstrap} />
             )}
 
-            {/* Toppkromet: profil + skapa till vänster, dag/stads-plattan i
-                mitten (länken till stadssidan) med filterbrickorna under,
-                sök till höger. */}
+            {/* Toppkromet (ägarbeslut 7/10 kväll): profil till vänster,
+                dagplattan i mitten, FILTERKNAPPEN till höger. Sökknappen och
+                skapa-knappen som stod här är flyttade - + bor vid dagväljaren
+                och filtersymbolen äger hörnet.
+
+                Plattan är EN KAPSEL: staden stort överst och dagen i ett
+                ljusare chip längst ner, med rundade hörn bara nedtill (raka
+                mot staden). Fasta fillets och den mätande varianten är
+                PRÖVADE OCH RIVNA på webben - bygg inte om dem. */}
             <View style={styles.topKrom} pointerEvents="box-none">
                 <View style={styles.topKolumn}>
                     <Pressable style={styles.rundKnapp} onPress={() => router.push('/profil')} accessibilityLabel="Profil">
                         <Text style={styles.rundIkon}>👤</Text>
                     </Pressable>
-                    <Pressable style={styles.skapaKnapp} onPress={skapa} accessibilityLabel="Skapa event">
-                        <Text style={styles.skapaIkon}>＋</Text>
-                    </Pressable>
                 </View>
                 <View style={styles.mittKolumn} pointerEvents="box-none">
                     <Pressable style={styles.periodPlatta} onPress={() => router.push(`/stad/${city.slug}`)}>
-                        <Text style={styles.periodText}>{periodLabel(offset, längd)}</Text>
-                        <Text style={styles.periodStad}>{city.name.toUpperCase()}</Text>
+                        <View style={styles.stadRad}>
+                            <Text style={styles.stadText} numberOfLines={1}>{city.name}</Text>
+                        </View>
+                        <View style={styles.dagChip}>
+                            <Text style={styles.dagText}>{periodLabel(offset, längd).toUpperCase()}</Text>
+                        </View>
                     </Pressable>
                     <FilterBricka />
                     {feed.isLoading ? (
@@ -374,8 +418,15 @@ export default function KartScreen() {
                     ) : null}
                 </View>
                 <View style={styles.topKolumn}>
-                    <Pressable style={styles.rundKnapp} onPress={() => router.push('/sok')} accessibilityLabel="Sök">
-                        <Text style={styles.rundIkon}>🔍</Text>
+                    {/* Filtersymbolen öppnar sökskärmen - appens motsvarighet
+                        till webbens sökark (sökfält + kategorichips, inga
+                        event förrän man sökt). Blå när kartfiltret är på. */}
+                    <Pressable
+                        style={[styles.rundKnapp, filter.aktivt && styles.rundKnappPå]}
+                        onPress={() => router.push('/sok')}
+                        accessibilityLabel="Sök och filtrera"
+                    >
+                        <Text style={[styles.rundIkon, filter.aktivt && styles.rundIkonPå]}>☰</Text>
                     </Pressable>
                 </View>
             </View>
@@ -401,6 +452,7 @@ export default function KartScreen() {
                 hemmadag={hemmadag}
                 onOffset={setOffset}
                 onLängd={setLängd}
+                onSkapa={skapa}
             />
 
             {kort ? (
@@ -417,6 +469,9 @@ export default function KartScreen() {
                     stad={{ slug: city.slug, name: city.name }}
                     onVälj={väljUrLista}
                     nav={nav}
+                    inbjudan={inbjudan && kort.event?.id === inbjudan.eventId
+                        ? { fran: inbjudan.fran, onStäng: () => setInbjudan(null) }
+                        : null}
                     onClose={stängKort}
                 />
             ) : null}
@@ -455,37 +510,39 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         elevation: 4,
     },
-    rundIkon: { fontSize: 19 },
-    skapaKnapp: {
-        width: KNAPP,
-        height: KNAPP,
-        borderRadius: KNAPP / 2,
-        backgroundColor: '#1d4ed8',
-        borderWidth: 3,
-        borderColor: '#FECC02',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOpacity: 0.2,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 4,
-    },
-    skapaIkon: { fontSize: 24, fontWeight: '700', color: '#ffffff', marginTop: -2 },
+    rundIkon: { fontSize: 19, color: '#0f172a' },
+    rundKnappPå: { backgroundColor: '#006AA7' },
+    rundIkonPå: { color: '#ffffff' },
+    /** EN kapsel: stadsraden överst, dagchipet inuti längst ner. Insatsen
+     *  (6) är skillnaden mellan kapselns radie (22) och chipets (16), så
+     *  hörnen blir koncentriska oavsett textlängd - ingen mätning. */
     periodPlatta: {
         backgroundColor: MÖRK,
-        borderRadius: 24,
-        paddingHorizontal: 28,
-        paddingVertical: 10,
-        alignItems: 'center',
+        borderRadius: 22,
+        paddingHorizontal: 6,
+        paddingBottom: 6,
+        alignItems: 'stretch',
+        minWidth: 150,
+        maxWidth: 260,
         shadowColor: '#000',
         shadowOpacity: 0.25,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 3 },
         elevation: 6,
     },
-    periodText: { fontSize: 19, fontWeight: '800', color: '#ffffff' },
-    periodStad: { marginTop: 1, fontSize: 11, fontWeight: '700', color: '#cbd5e1', letterSpacing: 1.6 },
+    /** Stadsraden är 44 px - i lod med profilknappen. */
+    stadRad: { height: 44, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14 },
+    stadText: { fontSize: 22, fontWeight: '800', color: '#ffffff' },
+    /** Dagchipet: ljusare yta, rundat BARA nedtill (22 - insatsen 6 = 16). */
+    dagChip: {
+        alignSelf: 'stretch',
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16,
+        paddingVertical: 4,
+        alignItems: 'center',
+    },
+    dagText: { fontSize: 12, fontWeight: '800', color: '#e2e8f0', letterSpacing: 1.4 },
     laddPill: {
         flexDirection: 'row',
         alignItems: 'center',

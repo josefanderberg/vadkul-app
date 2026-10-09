@@ -10,6 +10,7 @@
  * kart-ui). "Har varit" = ALLA i gruppen passerade → brickan dimmas.
  */
 import type { AppFeedEvent } from '@vadkul/kontrakt';
+import { ärEgetVadkulEvent, type AppEvent } from './appEvent';
 import { brickaIkon } from './brickor';
 import { isEventPast } from './harVarit';
 import { kategoriFor } from './kategorier';
@@ -28,10 +29,10 @@ export interface BrickProps {
 }
 
 export function byggBrickor(
-    events: readonly AppFeedEvent[],
+    events: readonly AppEvent[],
     opts: { nowMs: number; valtId?: string | null; ärSparad?: (id: string) => boolean },
 ): GeoJSON.FeatureCollection<GeoJSON.Point, BrickProps> {
-    const grupper = new Map<string, AppFeedEvent[]>();
+    const grupper = new Map<string, AppEvent[]>();
     for (const e of events) {
         const k = platsNyckel(e);
         const g = grupper.get(k);
@@ -47,16 +48,17 @@ export function byggBrickor(
         const past = levande.length === 0;
         const guld = isTicketmasterEvent(rep);
         const sparad = !!opts.ärSparad && grupp.some(e => opts.ärSparad!(e.id));
+        const grön = ärEgetVadkulEvent(rep);
         features.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [rep.lng, rep.lat] },
             properties: {
                 id: rep.id,
-                ikon: brickaIkon({ category: String(rep.category), pop: rep.pop === true, guld, sparad, vald: !!vald }),
+                ikon: brickaIkon({ category: String(rep.category), pop: rep.pop === true, guld, sparad, grön, vald: !!vald }),
                 label: kategoriFor(String(rep.category)).kort,
                 antal: grupp.length,
                 past,
-                sort: vald ? 4 : past ? 0 : guld || rep.pop ? 2 : 1,
+                sort: vald ? 4 : past ? 0 : guld || grön || rep.pop ? 2 : 1,
             },
         });
     }

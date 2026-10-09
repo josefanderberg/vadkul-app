@@ -11,16 +11,29 @@
       "bundleIdentifier": "se.vadkul.app",
       "icon": "./assets/images/icon.png",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "VADKUL använder din plats för att visa event nära dig och välja rätt län för eventflödet."
+        "NSLocationWhenInUseUsageDescription": "VADKUL använder din plats för att visa event nära dig och välja rätt län för eventflödet.",
+        "UIBackgroundModes": [
+          "remote-notification",
+          "remote-notification"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       },
       "googleServicesFile": "./GoogleService-Info.plist",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "associatedDomains": [
+        "applinks:vadkul.se",
+        "applinks:vadkul.se"
+      ],
+      "entitlements": {
+        "aps-environment": "production"
+      }
     },
     "android": {
       "package": "se.vadkul.app",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#006aa7",
@@ -29,7 +42,34 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "vadkul.se",
+              "pathPrefix": "/e/"
+            },
+            {
+              "scheme": "https",
+              "host": "vadkul.se",
+              "pathPrefix": "/evenemang/"
+            },
+            {
+              "scheme": "https",
+              "host": "vadkul.se",
+              "pathPrefix": "/arrangor/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "output": "static",
@@ -57,6 +97,16 @@
             "useFrameworks": "dynamic"
           }
         }
+      ],
+      "@react-native-firebase/messaging",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "VADKUL använder dina bilder när du lägger till en omslagsbild på ett event du skapar.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
       ]
     ],
     "experiments": {
@@ -69,6 +119,12 @@
         "projectId": "f01f79f6-725b-4b7b-a20e-7f577db7d8d2"
       }
     },
-    "owner": "josefanderberg"
+    "owner": "josefanderberg",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/f01f79f6-725b-4b7b-a20e-7f577db7d8d2"
+    }
   }
 }

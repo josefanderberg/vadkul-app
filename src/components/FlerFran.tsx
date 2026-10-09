@@ -4,8 +4,8 @@
  * arrangör (urvalet i lib/arrangorsRad - källdomänen, se app-anpassningen
  * där), brickor med BILD-FYRKANT till vänster ("bilder i dem också om det
  * finns, fast i en fyrkant åt vänster") och emoji-fyrkant som reserv,
- * "Arrangörssidan →" när sluggen finns (öppnar webbens /arrangor/<slug> -
- * appen har ingen egen arrangörsskärm), och under raden länken till
+ * "Alla event från {namn} →" när sluggen finns (appens arrangörsskärm
+ * src/app/arrangor sedan 8/10, förr webbens sida), och under raden länken till
  * stadssidan (appens /stad/<slug>). Webbens ?q=-medföljning till stadssidan
  * utelämnas - appens stadsskärm har inget sökfält än. Bara i infovyn
  * (EventKort gömmer raden under kortsökning).
@@ -13,7 +13,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import type { ArrangörsRad } from '@/lib/arrangorsRad';
 import { formatEventTid } from '@/lib/eventTid';
@@ -22,12 +21,15 @@ import { kategoriFor } from '@/lib/kategorier';
 export function FlerFran({
     rad,
     stad,
+    stadAntal,
     onVälj,
 }: {
     /** null = ingen arrangörsrad (lib/arrangorsRad) - stadslänken visas ändå. */
     rad: ArrangörsRad | null;
     /** Stadssidelänken - utelämnas på stadsskärmen (man är redan där). */
     stad: { slug: string; name: string } | null;
+    /** Månaden-flikens tal - underraden i stadsknappen (7/10 kväll). */
+    stadAntal: number | null;
     onVälj: (e: AppFeedEvent) => void;
 }) {
     if (!rad && !stad) return null;
@@ -37,14 +39,6 @@ export function FlerFran({
                 <View style={styles.radYta}>
                     <View style={styles.rubrikRad}>
                         <Text style={styles.rubrik} numberOfLines={1}>FLER FRÅN {rad.namn.toUpperCase()}</Text>
-                        {rad.slug ? (
-                            <Pressable
-                                onPress={() => WebBrowser.openBrowserAsync(`https://vadkul.se/arrangor/${rad.slug}`)}
-                                hitSlop={8}
-                            >
-                                <Text style={styles.sidLänk}>ARRANGÖRSSIDAN →</Text>
-                            </Pressable>
-                        ) : null}
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.brickRad}>
                         {rad.rader.map(e => (
@@ -69,15 +63,31 @@ export function FlerFran({
                             </Pressable>
                         ))}
                     </ScrollView>
+                    {/* Konturknapp i stället för den lilla textlänken
+                        (ägarbeslut 7/10 kväll) - sekundär, så den blå
+                        stadsknappen behåller tyngden. */}
+                    {rad.slug ? (
+                        <Pressable
+                            onPress={() => router.push({ pathname: '/arrangor/[slug]', params: { slug: rad.slug! } })}
+                            style={({ pressed }) => [styles.arrangörKnapp, pressed && styles.tryckt]}
+                        >
+                            <Text style={styles.arrangörText} numberOfLines={1}>Alla event från {rad.namn} →</Text>
+                        </Pressable>
+                    ) : null}
                 </View>
             ) : null}
             {stad ? (
+                /* Riktig knapp, inte en textlänk (ägarbeslut 7/10 kväll:
+                   "mer av en knapp som visar hur många de är kommande
+                   månaden i den staden"). */
                 <Pressable
                     onPress={() => router.push(`/stad/${stad.slug}`)}
-                    style={({ pressed }) => [styles.stadRad, pressed && styles.tryckt]}
+                    style={({ pressed }) => [styles.stadKnapp, pressed && styles.tryckt]}
                 >
-                    <Text style={styles.stadText}>Allt som händer i {stad.name}</Text>
-                    <Text style={styles.stadPil}>→</Text>
+                    <Text style={styles.stadText}>Allt som händer i {stad.name} →</Text>
+                    {stadAntal != null ? (
+                        <Text style={styles.stadAntal}>{stadAntal} event kommande månaden</Text>
+                    ) : null}
                 </Pressable>
             ) : null}
         </View>
@@ -124,17 +134,27 @@ const styles = StyleSheet.create({
     brickText: { flex: 1 },
     brickTid: { fontSize: 10, fontWeight: '800', color: '#94a3b8', letterSpacing: 0.8 },
     brickTitel: { marginTop: 2, fontSize: 12, fontWeight: '700', color: '#e2e8f0', lineHeight: 16 },
-    stadRad: {
-        flexDirection: 'row',
+    arrangörKnapp: {
+        marginTop: 10,
+        marginHorizontal: 16,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: '#3f4650',
+        paddingVertical: 9,
         alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-        paddingHorizontal: 16,
-        paddingVertical: 11,
-        borderTopWidth: 1,
-        borderTopColor: '#2a2e37',
     },
-    stadText: { flex: 1, fontSize: 13, fontWeight: '800', color: '#5aa2ff' },
-    stadPil: { fontSize: 14, fontWeight: '800', color: '#5aa2ff' },
+    arrangörText: { fontSize: 13, fontWeight: '800', color: '#cbd5e1' },
+    stadKnapp: {
+        marginTop: 14,
+        marginHorizontal: 16,
+        marginBottom: 2,
+        borderRadius: 14,
+        backgroundColor: '#006AA7',
+        paddingVertical: 11,
+        paddingHorizontal: 14,
+        alignItems: 'center',
+    },
+    stadText: { fontSize: 14, fontWeight: '800', color: '#ffffff' },
+    stadAntal: { marginTop: 2, fontSize: 12, fontWeight: '600', color: '#cfe4f5' },
     tryckt: { opacity: 0.8 },
 });

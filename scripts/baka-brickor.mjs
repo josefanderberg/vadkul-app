@@ -27,9 +27,9 @@ const puppeteer = req('puppeteer');
 const bundle = await esbuild.build({
     stdin: {
         contents: `
-            import { makeBrickaImageData } from './components/v2/v2MapBricka';
+            import { makeBrickaImageData, USER_EVENT_HEX } from './components/v2/v2MapBricka';
             import { EVENT_CATEGORIES } from './utils/categories';
-            window.__baka = { makeBrickaImageData, EVENT_CATEGORIES };
+            window.__baka = { makeBrickaImageData, EVENT_CATEGORIES, USER_EVENT_HEX };
         `,
         resolveDir: join(huvudRot, 'apps/web/src'),
         loader: 'ts',
@@ -50,6 +50,9 @@ const VARIANTER = {
     'sparad-vald': { selected: true, saved: true, gold: false, pop: false },
     guld: { selected: false, saved: false, gold: true, pop: false },
     'guld-vald': { selected: true, saved: false, gold: true, pop: false },
+    // Egna VADKUL-event: smaragdgrön kropp oavsett kategori (webbens brickaBodyHex).
+    gron: { selected: false, saved: false, gold: false, pop: false, grön: true },
+    'gron-vald': { selected: true, saved: false, gold: false, pop: false, grön: true },
 };
 
 const browser = await puppeteer.launch({ headless: true });
@@ -58,12 +61,12 @@ try {
     await page.setContent('<!doctype html><meta charset="utf-8"><body></body>');
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     const bilder = await page.evaluate((varianter) => {
-        const { makeBrickaImageData, EVENT_CATEGORIES } = window.__baka;
+        const { makeBrickaImageData, EVENT_CATEGORIES, USER_EVENT_HEX } = window.__baka;
         const ut = {};
         for (const [cat, def] of Object.entries(EVENT_CATEGORIES)) {
             for (const [namn, v] of Object.entries(varianter)) {
                 // makeBrickaImageData(emoji, bodyColor, selected, saved, wish, starred, count, gold, pop)
-                const res = makeBrickaImageData(def.emoji, def.markerHex, v.selected, v.saved, false, false, 0, v.gold, v.pop);
+                const res = makeBrickaImageData(def.emoji, v.grön ? USER_EVENT_HEX : def.markerHex, v.selected, v.saved, false, false, 0, v.gold, v.pop);
                 const c = document.createElement('canvas');
                 c.width = res.data.width;
                 c.height = res.data.height;

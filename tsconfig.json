@@ -8,6 +8,9 @@
       ],
       "@/assets/*": [
         "./assets/*"
+      ],
+      "@vadkul/kontrakt": [
+        "./kontrakt/index.ts"
       ]
     }
   },

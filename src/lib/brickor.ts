@@ -5,7 +5,9 @@
  * ritkod (scripts/baka-brickor.mjs → assets/brickor/ + brickBilder.generated).
  *
  * Varianterna följer webbens makeBrickaImageData-prioritet:
- *   kropp: guld (Ticketmaster, ägarbeslut 1/9) > sparad (vit) > kategorifärg
+ *   kropp: guld (Ticketmaster, ägarbeslut 1/9) > sparad (vit) > grön (VADKUL-
+ *          värdat användarevent, webbens USER_EVENT_HEX - tips är INTE gröna) >
+ *          kategorifärg
  *   kant:  vald (vit ram) > guld/sparad > 🔥 pop (tjockare) > vanlig
  *
  * MEDVETEN AVGRÄNSNING: kategorins standard-emoji, inte eventets fria
@@ -23,13 +25,15 @@ export interface BrickTillstånd {
     pop?: boolean;
     guld?: boolean;
     sparad?: boolean;
+    /** Eget VADKUL-event (lib/appEvent ärEgetVadkulEvent) - smaragdgrön kropp. */
+    grön?: boolean;
     vald?: boolean;
 }
 
 /** Bildnyckeln i registret för en bricka. Okänd kategori → other (webbens fallback). */
 export function brickaIkon(t: BrickTillstånd): string {
     const cat = (EVENT_CATEGORY_KEYS as readonly string[]).includes(t.category) ? t.category : 'other';
-    const kropp = t.guld ? 'guld' : t.sparad ? 'sparad' : '';
+    const kropp = t.guld ? 'guld' : t.sparad ? 'sparad' : t.grön ? 'gron' : '';
     let variant: string;
     if (kropp) variant = t.vald ? `${kropp}-vald` : kropp;
     else variant = t.vald ? 'vald' : t.pop ? 'pop' : '';

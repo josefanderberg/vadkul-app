@@ -25,11 +25,13 @@ import {
 import { router } from 'expo-router';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
 import { useRegionVal } from '@/lib/regionContext';
+import { KONTON_PÅ } from '@/lib/funktioner';
 
 const BLÅ = '#006aa7';
 const MOLN = require('../../assets/images/splash-icon.png');
 
-const SIDOR = 5;
+/** Kontosidan utgår i v1 (lib/funktioner: KONTON_PÅ) - då är platsfrågan sista steget. */
+const SIDOR = KONTON_PÅ ? 5 : 4;
 const PLATS_SIDA = 3;
 
 export default function IntroScreen() {
@@ -135,34 +137,36 @@ export default function IntroScreen() {
                     )}
                 </Sida>
 
-                <Sida width={width}>
-                    <Image source={MOLN} style={styles.litetMoln} resizeMode="contain" />
-                    <Text style={styles.rubrik}>Skapa ett konto</Text>
-                    <View style={styles.fördelar}>
-                        {[
-                            ['👤', 'Samma konto här och på vadkul.se'],
-                            ['📍', 'Din stad sparas - kartan och tipsen blir dina'],
-                            ['✨', 'Önska och skapa egna event'],
-                        ].map(([ikon, text]) => (
-                            <View key={text} style={styles.fördelRad}>
-                                <Text style={styles.fördelIkon}>{ikon}</Text>
-                                <Text style={styles.fördel}>{text}</Text>
-                            </View>
-                        ))}
-                    </View>
-                    <Pressable
-                        style={({ pressed }) => [styles.knappVit, pressed && styles.tryckt]}
-                        onPress={() => klar('/konto?lage=skapa')}
-                    >
-                        <Text style={styles.knappVitText}>Skapa konto</Text>
-                    </Pressable>
-                    <Pressable style={styles.knappKant} onPress={() => klar('/konto?lage=logga-in')}>
-                        <Text style={styles.knappKantText}>Jag har redan ett konto</Text>
-                    </Pressable>
-                    <Pressable onPress={() => klar()} hitSlop={10}>
-                        <Text style={styles.utan}>Fortsätt utan konto</Text>
-                    </Pressable>
-                </Sida>
+                {KONTON_PÅ ? (
+                    <Sida width={width}>
+                        <Image source={MOLN} style={styles.litetMoln} resizeMode="contain" />
+                        <Text style={styles.rubrik}>Skapa ett konto</Text>
+                        <View style={styles.fördelar}>
+                            {[
+                                ['👤', 'Samma konto här och på vadkul.se'],
+                                ['📍', 'Din stad sparas - kartan och tipsen blir dina'],
+                                ['✨', 'Önska och skapa egna event'],
+                            ].map(([ikon, text]) => (
+                                <View key={text} style={styles.fördelRad}>
+                                    <Text style={styles.fördelIkon}>{ikon}</Text>
+                                    <Text style={styles.fördel}>{text}</Text>
+                                </View>
+                            ))}
+                        </View>
+                        <Pressable
+                            style={({ pressed }) => [styles.knappVit, pressed && styles.tryckt]}
+                            onPress={() => klar('/konto?lage=skapa')}
+                        >
+                            <Text style={styles.knappVitText}>Skapa konto</Text>
+                        </Pressable>
+                        <Pressable style={styles.knappKant} onPress={() => klar('/konto?lage=logga-in')}>
+                            <Text style={styles.knappKantText}>Jag har redan ett konto</Text>
+                        </Pressable>
+                        <Pressable onPress={() => klar()} hitSlop={10}>
+                            <Text style={styles.utan}>Fortsätt utan konto</Text>
+                        </Pressable>
+                    </Sida>
+                ) : null}
             </ScrollView>
 
             <View style={styles.fot}>
@@ -178,8 +182,15 @@ export default function IntroScreen() {
                     >
                         <Text style={styles.nästaText}>{sida === PLATS_SIDA && !platsSvar ? 'Inte nu' : 'Nästa'}</Text>
                     </Pressable>
-                ) : (
+                ) : KONTON_PÅ ? (
                     <View style={styles.nästaPlats} />
+                ) : (
+                    <Pressable
+                        style={({ pressed }) => [styles.nästa, pressed && styles.tryckt]}
+                        onPress={() => klar()}
+                    >
+                        <Text style={styles.nästaText}>{platsSvar ? 'Kom igång' : 'Inte nu'}</Text>
+                    </Pressable>
                 )}
             </View>
         </View>

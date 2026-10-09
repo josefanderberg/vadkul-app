@@ -11,11 +11,15 @@
  *  - FLER-KÄLLAN = "visa bara källan", även om den inte är ikryssad; den släpper
  *    kategorin och 🔥 (det sköts av den som sätter state, se väljKälla).
  *
- * Appflödet bär inga användarskapade event och ingen boost, så webbens bypass
- * för dem finns inte här. Familj-opt-in gäller bara inloggade vuxna utan barn
- * (utils/familyFilter) - appen har inga konton ännu, så 🧸 syns alltid.
+ *  - ANVÄNDARSKAPADE event (sedan 8/10 i appen, api/useEvent) är sajtens kärna
+ *    och kringgår HELA filtret, även ett aktivt kategorival - webbens första rad.
+ *
+ * Appen visar ingen boost, så webbens boost-bypass finns inte här. Familj-
+ * opt-in gäller bara inloggade vuxna utan barn (utils/familyFilter) - inte
+ * portat än, så 🧸 syns alltid.
  */
 import type { AppFeedEvent, EventCategoryType } from '@vadkul/kontrakt';
+import type { AppEvent } from './appEvent';
 
 export type KällNyckel = 'svenskakyrkan' | 'pro' | 'korpen';
 
@@ -62,11 +66,12 @@ export const TOMT_FILTER: KartFilter = { kategori: null, populärt: false, käll
 /** Syns eventet med det här filtret? `kategori`/`källa` kan skickas separat
  *  så kategoriradens siffror räknas med exakt samma regler (webbens mönster). */
 export function matcharFilter(
-    e: AppFeedEvent,
+    e: AppEvent,
     f: KartFilter,
     kategori: EventCategoryType | null = f.kategori,
     källa: KällNyckel | null = f.källa,
 ): boolean {
+    if (e.userCreated) return true;
     if (f.populärt && e.pop !== true) return false;
     const src = klassaKälla(e);
     if (källa) return src === källa;

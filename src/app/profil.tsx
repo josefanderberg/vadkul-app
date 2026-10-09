@@ -2,25 +2,96 @@
  * Profil - webbens ProfilePanel: kontot (inloggning, "Om dig", utloggning och
  * radering - App Store 5.1.1 kräver radering inifrån appen), sparade event
  * (hjärtat, sparat på enheten), "Visa även på kartan" (Svenska kyrkan/PRO -
- * opt-in-källorna, kart-ui 15/9) och din stad. Mina event och notiser kommer
- * i nästa steg av plattformsplanens fas 3.
+ * opt-in-källorna, kart-ui 15/9), din stad och - för inloggade - NOTISER
+ * (sedan 8/10, webbens två reglage): påminnelse 1 h före sparade event är
+ * per ENHET (FCM-token, data/push) och veckans helgtips är per KONTO
+ * (users.weeklyDigest, default på - functions/digest kräver även citySlug).
  *
  * HÅRD REGEL (CLAUDE.md): appen säljer ingenting - ingen boost, inga priser.
  */
-import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { EventKort } from '@/components/EventKort';
 import { EventRad } from '@/components/EventRad';
 import { useFilter } from '@/lib/filterContext';
+import { KONTON_PÅ } from '@/lib/funktioner';
 import { isEventPast } from '@/lib/harVarit';
 import { KÄLLOR } from '@/lib/kartFilter';
 import { useKonto } from '@/lib/kontoContext';
 import { felText } from '@/lib/kontoFel';
 import { useRegionVal } from '@/lib/regionContext';
 import { useSparade } from '@/lib/sparadeContext';
+import { läsFält, sättFält } from '@/data/anvandare';
+import { pushTillstånd, slåAvPush, slåPåPush, type PushTillstånd } from '@/data/push';
+
+/** Notisreglagen - bara för inloggade (påminnelsejobbet frågar kontots
+ *  sparade event, helgtipset kontots stad). */
+function Notiser({ uid, harStad }: { uid: string; harStad: boolean }) {
+    const [push, setPush] = useState<PushTillstånd | null>(null);
+    const [helgtips, setHelgtips] = useState(true);
+    const [upptagen, setUpptagen] = useState(false);
+    useEffect(() => {
+        void pushTillstånd().then(setPush);
+        void läsFält(uid).then(d => setHelgtips(d?.weeklyDigest !== false)).catch(() => {});
+    }, [uid]);
+
+    const växlaPush = async () => {
+        if (upptagen) return;
+        setUpptagen(true);
+        try {
+            if (push === 'på') {
+                await slåAvPush(uid);
+                setPush('ej-frågad');
+            } else {
+                const r = await slåPåPush(uid);
+                if (r === 'nekad') {
+                    setPush('nekad');
+                    Alert.alert('Notiser är avstängda', 'Slå på notiser för VADKUL i telefonens inställningar.', [
+                        { text: 'Inte nu', style: 'cancel' },
+                        { text: 'Öppna inställningar', onPress: () => void Linking.openSettings() },
+                    ]);
+                } else if (r === 'fel') {
+                    Alert.alert('Kunde inte slå på notiser', 'Försök igen om en stund.');
+                } else {
+                    setPush('på');
+                }
+            }
+        } finally {
+            setUpptagen(false);
+        }
+    };
+    const växlaHelgtips = () => {
+        const nästa = !helgtips;
+        setHelgtips(nästa);
+        sättFält(uid, { weeklyDigest: nästa }).catch(() => {
+            setHelgtips(!nästa);
+            Alert.alert('Kunde inte spara', 'Försök igen om en stund.');
+        });
+    };
+
+    return (
+        <>
+            <Text style={styles.sektion}>Notiser</Text>
+            <View style={styles.kort}>
+                <View style={styles.växelRad}>
+                    <Text style={[styles.växelText, styles.växelEtikett]}>🔔 Notiser på den här telefonen</Text>
+                    <Switch value={push === 'på'} onValueChange={() => void växlaPush()} disabled={push === null || upptagen} />
+                </View>
+                <Text style={styles.kortHjalp}>Påminnelse en timme innan event du sparat med hjärtat.</Text>
+                <View style={[styles.växelRad, styles.växelRadLuft]}>
+                    <Text style={[styles.växelText, styles.växelEtikett]}>Veckans helgtips (torsdagar)</Text>
+                    <Switch value={helgtips} onValueChange={växlaHelgtips} />
+                </View>
+                {!harStad ? (
+                    <Text style={styles.kortHjalp}>Välj din stad under Redigera profil så vet vi vilka tips du ska få.</Text>
+                ) : null}
+            </View>
+        </>
+    );
+}
 
 export default function ProfilScreen() {
     const { city, fromGps, manuell } = useRegionVal();
@@ -55,42 +126,47 @@ export default function ProfilScreen() {
                 </Pressable>
             </View>
             <ScrollView contentContainerStyle={styles.innehåll}>
-                <Text style={styles.sektion}>Konto</Text>
-                {konto.användare ? (
-                    <View style={styles.kort}>
-                        <Text style={styles.kortText}>{konto.profil?.displayName ?? konto.användare.displayName ?? 'Inloggad'}</Text>
-                        {konto.användare.email ? <Text style={styles.kortHjalp}>{konto.användare.email}</Text> : null}
-                        {konto.profil?.city ? <Text style={styles.kortHjalp}>📍 {konto.profil.city}</Text> : null}
-                        <Pressable
-                            style={({ pressed }) => [styles.knapp, pressed && styles.tryckt]}
-                            onPress={() => router.push('/konto?lage=om-dig')}
-                        >
-                            <Text style={styles.knappText}>{konto.behöverProfil ? 'Fyll i din profil' : 'Redigera profil'}</Text>
-                        </Pressable>
-                        <View style={styles.kontoRad}>
-                            <Pressable onPress={() => konto.loggaUt()} hitSlop={8}>
-                                <Text style={styles.länk}>Logga ut</Text>
+                {KONTON_PÅ ? (
+                    <>
+                    <Text style={styles.sektion}>Konto</Text>
+                    {konto.användare ? (
+                        <View style={styles.kort}>
+                            <Text style={styles.kortText}>{konto.profil?.displayName ?? konto.användare.displayName ?? 'Inloggad'}</Text>
+                            {konto.användare.email ? <Text style={styles.kortHjalp}>{konto.användare.email}</Text> : null}
+                            {konto.profil?.city ? <Text style={styles.kortHjalp}>📍 {konto.profil.city}</Text> : null}
+                            <Pressable
+                                style={({ pressed }) => [styles.knapp, pressed && styles.tryckt]}
+                                onPress={() => router.push('/konto?lage=om-dig')}
+                            >
+                                <Text style={styles.knappText}>{konto.behöverProfil ? 'Fyll i din profil' : 'Redigera profil'}</Text>
                             </Pressable>
-                            <Pressable onPress={radera} hitSlop={8}>
-                                <Text style={styles.raderaLänk}>Radera konto</Text>
+                            <View style={styles.kontoRad}>
+                                <Pressable onPress={() => konto.loggaUt()} hitSlop={8}>
+                                    <Text style={styles.länk}>Logga ut</Text>
+                                </Pressable>
+                                <Pressable onPress={radera} hitSlop={8}>
+                                    <Text style={styles.raderaLänk}>Radera konto</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={styles.kort}>
+                            <Text style={styles.kortText}>Du är inte inloggad.</Text>
+                            <Text style={styles.kortHjalp}>Samma konto funkar här och på vadkul.se.</Text>
+                            <Pressable
+                                style={({ pressed }) => [styles.knapp, pressed && styles.tryckt]}
+                                onPress={() => router.push('/konto?lage=skapa')}
+                            >
+                                <Text style={styles.knappText}>Skapa konto</Text>
+                            </Pressable>
+                            <Pressable onPress={() => router.push('/konto?lage=logga-in')} hitSlop={8}>
+                                <Text style={[styles.länk, styles.centrerad]}>Logga in</Text>
                             </Pressable>
                         </View>
-                    </View>
-                ) : (
-                    <View style={styles.kort}>
-                        <Text style={styles.kortText}>Du är inte inloggad.</Text>
-                        <Text style={styles.kortHjalp}>Samma konto funkar här och på vadkul.se.</Text>
-                        <Pressable
-                            style={({ pressed }) => [styles.knapp, pressed && styles.tryckt]}
-                            onPress={() => router.push('/konto?lage=skapa')}
-                        >
-                            <Text style={styles.knappText}>Skapa konto</Text>
-                        </Pressable>
-                        <Pressable onPress={() => router.push('/konto?lage=logga-in')} hitSlop={8}>
-                            <Text style={[styles.länk, styles.centrerad]}>Logga in</Text>
-                        </Pressable>
-                    </View>
-                )}
+                    )}
+                    {konto.användare ? <Notiser uid={konto.användare.uid} harStad={!!konto.profil?.citySlug} /> : null}
+                    </>
+                ) : null}
 
                 <Text style={styles.sektion}>♥ Sparade event</Text>
                 {sparade.length === 0 ? (
@@ -178,6 +254,8 @@ const styles = StyleSheet.create({
     kortHjalp: { marginTop: 6, fontSize: 13, color: '#475569' },
     växelRad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
     växelText: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
+    växelEtikett: { flex: 1, paddingRight: 12 },
+    växelRadLuft: { marginTop: 10 },
     hjärta: { fontSize: 22, color: '#e11d48', paddingHorizontal: 6 },
     knapp: { marginTop: 12, borderRadius: 999, backgroundColor: '#0f172a', paddingVertical: 10, alignItems: 'center' },
     tryckt: { opacity: 0.85 },

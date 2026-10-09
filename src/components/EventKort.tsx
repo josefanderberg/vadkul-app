@@ -46,13 +46,16 @@ import {
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { eventShareSlug, type AppFeedEvent } from '@vadkul/kontrakt';
+import type { AppEvent } from '@/lib/appEvent';
+import { seriensRytm } from '@/lib/anvandarEvent';
 import { useEventDetalj } from '@/api/eventDetalj';
 import { EventRad } from '@/components/EventRad';
 import { FlerFran } from '@/components/FlerFran';
+import { Rapportera } from '@/components/Rapportera';
 import { HelskarmsBild } from '@/components/HelskarmsBild';
 import { KategoriRad } from '@/components/KategoriRad';
 import { RsvpFooter } from '@/components/RsvpFooter';
-import { arrangörsRad } from '@/lib/arrangorsRad';
+import { arrangörsRad, källDomän } from '@/lib/arrangorsRad';
 import { periodLabel } from '@/lib/dagar';
 import { descriptionText, eventOutlink, hostLabelFor } from '@/lib/eventDetalj';
 import { formatTidSpann } from '@/lib/eventTid';
@@ -98,10 +101,11 @@ export function EventKort({
     stad = null,
     onVälj,
     nav,
+    inbjudan = null,
     onClose,
 }: {
     /** Valt event; null = väljarlistan över `grupp`. */
-    event: AppFeedEvent | null;
+    event: AppEvent | null;
     /** Eventen på samma plats (väljarlistan + pagern). */
     grupp?: AppFeedEvent[];
     onVäljIGrupp?: (e: AppFeedEvent) => void;
@@ -118,6 +122,8 @@ export function EventKort({
     stad?: { slug: string; name: string } | null;
     onVälj?: (e: AppFeedEvent) => void;
     nav?: KortNav;
+    /** Kom man via en Bjud med-länk (?inb=1&fran=) - bannern i svarsraden. */
+    inbjudan?: { fran: string | null; onStäng: () => void } | null;
     onClose: () => void;
 }) {
     const { height: fönsterHöjd } = useWindowDimensions();
@@ -209,6 +215,7 @@ export function EventKort({
                     footerSkjut={translate}
                     onVälj={onVälj}
                     nav={nav}
+                    inbjudan={inbjudan}
                     onClose={onClose}
                     panHandlers={pan.panHandlers}
                     onHuvudHöjd={setHuvudHöjd}
@@ -218,6 +225,11 @@ export function EventKort({
                 <Väljarlista
                     grupp={grupp}
                     onVälj={e => onVäljIGrupp?.(e)}
+                    lista={lista}
+                    listaFrånOffset={listaFrånOffset}
+                    flöde={flöde}
+                    stad={stad}
+                    onVäljUrLista={onVälj ?? null}
                     onClose={onClose}
                     panHandlers={pan.panHandlers}
                     onHuvudHöjd={setHuvudHöjd}
@@ -230,9 +242,24 @@ export function EventKort({
 
 type PanHandlers = ReturnType<typeof PanResponder.create>['panHandlers'];
 
+/** Månaden-flikens tal: samma eventDagar-underlag som listan under kortet.
+ *  `utesluten` är det valda eventet (räknas som passerat, som i fliken). */
+function månadsTal(lista: AppFeedEvent[], frånOffset: number, utesluten: string): number | null {
+    if (lista.length === 0) return null;
+    const nu = new Date();
+    const nuMs = nu.getTime();
+    const dagar = eventDagar(lista, frånOffset, nu, e => isEventPast(e, nuMs) || e.id === utesluten);
+    return dagar.reduce((n, d) => n + d.events.length, 0);
+}
+
 function Väljarlista({
     grupp,
     onVälj,
+    lista,
+    listaFrånOffset,
+    flöde,
+    stad,
+    onVäljUrLista,
     onClose,
     panHandlers,
     onHuvudHöjd,
@@ -240,6 +267,12 @@ function Väljarlista({
 }: {
     grupp: AppFeedEvent[];
     onVälj: (e: AppFeedEvent) => void;
+    lista: AppFeedEvent[];
+    listaFrånOffset: number;
+    flöde: readonly AppFeedEvent[];
+    stad: { slug: string; name: string } | null;
+    /** null på skärmar utan den gemensamma listan (stadsskärmen). */
+    onVäljUrLista: ((e: AppFeedEvent) => void) | null;
     onClose: () => void;
     panHandlers: PanHandlers;
     onHuvudHöjd: (h: number) => void;
@@ -247,6 +280,15 @@ function Väljarlista({
 }) {
     const plats = grupp[0]?.locationName;
     const nu = Date.now();
+    /** Arrangörsraden bara när HELA högen delar källdomän (webbens
+     *  chooserOrganizerRow, som matchar värdnamn - flödet har bara domänen). */
+    const gruppRad = useMemo(() => {
+        const först = grupp[0];
+        if (!först) return null;
+        const domän = källDomän(först.id);
+        if (!domän || !grupp.every(e => källDomän(e.id) === domän)) return null;
+        return arrangörsRad(först, null, flöde, Date.now());
+    }, [grupp, flöde]);
     return (
         <>
             <View {...panHandlers} onLayout={ev => onHuvudHöjd(ev.nativeEvent.layout.height + 120)}>
@@ -264,10 +306,29 @@ function Väljarlista({
                     <Text style={styles.väljarPillText}>Välj ett event</Text>
                 </View>
             </View>
+            {/* Högen först, sedan SAMMA block som när man valt ett event
+                (ägarbeslut 7/10 kväll: "listan går att fortsätta bläddra i,
+                utan att välja dem i början"). Delar hela högen arrangör visas
+                arrangörsraden + stadsknappen mellan högen och listan.
+                Platsrubriken är redan "sticky": den ligger utanför den här
+                scrollvyn och följer alltså aldrig med upp. */}
             <ScrollView ref={scrollRef} style={styles.innehåll} contentContainerStyle={styles.innehållInre}>
                 {grupp.map(e => (
                     <EventRad key={e.id} event={e} tema="mörk" dimmad={isEventPast(e, nu)} onPress={() => onVälj(e)} />
                 ))}
+                {onVäljUrLista ? (
+                    <>
+                        <FlerFran
+                            rad={gruppRad}
+                            stad={stad}
+                            stadAntal={stad ? månadsTal(lista, listaFrånOffset, '') : null}
+                            onVälj={onVäljUrLista}
+                        />
+                        {lista.length > 0 ? (
+                            <FlerEvent lista={lista} valtId="" frånOffset={listaFrånOffset} onVälj={onVäljUrLista} />
+                        ) : null}
+                    </>
+                ) : null}
             </ScrollView>
         </>
     );
@@ -290,12 +351,13 @@ function EventInnehåll({
     footerSkjut,
     onVälj,
     nav,
+    inbjudan,
     onClose,
     panHandlers,
     onHuvudHöjd,
     scrollRef,
 }: {
-    event: AppFeedEvent;
+    event: AppEvent;
     grupp: AppFeedEvent[];
     onVäljIGrupp?: (e: AppFeedEvent) => void;
     onTillbakaTillLista: (() => void) | null;
@@ -312,6 +374,7 @@ function EventInnehåll({
     footerSkjut: Animated.Value;
     onVälj?: (e: AppFeedEvent) => void;
     nav?: KortNav;
+    inbjudan: { fran: string | null; onStäng: () => void } | null;
     onClose: () => void;
     panHandlers: PanHandlers;
     onHuvudHöjd: (h: number) => void;
@@ -320,7 +383,9 @@ function EventInnehåll({
     const { minPos } = useRegionVal();
     const { ärSparad, växla } = useSparade();
     const filter = useFilter();
-    const detalj = useEventDetalj(event.id);
+    // Användarskapade event bär beskrivning/värd själva - id:t är ett
+    // dokument-id, ingen URL att slå upp i aggregaten.
+    const detalj = useEventDetalj(event.userCreated ? null : event.id);
     const [helskärm, setHelskärm] = useState<string | null>(null);
 
     const kat = kategoriFor(String(event.category));
@@ -333,8 +398,19 @@ function EventInnehåll({
     const tid = formatTidSpann(event.time, event.hasSpecificTime, event.endDate);
     const km = minPos ? distanceKm(minPos.lat, minPos.lng, event.lat, event.lng) : null;
     const plats = [km != null ? `${formatKm(km)} bort` : null, event.locationName].filter(Boolean).join(' · ');
-    const värd = hostLabelFor(detalj.data?.hostName, detalj.data?.url ?? event.url ?? event.id);
-    const beskrivning = descriptionText(detalj.data?.description, detalj.isLoading);
+    const värd = event.userCreated
+        ? (event.hostName || 'VADKUL-användare')
+        : hostLabelFor(detalj.data?.hostName, detalj.data?.url ?? event.url ?? event.id);
+    const beskrivning = event.userCreated
+        ? descriptionText(event.description, false)
+        : descriptionText(detalj.data?.description, detalj.isLoading);
+    // Härkomstraden (webbens LinkEventCard): eget VADKUL-event eller tips,
+    // med seriens rytm + slut längst till höger (ägarbeslut 16/9).
+    const härkomst = event.userCreated
+        ? (event.isTip ? '💡 Tipsat av en VADKUL-användare' : 'Skapat på VADKUL')
+        : null;
+    const rytm = event.userCreated ? seriensRytm(event) : null;
+    const pris = event.price != null && String(event.price).trim() ? String(event.price).trim() : null;
     const utlänk = eventOutlink(event.id, detalj.data?.url ?? event.url);
     const annons = isAffiliateUrl(utlänk);
 
@@ -344,6 +420,12 @@ function EventInnehåll({
         : null;
 
     const söker = sök.trim().length > 0;
+    /** Stadsknappens tal = Månaden-flikens: samma eventDagar-underlag, utan
+     *  kortsökets smalning (headern är ändå gömd medan man söker). */
+    const månadsAntal = useMemo(
+        () => (stad ? månadsTal(lista, listaFrånOffset, event.id) : null),
+        [stad, lista, listaFrånOffset, event.id],
+    );
     // "Fler från samma arrangör" (6/10) - värdnamnet kommer med detaljsvaret,
     // raden räknas om när det landat (namn + sidlänk).
     const flerFrån = useMemo(
@@ -357,12 +439,21 @@ function EventInnehåll({
         <>
             <View {...panHandlers} onLayout={ev => onHuvudHöjd(ev.nativeEvent.layout.height)}>
                 <View style={styles.handtag} />
+                {/* Söker man göms eventet (ägarbeslut 7/10 kväll: "om jag
+                    söker, då tar vi bort det eventet som visas högst upp") -
+                    kvar är bara knappraden med fältet och chipsen. ALLT som
+                    göms ligger i EN slot, så knappradens plats i trädet står
+                    still och TextInputen aldrig remountas (tangentbordet får
+                    inte stängas av vyskiftet). */}
+                {!söker ? (
+                <>
+                {härkomst ? (
+                    <View style={styles.härkomstRad}>
+                        <Text style={[styles.härkomst, !event.isTip && styles.härkomstEget]} numberOfLines={1}>{härkomst}</Text>
+                        {rytm ? <Text style={styles.rytm} numberOfLines={1}>{rytm}</Text> : null}
+                    </View>
+                ) : null}
                 <View style={styles.rad}>
-                    {onTillbakaTillLista ? (
-                        <Pressable onPress={onTillbakaTillLista} hitSlop={10} style={styles.tillbaka} accessibilityLabel="Tillbaka till listan">
-                            <Text style={styles.stangText}>‹</Text>
-                        </Pressable>
-                    ) : null}
                     <View style={styles.textkol}>
                         <Text style={[styles.titel, harVarit && styles.titelVarit]} numberOfLines={2}>{emoji} {event.title}</Text>
                         {/* Tid/plats-raderna rullar i sidled - inget trunkeras (ägarbeslut 16/9). */}
@@ -391,6 +482,11 @@ function EventInnehåll({
                     <View style={[styles.chip, styles.värdChip]}>
                         <Text style={[styles.chipText, styles.värdText]}>{värd}</Text>
                     </View>
+                    {pris ? (
+                        <View style={[styles.chip, styles.värdChip]}>
+                            <Text style={[styles.chipText, styles.värdText]}>{pris}</Text>
+                        </View>
+                    ) : null}
                 </ScrollView>
                 {nav || pager ? (
                     <View style={styles.navRad}>
@@ -400,6 +496,14 @@ function EventInnehåll({
                             </Pressable>
                         ) : null}
                         <View style={styles.navFyll} />
+                        {/* Pilen tillbaka till multievent-listan sitter DIREKT
+                            till vänster om 1/2-pagern (ägarbeslut 7/10 kväll). */}
+                        {onTillbakaTillLista ? (
+                            <Pressable onPress={onTillbakaTillLista} hitSlop={10} style={styles.navKnapp}
+                                accessibilityLabel="Tillbaka till listan">
+                                <Text style={styles.navText}>‹ ☰</Text>
+                            </Pressable>
+                        ) : null}
                         {pager ? (
                             <Pressable onPress={() => onVäljIGrupp?.(pager.nästa)} hitSlop={6} style={styles.navKnapp}
                                 accessibilityLabel="Nästa event på samma plats">
@@ -418,18 +522,36 @@ function EventInnehåll({
                         ) : null}
                     </View>
                 ) : null}
+                </>
+                ) : null}
+                {/* Knappraden (ägarbeslut 7/10 kväll): kortsöket är ett
+                    RIKTIGT FÄLT, inte en ikon - med filtersymbolen bredvid som
+                    fäller ut kategorichipsen utan att fokusera fältet. Den
+                    stora ANMÄL/BOKA-knappen som stod här är RIVEN: footern är
+                    enda utlänken ("ha de knapparna som är i footern istället").
+                    Dela-knappen är riven sedan tidigare - Bjud med delar. */}
                 <View style={styles.knappRad}>
-                    {/* Sök/filter-ikonen längst till vänster (7/10) - blå när
-                        blocket är öppet eller kartfiltret är på. Dela-knappen
-                        som stod här är RIVEN (Bjud med i footern delar). */}
                     {lista.length > 0 ? (
-                        <Pressable
-                            style={({ pressed }) => [styles.knapp, styles.sökKnapp, (sökÖppen || filter.aktivt) && styles.sökKnappPå, pressed && styles.knappTryckt]}
-                            onPress={onVäxlaSök}
-                            accessibilityLabel="Sök och filtrera i listan"
-                        >
-                            <Text style={styles.sökIkon}>🔍</Text>
-                        </Pressable>
+                        <>
+                            <TextInput
+                                ref={sökFältRef}
+                                value={sök}
+                                onChangeText={onSök}
+                                placeholder="Sök event eller plats …"
+                                placeholderTextColor="#64748b"
+                                autoCorrect={false}
+                                returnKeyType="search"
+                                onFocus={() => { if (!sökÖppen) onVäxlaSök(); }}
+                                style={styles.sökFält}
+                            />
+                            <Pressable
+                                style={({ pressed }) => [styles.knapp, styles.filterKnapp, (sökÖppen || filter.aktivt) && styles.filterKnappPå, pressed && styles.knappTryckt]}
+                                onPress={onVäxlaSök}
+                                accessibilityLabel="Visa kategorier"
+                            >
+                                <Text style={[styles.filterIkon, (sökÖppen || filter.aktivt) && styles.filterIkonPå]}>☰</Text>
+                            </Pressable>
+                        </>
                     ) : null}
                     <Pressable
                         style={({ pressed }) => [styles.knapp, styles.hjärtKnapp, sparad && styles.hjärtSparad, pressed && styles.knappTryckt]}
@@ -438,34 +560,11 @@ function EventInnehåll({
                     >
                         <Text style={[styles.hjärtText, sparad && styles.hjärtTextSparad]}>{sparad ? '♥' : '♡'}</Text>
                     </Pressable>
-                    {utlänk ? (
-                        <Pressable
-                            style={({ pressed }) => [styles.knapp, tm ? styles.bokaKnapp : styles.anmälKnapp, pressed && styles.knappTryckt]}
-                            onPress={() => WebBrowser.openBrowserAsync(utlänk)}
-                        >
-                            <Text style={tm ? styles.bokaText : styles.anmälText}>{tm ? 'BOKA →' : 'ANMÄL →'}</Text>
-                        </Pressable>
-                    ) : null}
                 </View>
-                {annons ? <Text style={styles.annons}>{AFFILIATE_DISCLOSURE}</Text> : null}
-                {sökÖppen ? (
-                    <View style={styles.sökBlock}>
-                        <TextInput
-                            ref={sökFältRef}
-                            value={sök}
-                            onChangeText={onSök}
-                            placeholder="Sök event eller plats …"
-                            placeholderTextColor="#64748b"
-                            autoCorrect={false}
-                            returnKeyType="search"
-                            style={styles.sökFält}
-                        />
-                        {/* Kategorichipsen direkt under sökfältet (6/10) -
-                            samma rad som sökpanelen, delat filter: ett val
-                            smalnar listan i kortet OCH kartan bakom. */}
-                        <KategoriRad events={lista} />
-                    </View>
-                ) : null}
+                {/* Kategorichipsen direkt under knappraden - samma rad som
+                    sökpanelen, delat filter: ett val smalnar listan i kortet
+                    OCH kartan bakom. */}
+                {sökÖppen ? <KategoriRad events={lista} /> : null}
             </View>
             <ScrollView ref={scrollRef} style={styles.innehåll} contentContainerStyle={styles.innehållMedFooter}>
                 {/* Under sökning visas listan direkt (webbens listvy-växling). */}
@@ -480,8 +579,10 @@ function EventInnehåll({
                         <FlerFran
                             rad={flerFrån}
                             stad={stad}
+                            stadAntal={månadsAntal}
                             onVälj={e => (onVälj ?? onVäljIGrupp)?.(e)}
                         />
+                        <Rapportera event={event} />
                     </>
                 ) : null}
                 {onVälj && lista.length > 0 ? (
@@ -497,8 +598,8 @@ function EventInnehåll({
             >
                 <RsvpFooter
                     event={event}
-                    delningsUrl={eventUrl(event)}
-                    cta={utlänk ? { url: utlänk, label: tm ? 'BOKA' : 'ANMÄL', guld: tm } : null}
+                    inbjudan={inbjudan}
+                    cta={utlänk ? { url: utlänk, label: tm ? 'BOKA' : 'ANMÄL', guld: tm, annons: annons ? AFFILIATE_DISCLOSURE : null } : null}
                 />
             </Animated.View>
             <HelskarmsBild uri={helskärm} onClose={() => setHelskärm(null)} />
@@ -658,6 +759,10 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     stangText: { fontSize: 15, fontWeight: '700', color: '#cbd5e1' },
+    härkomstRad: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 2, paddingBottom: 4 },
+    härkomst: { flexShrink: 1, fontSize: 12, fontWeight: '800', color: '#fbbf24' },
+    härkomstEget: { color: '#34d399' },
+    rytm: { marginLeft: 'auto', flexShrink: 1, fontSize: 12, fontWeight: '700', color: '#94a3b8' },
     chipRad: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingTop: 10 },
     chip: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
     chipText: { fontSize: 12, fontWeight: '700' },
@@ -675,28 +780,24 @@ const styles = StyleSheet.create({
     knappRad: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12 },
     knapp: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
     knappTryckt: { opacity: 0.85 },
-    sökKnapp: { width: 48, backgroundColor: MÖRK_RAD },
-    sökKnappPå: { backgroundColor: '#006AA7' },
-    sökIkon: { fontSize: 17 },
+    filterKnapp: { width: 44, backgroundColor: MÖRK_RAD },
+    filterKnappPå: { backgroundColor: '#006AA7' },
+    filterIkon: { fontSize: 16, color: '#e2e8f0' },
+    filterIkonPå: { color: '#ffffff' },
     hjärtKnapp: { width: 48, backgroundColor: MÖRK_RAD },
     hjärtSparad: { backgroundColor: '#ffffff' },
     hjärtText: { fontSize: 20, color: '#e2e8f0', marginTop: -2 },
     hjärtTextSparad: { color: '#e11d48' },
-    anmälKnapp: { flex: 1, backgroundColor: '#2563eb' },
-    anmälText: { color: '#ffffff', fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
-    bokaKnapp: { flex: 1, backgroundColor: GULD },
-    bokaText: { color: '#451a03', fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
-    annons: { marginTop: -6, marginBottom: 8, textAlign: 'center', fontSize: 10, fontWeight: '600', color: '#64748b' },
-    sökBlock: { paddingBottom: 10 },
+    /** Fältet ligger I knappraden (7/10 kväll) - flex-1 så det tar bredden
+     *  som blir över bredvid filtersymbolen och hjärtat. */
     sökFält: {
-        marginHorizontal: 16,
-        marginBottom: 2,
-        borderRadius: 12,
+        flex: 1,
+        borderRadius: 999,
         backgroundColor: MÖRK_RAD,
         borderWidth: 1,
         borderColor: '#3f4650',
         paddingHorizontal: 14,
-        paddingVertical: 10,
+        paddingVertical: 9,
         fontSize: 14,
         fontWeight: '600',
         color: '#e2e8f0',

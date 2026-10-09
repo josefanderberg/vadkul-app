@@ -50,6 +50,11 @@ describe('klassaKälla', () => {
 });
 
 describe('matcharFilter', () => {
+    it('användarskapade kringgår hela filtret (webbens första rad)', () => {
+        const eget = { ...ev('abc123', 'social'), userCreated: true as const };
+        expect(matcharFilter(eget, f({ kategori: 'music', populärt: true }))).toBe(true);
+        expect(matcharFilter(eget, f({ källa: 'korpen' }))).toBe(true);
+    });
     it('standard: stora källor göms, resten syns', () => {
         expect(matcharFilter(KYRKAN, TOMT_FILTER)).toBe(false);
         expect(matcharFilter(PRO, TOMT_FILTER)).toBe(false);

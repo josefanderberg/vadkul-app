@@ -18,10 +18,15 @@ describe('brickaIkon', () => {
         expect(brickaIkon({ category: 'stage', guld: true, vald: true })).toBe('bricka-stage-guld-vald');
         expect(brickaIkon({ category: 'food', sparad: true, vald: true })).toBe('bricka-food-sparad-vald');
     });
+    it('eget VADKUL-event är grönt, sparad och guld går före', () => {
+        expect(brickaIkon({ category: 'social', grön: true })).toBe('bricka-social-gron');
+        expect(brickaIkon({ category: 'social', grön: true, vald: true, pop: true })).toBe('bricka-social-gron-vald');
+        expect(brickaIkon({ category: 'social', grön: true, sparad: true })).toBe('bricka-social-sparad');
+    });
     it('varje nyckel finns som bakad PNG', () => {
         const bakade = new Set(BRICKA_NYCKLAR);
         for (const category of EVENT_CATEGORY_KEYS) {
-            for (const t of [{}, { pop: true }, { vald: true }, { sparad: true }, { sparad: true, vald: true }, { guld: true }, { guld: true, vald: true }]) {
+            for (const t of [{}, { pop: true }, { vald: true }, { sparad: true }, { sparad: true, vald: true }, { guld: true }, { guld: true, vald: true }, { grön: true }, { grön: true, vald: true }]) {
                 expect(bakade.has(brickaIkon({ category, ...t }))).toBe(true);
             }
         }

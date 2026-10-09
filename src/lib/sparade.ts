@@ -23,3 +23,12 @@ export function rensaSparade(lista: readonly AppFeedEvent[], nowMs: number): App
         return slut === null || nowMs - slut < SPARAD_KVAR_EFTER_MS;
     });
 }
+
+/** Slå in event hämtade från kontot (sparade på en annan enhet) i enhetens
+ *  lista - de som redan finns behåller sin ögonblicksbild. */
+export function slåIhopSparade(lista: readonly AppFeedEvent[], nya: readonly AppFeedEvent[]): AppFeedEvent[] {
+    const har = new Set(lista.map(e => e.id));
+    const till = nya.filter(e => !har.has(e.id));
+    if (!till.length) return lista as AppFeedEvent[];
+    return [...lista, ...till].sort((a, b) => tid(a) - tid(b));
+}

@@ -11,7 +11,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
-import { useAppFeed } from '@/api/appFeed';
+import { useEvent } from '@/api/useEvent';
 import { EventKort } from '@/components/EventKort';
 import { EventRad } from '@/components/EventRad';
 import { KategoriRad } from '@/components/KategoriRad';
@@ -30,11 +30,11 @@ export default function SokScreen() {
 
     const q = normalizeSearchQuery(fråga);
     const { city: sökOrt, text: sökText } = splitCityFromQuery(q);
-    const feed = useAppFeed(sökOrt?.region ?? region);
+    const feed = useEvent(sökOrt?.region ?? region);
 
     const underlag = useMemo(() => {
         const nu = Date.now();
-        return (feed.data?.events ?? []).filter(e => matcharFilter(e, filter) && !isEventPast(e, nu));
+        return (feed.data ?? []).filter(e => matcharFilter(e, filter) && !isEventPast(e, nu));
     }, [feed.data, filter]);
     const träffar = useMemo(() => sokEvent(underlag, fråga), [underlag, fråga]);
     const städer = searchCities(fråga);
@@ -68,7 +68,7 @@ export default function SokScreen() {
                 returnKeyType="search"
             />
             <View>
-                <KategoriRad events={feed.data?.events ?? []} />
+                <KategoriRad events={feed.data ?? []} />
             </View>
             <FlatList
                 data={q ? träffar : []}

@@ -22,6 +22,7 @@ export function DagValjare({
     hemmadag,
     onOffset,
     onLängd,
+    onSkapa,
 }: {
     offset: number;
     längd: 1 | 7;
@@ -31,6 +32,8 @@ export function DagValjare({
     hemmadag: number;
     onOffset: (o: number) => void;
     onLängd: (l: 1 | 7) => void;
+    /** Skapa-knappen (+) bor vid väljaren sedan 7/10 kväll - spegelbilden av ↺. */
+    onSkapa: () => void;
 }) {
     const [hintKlar, setHintKlar, hintLaddad] = useLagrad(NYCKEL.växlaHintKlar, false);
     const kvittera = () => { if (!hintKlar) setHintKlar(true); };
@@ -52,6 +55,12 @@ export function DagValjare({
                         <Text style={styles.nollText}>↺</Text>
                     </Pressable>
                 ) : null}
+                {/* + på motsvarande sida som ↺ (ägarbeslut 7/10 kväll:
+                    "ovanför åt höger om dagsväljaren"). Blå med gul kant,
+                    still - skapa-knappen pulserar inte (29/9). */}
+                <Pressable style={styles.skapaKnapp} onPress={onSkapa} accessibilityLabel="Skapa event">
+                    <Text style={styles.skapaText}>＋</Text>
+                </Pressable>
                 <View style={styles.platta}>
                     <Pressable
                         onPress={() => { kvittera(); onOffset(Math.max(0, offset - 1)); }}
@@ -115,6 +124,25 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
     nollText: { fontSize: 20, color: '#ffffff', fontWeight: '700' },
+    skapaKnapp: {
+        position: 'absolute',
+        right: 4,
+        top: -58,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#0077BC',
+        borderWidth: 2,
+        borderColor: '#f0b429',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 5,
+    },
+    skapaText: { fontSize: 24, fontWeight: '700', color: '#ffffff', marginTop: -2 },
     platta: {
         flexDirection: 'row',
         alignItems: 'center',

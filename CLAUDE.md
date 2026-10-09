@@ -12,23 +12,45 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
 - **APPEN SÄLJER INGENTING.** Ingen boost-knapp, inga priser, ingen länk till
   köp — ordet "boost" förekommer inte i UI:t. Betalningar sker på webben
   (Apples IAP-regler; hela resonemanget i plattformsplanen).
-- **Ingen Firestore-/firebase-js-SDK.** Eventdata via CDN-flödet
-  (`https://vadkul.se/api/events/app-<region>`), allt autentiserat via
-  /v1-API:t (huvudrepots `apps/functions/src/api`, src/api/konto.ts här).
-  Auth via @react-native-firebase/auth (sessionen i nyckelringen), push (FCM)
-  kommer samma väg. Firebase-apparna för `se.vadkul.app` är registrerade;
+- **Eventflödet läses ALDRIG ur Firestore.** Event kommer via CDN-flödet
+  (`https://vadkul.se/api/events/app-<region>`) och `/api/event?id=` - samma
+  egress-regel som huvudrepots CLAUDE.md. Läs aldrig hela kollektioner.
+- **Användardata går via Firestore direkt** (ägarbeslut 8/10 2026, ersätter
+  den gamla "allt via /v1-API:t"-regeln): `@react-native-firebase/firestore`,
+  `/storage` och `/messaging` mot SAMMA dokument och rules som webben - konton,
+  skapa/önska event, gilla, RSVP, vänner, chatt, push-tokens. Porta webbens
+  `apps/web/src/services/*` och ange webbfilen i huvudkommentaren; ändras
+  webbens dataform ska appen följa (EAS Update når gamla installationer).
+  Aldrig firebase-js-SDK:t - bara RN Firebase (native). /v1-API:t
+  (src/api/konto.ts) finns kvar men är inte längre vägen framåt.
+  Firebase-apparna för `se.vadkul.app` är registrerade;
   GoogleService-Info.plist/google-services.json är publika värden och
   committas.
-- **Kontot är FRIVILLIGT** (ägarbeslut 29/9): introt erbjuder det men
+- **App Store först vid paritet med webben** (ägarbeslut 8/10 2026): appen
+  går till TestFlight nu men skickas inte till granskning förrän konton,
+  skapa event, push och det sociala lagret är med. Gaplistan bor i
+  huvudrepots `docs/app-plattform-plan.md` §10.
+- **KONTON_PÅ** i `src/lib/funktioner.ts` styr intro-sidan om konto,
+  profilens kontosektion och /konto. Den slås på när profilen sparas via
+  Firestore (8/10-beslutet) i stället för /v1/me. Riv inte koden.
+- **Rapportvägen måste finnas** (App Store 1.2, appen visar användarskapade
+  event): `components/Rapportera` under beskrivningen i eventkortet, mejl till
+  hej@vadkul.se via `lib/rapportera`. Tas den bort faller granskningen.
+- När kontot är på igen gäller: det är FRIVILLIGT (ägarbeslut 29/9), introt erbjuder det men
   "Fortsätt utan konto" finns alltid - Apples regel 5.1.1. Inloggning: e-post
   + Google överallt, Sign in with Apple bara på iOS (regel 4.8). Kontot
   raderas inifrån appen (Profil → Radera konto → DELETE /v1/me).
 - **@vadkul/kontrakt är sanningen** för typer, stadslistan (regionvalet!),
   kategori-nycklarna och eventShareSlug. Definiera aldrig egna kopior.
-  Publicerat på npmjs sedan 25/9 (som TS-källa, plan §9.1) och installeras
-  som `^0.1.0` från registryt — kravet för EAS-molnbyggen. Kontraktsändring
-  görs i huvudrepots `packages/kontrakt`, versionsbumpas, `npm publish`as
-  (kräver 2FA-koden) och bumpas sedan här.
+  **Sedan 7/10 2026 ligger kontraktet INBAKAT i `kontrakt/`** i stället för att
+  installeras från npm: 0.2.0 (konto.ts + organizer.ts) är aldrig publicerat,
+  och EAS-molnbyggen kör `npm install` på Expos servrar där varken registryt
+  eller en workspace-länk utanför projektet finns. Importerna ser likadana ut
+  (`@vadkul/kontrakt` → tsconfig paths + vitest-alias), så ingen appkod ändras.
+  **Redigera ALDRIG `kontrakt/` här.** Ändra i huvudrepots `packages/kontrakt`
+  och kör `npm run kontrakt:sync`; `npm run kontrakt:check` faller om kopian
+  glidit isär. Publiceras 0.2.0 på npm någon gång kan mappen och aliaset tas
+  bort och beroendet läggas tillbaka.
 - **Kartbesluten ärvs från huvudrepots `.claude/skills/kart-ui/`** — borttagna
   features återuppstår inte i appen. Kartan är MapLibre RN (aldrig Mapbox).
   Webbparitetens regler bor i lib/ med webbfilen angiven i huvudkommentaren
