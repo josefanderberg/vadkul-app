@@ -52,7 +52,7 @@ describe('klassaKälla', () => {
 describe('matcharFilter', () => {
     it('användarskapade kringgår hela filtret (webbens första rad)', () => {
         const eget = { ...ev('abc123', 'social'), userCreated: true as const };
-        expect(matcharFilter(eget, f({ kategori: 'music', populärt: true }))).toBe(true);
+        expect(matcharFilter(eget, f({ kategorier: new Set(['music']), populärt: true }))).toBe(true);
         expect(matcharFilter(eget, f({ källa: 'korpen' }))).toBe(true);
     });
     it('standard: stora källor göms, resten syns', () => {
@@ -66,7 +66,7 @@ describe('matcharFilter', () => {
         expect(matcharFilter(PRO, f({ optIn: new Set(['svenskakyrkan']) }))).toBe(false);
     });
     it('kategori smalnar även ikryssade källor', () => {
-        const filter = f({ kategori: 'sport', optIn: new Set(['svenskakyrkan']) });
+        const filter = f({ kategorier: new Set(['sport']), optIn: new Set(['svenskakyrkan']) });
         expect(matcharFilter(KYRKAN, filter)).toBe(false);
         expect(matcharFilter(FOTBOLL, filter)).toBe(true);
         expect(matcharFilter(JAZZ, filter)).toBe(false);
@@ -84,7 +84,7 @@ describe('matcharFilter', () => {
         expect(matcharFilter(KYRKAN, filter)).toBe(false);
     });
     it('🔥 + kategori är en UNION (ägarbeslut 11/10): kategorin OCH populära', () => {
-        const filter = f({ populärt: true, kategori: 'sport' });
+        const filter = f({ populärt: true, kategorier: new Set(['sport']) });
         expect(matcharFilter(FOTBOLL, filter)).toBe(true); // kategorin, inte pop
         expect(matcharFilter(JAZZ, filter)).toBe(true); // pop utanför kategorin
         expect(matcharFilter(TM, filter)).toBe(true); // pop utanför kategorin
@@ -93,18 +93,38 @@ describe('matcharFilter', () => {
     });
 });
 
+describe('flervalet (6/10-beslutet, portat 11/10)', () => {
+    it('flera kategorier är en union sinsemellan, tom mängd = alla', () => {
+        const filter = f({ kategorier: new Set(['sport', 'music']) });
+        expect(matcharFilter(FOTBOLL, filter)).toBe(true);
+        expect(matcharFilter(JAZZ, filter)).toBe(true);
+        expect(matcharFilter(TM, filter)).toBe(false); // stage
+        expect(matcharFilter(TM, f({}))).toBe(true);
+    });
+    it('🔥 + flera kategorier = kategorierna OCH alla populära', () => {
+        const filter = f({ populärt: true, kategorier: new Set(['sport']) });
+        expect(matcharFilter(FOTBOLL, filter)).toBe(true);
+        expect(matcharFilter(TM, filter)).toBe(true); // pop utanför valet
+    });
+    it('valda chips står först i raden', () => {
+        const counts = new Map([['music', 3], ['sport', 5]]);
+        expect(planeraKategoriChips(['music', 'sport'], counts, new Set(['music'])).map(c => c.key))
+            .toEqual(['music', 'sport']);
+    });
+});
+
 describe('räknare', () => {
     const alla = [KYRKAN, PRO, KORPEN, JAZZ, FOTBOLL, TM];
     it('kategorisiffrorna räknas utan kategorival men med opt-in', () => {
-        const c = räknaKategorier(alla, f({ kategori: 'sport' }));
+        const c = räknaKategorier(alla, f({ kategorier: new Set(['sport']) }));
         expect(c.get('music')).toBe(1);
         expect(c.get('sport')).toBe(1);
         expect(c.get('stage')).toBe(1);
         expect(räknaKategorier(alla, f({ optIn: new Set(['svenskakyrkan']) })).get('music')).toBe(2);
     });
-    it('populärsiffran ignorerar kategorin sedan unionsbeslutet 11/10', () => {
+    it('populärsiffran ignorerar kategorierna sedan unionsbeslutet 11/10', () => {
         expect(räknaPopulära(alla, TOMT_FILTER)).toBe(2);
-        expect(räknaPopulära(alla, f({ kategori: 'stage' }))).toBe(2);
+        expect(räknaPopulära(alla, f({ kategorier: new Set(['stage']) }))).toBe(2);
     });
     it('kategorisiffran med 🔥 på räknar unionen ("vad visas om jag trycker här")', () => {
         expect(räknaKategorier(alla, f({ populärt: true })).get('sport')).toBe(3); // FOTBOLL + JAZZ + TM
@@ -118,10 +138,10 @@ describe('räknare', () => {
 describe('planeraKategoriChips', () => {
     it('flest först, Övrigt sist, nollor bort utom den valda', () => {
         const counts = new Map([['music', 3], ['sport', 5], ['other', 9], ['art', 0]]);
-        expect(planeraKategoriChips(['music', 'sport', 'art', 'other'], counts, null).map(c => c.key))
+        expect(planeraKategoriChips(['music', 'sport', 'art', 'other'], counts, new Set()).map(c => c.key))
             .toEqual(['sport', 'music', 'other']);
-        expect(planeraKategoriChips(['music', 'sport', 'art', 'other'], counts, 'art').map(c => c.key))
-            .toEqual(['sport', 'music', 'art', 'other']);
+        expect(planeraKategoriChips(['music', 'sport', 'art', 'other'], counts, new Set(['art'])).map(c => c.key))
+            .toEqual(['art', 'sport', 'music', 'other']);
     });
 });
 

@@ -22,7 +22,7 @@ export function KategoriRad({ events }: { events: readonly AppFeedEvent[] }) {
     const f = useFilter();
     const [flerÖppen, setFlerÖppen] = useState(f.källa !== null);
 
-    const chips = planeraKategoriChips(EVENT_CATEGORY_KEYS, räknaKategorier(events, f), f.kategori);
+    const chips = planeraKategoriChips(EVENT_CATEGORY_KEYS, räknaKategorier(events, f), f.kategorier);
     const antalPop = räknaPopulära(events, f);
     const källAntal = räknaKällor(events);
     const källor = synligaKällor(källAntal, f.källa);
@@ -40,7 +40,7 @@ export function KategoriRad({ events }: { events: readonly AppFeedEvent[] }) {
                 return (
                     <Chip
                         key={c.key}
-                        vald={f.kategori === c.key}
+                        vald={f.kategorier.has(c.key as EventCategoryType)}
                         onPress={() => f.växlaKategori(c.key as EventCategoryType)}
                         text={`${k.emoji} ${k.label} · ${c.count}`}
                     />

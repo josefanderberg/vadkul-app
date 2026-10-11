@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export const NYCKEL = {
     startstad: 'vadkul.startstad',
     optIn: 'vadkul.optIn',
+    kartfilter: 'vadkul.kartfilter',
     sparade: 'vadkul.sparade',
     rsvp: 'vadkul.rsvp',
     växlaHintKlar: 'vadkul.vaxlaHintKlar',

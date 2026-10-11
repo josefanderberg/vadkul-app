@@ -2,65 +2,108 @@
  * Kartfiltret som delat state (regler i lib/kartFilter). Kartan, sökpanelen
  * och stadssidorna läser samma filter, precis som webbens page-state:
  *
- *  - kategori/🔥/FLER-källa gäller besöket och sparas ALDRIG (ägarbeslut
- *    15-16/9: ett sparat normal-val var ett osynligt filter utan väg ut).
+ *  - KATEGORIERNA är FLERVAL och SPARAS (ägarbeslut 6/10, webbens
+ *    mapCategories - ersätter 16/9-regeln "en åt gången, sparas aldrig"):
+ *    enheten via lagringen (30 dagars TTL, lib/filterMinne) och kontot via
+ *    users.mapFilter - KONTOT VINNER över enheten vid inloggning.
+ *    15/9-läxan hålls av FilterBrickas alltid synliga brickor.
+ *  - 🔥 och FLER-källan gäller besöket och sparas aldrig (källan är en
+ *    drilldown, inte en preferens - webbens beslut).
  *  - opt-in-källorna (Svenska kyrkan/PRO, "Visa även på kartan") sparas på
- *    enheten - webben sparar dem i profilen, appen har inga konton än.
+ *    enheten.
  *
- * Växlingsreglerna är webbens: källval släpper kategori och 🔥, 🔥 på släpper
- * källvalet, kategori släpper källvalet men kombineras med 🔥.
+ * Växlingsreglerna är webbens: källval släpper kategorierna och 🔥, 🔥 på
+ * släpper källvalet, kategorival släpper källvalet men kombineras med 🔥.
  */
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { EventCategoryType } from '@vadkul/kontrakt';
+import { läsFält, sättFält } from '@/data/anvandare';
+import { läsKontoFilter, läsSparat, tillSparat, type SparatFilter } from './filterMinne';
 import type { KartFilter, KällNyckel } from './kartFilter';
+import { useKonto } from './kontoContext';
 import { NYCKEL, useLagrad } from './lagring';
 
 export interface FilterState extends KartFilter {
-    /** Trycker man på den valda kategorin släpps den. */
+    /** Togglar kategorin i mängden (webbens chips). */
     växlaKategori: (k: EventCategoryType) => void;
     växlaPopulärt: () => void;
     växlaKälla: (k: KällNyckel) => void;
     växlaOptIn: (k: KällNyckel) => void;
-    /** Släpp kategori, 🔥 och källa ("Visa alla"). */
+    /** Släpp kategorierna, 🔥 och källan ("Visa alla"). */
     rensa: () => void;
-    /** Något av kategori/🔥/källa är på. */
+    /** Något av kategorier/🔥/källa är på. */
     aktivt: boolean;
 }
 
 const FilterContext = createContext<FilterState | null>(null);
 
 export function FilterProvider({ children }: { children: ReactNode }) {
-    const [kategori, setKategori] = useState<EventCategoryType | null>(null);
+    const { användare } = useKonto();
+    const [sparat, setSparat] = useLagrad<SparatFilter | null>(NYCKEL.kartfilter, null);
     const [populärt, setPopulärt] = useState(false);
     const [källa, setKälla] = useState<KällNyckel | null>(null);
     const [optInLista, setOptInLista] = useLagrad<KällNyckel[]>(NYCKEL.optIn, []);
 
+    const kategorier = useMemo(
+        () => new Set<EventCategoryType>(läsSparat(sparat, Date.now())),
+        [sparat],
+    );
+
+    // KONTOT VINNER vid inloggning (webbens prioritet enhet < konto): finns
+    // users.mapFilter skrivs det över enhetens val; saknas fältet står
+    // enhetens kvar. Körs en gång per inloggat uid.
+    useEffect(() => {
+        if (!användare) return;
+        let aktiv = true;
+        void läsFält(användare.uid).then(fält => {
+            if (!aktiv || !fält || !('mapFilter' in fält)) return;
+            const konto = läsKontoFilter(fält.mapFilter);
+            setSparat(tillSparat(new Set(konto), Date.now()));
+        }).catch(() => {});
+        return () => { aktiv = false; };
+        // setSparat är stabil (useLagrad).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [användare?.uid]);
+
+    /** Skriv nya valet till enheten och - inloggad - kontot (fire-and-forget). */
+    const sättKategorier = useCallback((nästa: ReadonlySet<EventCategoryType>) => {
+        setSparat(tillSparat(nästa, Date.now()));
+        if (användare) {
+            sättFält(användare.uid, { mapFilter: [...nästa] }).catch(() => {
+                /* offline - enhetens val gäller, kontot hinner ikapp nästa gång */
+            });
+        }
+    }, [setSparat, användare]);
+
     const växlaKategori = useCallback((k: EventCategoryType) => {
         setKälla(null);
-        setKategori(prev => (prev === k ? null : k));
-    }, []);
+        const nästa = new Set(kategorier);
+        if (nästa.has(k)) nästa.delete(k);
+        else nästa.add(k);
+        sättKategorier(nästa);
+    }, [kategorier, sättKategorier]);
     const växlaPopulärt = useCallback(() => {
         setKälla(null);
         setPopulärt(p => !p);
     }, []);
     const växlaKälla = useCallback((k: KällNyckel) => {
-        setKategori(null);
+        sättKategorier(new Set());
         setPopulärt(false);
         setKälla(prev => (prev === k ? null : k));
-    }, []);
+    }, [sättKategorier]);
     const växlaOptIn = useCallback((k: KällNyckel) => {
         setOptInLista(prev => (prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]));
     }, [setOptInLista]);
     const rensa = useCallback(() => {
-        setKategori(null);
+        sättKategorier(new Set());
         setPopulärt(false);
         setKälla(null);
-    }, []);
+    }, [sättKategorier]);
 
     const optIn = useMemo(() => new Set(optInLista), [optInLista]);
 
     const value = useMemo<FilterState>(() => ({
-        kategori,
+        kategorier,
         populärt,
         källa,
         optIn,
@@ -69,8 +112,8 @@ export function FilterProvider({ children }: { children: ReactNode }) {
         växlaKälla,
         växlaOptIn,
         rensa,
-        aktivt: kategori !== null || populärt || källa !== null,
-    }), [kategori, populärt, källa, optIn, växlaKategori, växlaPopulärt, växlaKälla, växlaOptIn, rensa]);
+        aktivt: kategorier.size > 0 || populärt || källa !== null,
+    }), [kategorier, populärt, källa, optIn, växlaKategori, växlaPopulärt, växlaKälla, växlaOptIn, rensa]);
 
     return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;
 }

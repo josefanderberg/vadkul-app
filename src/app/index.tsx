@@ -385,7 +385,9 @@ export default function KartScreen() {
     const iPeriodIRutan = längd === 1 ? räkna(offset, 1) : räkna(offset, 7);
     const filterNamn = filter.källa
         ? KÄLLOR.find(k => k.key === filter.källa)?.label ?? null
-        : filter.kategori ? kategoriFor(filter.kategori).label : filter.populärt ? 'Populära' : null;
+        : filter.kategorier.size > 0
+            ? [...filter.kategorier].map(k => kategoriFor(k).label).join(' eller ')
+            : filter.populärt ? 'Populära' : null;
     const prompt = !kort && feed.data
         ? kartPrompt({
             antal: ruta ? iPeriodIRutan.length : null,

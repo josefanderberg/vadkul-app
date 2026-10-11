@@ -12,11 +12,15 @@ export function FilterBricka() {
     const f = useFilter();
     if (!f.aktivt) return null;
     const källa = f.källa ? KÄLLOR.find(k => k.key === f.källa) : null;
-    const kat = f.kategori ? kategoriFor(f.kategori) : null;
     return (
         <View style={styles.rad} pointerEvents="box-none">
             {f.populärt ? <Bricka text="🔥 Populära" onPress={f.växlaPopulärt} /> : null}
-            {kat && f.kategori ? <Bricka text={`${kat.emoji} ${kat.label}`} onPress={() => f.växlaKategori(f.kategori!)} /> : null}
+            {/* EN bricka per vald kategori (flervalet 6/10) - varje ✕ släpper
+                sin. Sparade filter kräver alltid synliga brickor (15/9). */}
+            {[...f.kategorier].map(k => {
+                const kat = kategoriFor(k);
+                return <Bricka key={k} text={`${kat.emoji} ${kat.label}`} onPress={() => f.växlaKategori(k)} />;
+            })}
             {källa ? <Bricka text={`${källa.emoji} ${källa.label}`} onPress={() => f.växlaKälla(källa.key)} /> : null}
         </View>
     );
@@ -32,7 +36,7 @@ function Bricka({ text, onPress }: { text: string; onPress: () => void }) {
 }
 
 const styles = StyleSheet.create({
-    rad: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 8 },
+    rad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 8 },
     bricka: {
         backgroundColor: '#ffffff',
         borderRadius: 999,
