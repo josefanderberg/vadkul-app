@@ -6,7 +6,10 @@
  *    GÖMS tills de väljs. Kyrkan/PRO kan kryssas i ("Visa även på kartan" i
  *    profilen); Korpen nås bara via FLER i sökpanelen (ägarbeslut 8/8 + 16/9).
  *    I Stockholms flöde är det över hälften av alla event.
- *  - 🔥 POPULÄRA smalnar allt, före källgrinden (källornas event är aldrig pop).
+ *  - 🔥 POPULÄRA ensamt smalnar allt, före källgrinden (källornas event är
+ *    aldrig pop). IHOP MED EN KATEGORI är 🔥 en UNION (ägarbeslut 11/10,
+ *    Josef: "om jag väljer populära och scen, så ska det vara både scen och
+ *    populära, inte bara de populära inom scen") - samma regel som webben.
  *  - KATEGORIN är EN åt gången och sparas aldrig (webbens mapCategory).
  *  - FLER-KÄLLAN = "visa bara källan", även om den inte är ikryssad; den släpper
  *    kategorin och 🔥 (det sköts av den som sätter state, se väljKälla).
@@ -72,22 +75,29 @@ export function matcharFilter(
     källa: KällNyckel | null = f.källa,
 ): boolean {
     if (e.userCreated) return true;
-    if (f.populärt && e.pop !== true) return false;
+    // 🔥 ensamt smalnar allt; 🔥 + kategori är en UNION (ägarbeslut 11/10:
+    // "både scen och populära, inte bara de populära inom scen").
+    const unionPop = f.populärt && kategori !== null && e.pop === true;
+    if (f.populärt && e.pop !== true && !(kategori && e.category === kategori)) return false;
     const src = klassaKälla(e);
     if (källa) return src === källa;
-    if (kategori && e.category !== kategori) return false;
+    if (kategori && e.category !== kategori && !unionPop) return false;
     if (src) return f.optIn.has(src);
     return true;
 }
 
-/** Antal per kategorinyckel bland `events` med filtrets 🔥/opt-in men utan
- *  kategori- och källval - "vad visas om jag trycker här". */
+/** Antal per kategorinyckel bland `events` - "vad visas om jag trycker här",
+ *  räknat per kategori med exakt matcharFilter (webbens enelements-mönster).
+ *  Med 🔥 på räknas unionen in: populära utanför kategorin höjer siffran,
+ *  precis som vyn ser ut efter trycket. */
 export function räknaKategorier(events: readonly AppFeedEvent[], f: KartFilter): Map<string, number> {
+    const nycklar = new Set<string>();
+    for (const e of events) nycklar.add(String(e.category));
     const counts = new Map<string, number>();
-    for (const e of events) {
-        if (!matcharFilter(e, f, null, null)) continue;
-        const k = String(e.category);
-        counts.set(k, (counts.get(k) ?? 0) + 1);
+    for (const k of nycklar) {
+        let n = 0;
+        for (const e of events) if (matcharFilter(e, f, k as EventCategoryType, null)) n++;
+        if (n > 0) counts.set(k, n);
     }
     return counts;
 }
@@ -102,10 +112,12 @@ export function räknaKällor(events: readonly AppFeedEvent[]): Map<KällNyckel,
     return counts;
 }
 
-/** Antal 🔥-event bland `events` med filtrets kategori och opt-in. */
+/** Antal 🔥-event bland `events` med filtrets opt-in - UTAN kategorismalning
+ *  sedan unionsbeslutet 11/10: trycket LÄGGER TILL alla populära, så siffran
+ *  är antalet populära, inte "populära inom vald kategori". */
 export function räknaPopulära(events: readonly AppFeedEvent[], f: KartFilter): number {
     let n = 0;
-    for (const e of events) if (e.pop === true && matcharFilter(e, { ...f, populärt: false }, f.kategori, null)) n++;
+    for (const e of events) if (e.pop === true && matcharFilter(e, { ...f, populärt: false }, null, null)) n++;
     return n;
 }
 

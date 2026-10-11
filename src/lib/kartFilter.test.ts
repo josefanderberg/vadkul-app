@@ -76,12 +76,20 @@ describe('matcharFilter', () => {
         expect(matcharFilter(KORPEN, filter)).toBe(true);
         expect(matcharFilter(FOTBOLL, filter)).toBe(false);
     });
-    it('🔥 smalnar allt till pop-flaggade', () => {
+    it('🔥 ensamt smalnar allt till pop-flaggade', () => {
         const filter = f({ populärt: true, optIn: new Set(['svenskakyrkan']) });
         expect(matcharFilter(JAZZ, filter)).toBe(true);
         expect(matcharFilter(TM, filter)).toBe(true);
         expect(matcharFilter(FOTBOLL, filter)).toBe(false);
         expect(matcharFilter(KYRKAN, filter)).toBe(false);
+    });
+    it('🔥 + kategori är en UNION (ägarbeslut 11/10): kategorin OCH populära', () => {
+        const filter = f({ populärt: true, kategori: 'sport' });
+        expect(matcharFilter(FOTBOLL, filter)).toBe(true); // kategorin, inte pop
+        expect(matcharFilter(JAZZ, filter)).toBe(true); // pop utanför kategorin
+        expect(matcharFilter(TM, filter)).toBe(true); // pop utanför kategorin
+        expect(matcharFilter(ev('https://x.se/teater', 'stage'), filter)).toBe(false); // varken eller
+        expect(matcharFilter(KORPEN, filter)).toBe(false); // källgrinden står kvar
     });
 });
 
@@ -94,9 +102,12 @@ describe('räknare', () => {
         expect(c.get('stage')).toBe(1);
         expect(räknaKategorier(alla, f({ optIn: new Set(['svenskakyrkan']) })).get('music')).toBe(2);
     });
-    it('populärsiffran följer kategorin', () => {
+    it('populärsiffran ignorerar kategorin sedan unionsbeslutet 11/10', () => {
         expect(räknaPopulära(alla, TOMT_FILTER)).toBe(2);
-        expect(räknaPopulära(alla, f({ kategori: 'stage' }))).toBe(1);
+        expect(räknaPopulära(alla, f({ kategori: 'stage' }))).toBe(2);
+    });
+    it('kategorisiffran med 🔥 på räknar unionen ("vad visas om jag trycker här")', () => {
+        expect(räknaKategorier(alla, f({ populärt: true })).get('sport')).toBe(3); // FOTBOLL + JAZZ + TM
     });
     it('källsiffrorna räknar alla tre', () => {
         const c = räknaKällor(alla);

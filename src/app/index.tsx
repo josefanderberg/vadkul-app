@@ -170,9 +170,29 @@ export default function KartScreen() {
         setKort(grupp.length > 1 ? { event: null, grupp, frånLista: false } : { event: e, grupp, frånLista: false });
     };
 
+    // Kartans onPress eldar OCKSÅ när trycket träffade en bricka (källans
+    // onPress är en separat callback) - stämpeln låter karttrycket skilja
+    // "tom karta" från "bricka", oavsett i vilken ordning de två eldar.
+    const brickTryckRef = useRef(0);
     const trycktBricka = (id: string | undefined) => {
+        brickTryckRef.current = Date.now();
         const e = id ? iPeriod.find(x => x.id === id) : undefined;
         if (e) öppna(e, iPeriod);
+    };
+
+    // Tryck på TOM karta MINIMERAR kortet till filterraden (Josef 11/10:
+    // "om man klickar på kartan så ska eventkortet åka ner ... men lämna så
+    // man ser översta filterraden") - kortet stängs bara med ✕ eller
+    // neddrag. Fördröjningen släpper fram brickans callback först så ett
+    // brickbyte aldrig minimeras i förbifarten.
+    const [minimeraNonce, setMinimeraNonce] = useState(0);
+    const karttryck = () => {
+        if (banner) stängBanner();
+        const vid = Date.now();
+        setTimeout(() => {
+            if (brickTryckRef.current > vid - 400) return;
+            setMinimeraNonce(n => n + 1);
+        }, 120);
     };
 
     const väljIGrupp = (e: AppFeedEvent) => {
@@ -242,9 +262,16 @@ export default function KartScreen() {
 
     const push = () => { if (kort) setHistorik(h => [...h, { kort, offset }]); };
 
+    // Förhandsvisningarna i navraden (webbens Nästa/Föregående-knappar visar
+    // vart man går): föregående = historikens topp, antal = gruppens längd.
+    const bakåtKort = historik.length > 0 ? historik[historik.length - 1].kort : null;
     const nav: KortNav | undefined = aktuellt
         ? {
             nästaEtikett: nästaHär ? 'NÄSTA' : nästaDag !== null ? periodLabel(nästaDag, längd).toUpperCase() : null,
+            nästaEvent: nästaHär,
+            nästaAntal: nästaHär ? sammaPlats(iPeriod, nästaHär).length : 0,
+            bakåtEvent: bakåtKort ? bakåtKort.event ?? bakåtKort.grupp[0] ?? null : null,
+            bakåtAntal: bakåtKort?.grupp.length ?? 0,
             onNästa: () => {
                 if (!aktuellt || !ruta) return;
                 const steg = nästaIBild(ankareRef.current ?? aktuellt, aktuellt, poolIBild, besökta);
@@ -372,7 +399,7 @@ export default function KartScreen() {
                         setRuta(ev.nativeEvent.bounds);
                         setZoom(ev.nativeEvent.zoom);
                     }}
-                    onPress={() => { if (banner) stängBanner(); }}
+                    onPress={karttryck}
                 >
                     <Camera ref={cameraRef} initialViewState={{ center: [city.lng, city.lat], zoom: 11 }} />
                     <Images images={BRICKA_IMAGES} />
@@ -559,6 +586,7 @@ export default function KartScreen() {
                     stad={{ slug: city.slug, name: city.name }}
                     onVälj={väljUrLista}
                     nav={nav}
+                    minimeraNonce={minimeraNonce}
                     inbjudan={inbjudan && kort.event?.id === inbjudan.eventId
                         ? { fran: inbjudan.fran, onStäng: () => setInbjudan(null) }
                         : null}

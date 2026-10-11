@@ -193,7 +193,7 @@ function PersonPlus() {
     );
 }
 
-const IKON_FÄRG = '#e2e8f0';
+const IKON_FÄRG = '#334155';
 const STRECK = 2;
 const ikon = StyleSheet.create({
     ram: { width: 20, height: 16 },
@@ -216,13 +216,14 @@ const ikon = StyleSheet.create({
     },
 });
 
-/** Webbens BTN_ON-blå (#006AA7) på kortets mörka yta (EventKort.MÖRK_*). */
+/** Webbens ljusa footer (bg-card + BTN_OFF/BTN_ON): vita knappar med
+ *  slate-kant, blå när valet är på - på kortets vita yta (EventKort 10/10). */
 const styles = StyleSheet.create({
     /** Positioneras av EventKorts footerHållare (counter-translaten). */
     hållare: {
-        backgroundColor: '#17191f',
+        backgroundColor: '#ffffff',
         borderTopWidth: 1,
-        borderTopColor: '#2a2e37',
+        borderTopColor: '#e2e8f0',
     },
     annons: { paddingHorizontal: 12, paddingBottom: 2, fontSize: 11, color: '#94a3b8' },
     platta: {
@@ -234,9 +235,9 @@ const styles = StyleSheet.create({
     },
     knapp: {
         borderRadius: 999,
-        backgroundColor: '#22252d',
+        backgroundColor: '#ffffff',
         borderWidth: 1,
-        borderColor: '#3f4650',
+        borderColor: '#e2e8f0',
         paddingHorizontal: 14,
         paddingVertical: 9,
     },
@@ -244,7 +245,15 @@ const styles = StyleSheet.create({
     ikonKnapp: { paddingHorizontal: 11, minHeight: 36, justifyContent: 'center' },
     /** Textknapparna: texten + räknaren på samma rad. */
     svarKnapp: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-    knappPå: { backgroundColor: '#006AA7', borderColor: '#005590' },
+    knappPå: {
+        backgroundColor: '#006AA7',
+        borderColor: '#005590',
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
+    },
     antal: { fontSize: 13, fontWeight: '800', color: '#94a3b8', fontVariant: ['tabular-nums'] },
     antalPå: { color: 'rgba(255,255,255,0.75)' },
     inbjudan: {
@@ -257,15 +266,15 @@ const styles = StyleSheet.create({
     inbjudanStäng: { fontSize: 14, fontWeight: '900', color: '#ffffff' },
     ansiktsRad: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8 },
     ansikte: {
-        width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#17191f',
-        backgroundColor: '#475569', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+        width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: '#ffffff',
+        backgroundColor: '#cbd5e1', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     },
     ansikteÖverlapp: { marginLeft: -8 },
     ansiktsBild: { width: '100%', height: '100%' },
-    initial: { fontSize: 11, fontWeight: '900', color: '#e2e8f0' },
-    fler: { marginLeft: 4, fontSize: 11, fontWeight: '800', color: '#94a3b8' },
-    ansiktsText: { marginLeft: 8, fontSize: 12, fontWeight: '700', color: '#94a3b8' },
-    knappText: { fontSize: 13, fontWeight: '800', color: '#e2e8f0' },
+    initial: { fontSize: 11, fontWeight: '900', color: '#475569' },
+    fler: { marginLeft: 4, fontSize: 11, fontWeight: '800', color: '#64748b' },
+    ansiktsText: { marginLeft: 8, fontSize: 12, fontWeight: '700', color: '#64748b' },
+    knappText: { fontSize: 13, fontWeight: '800', color: '#334155' },
     knappTextPå: { color: '#ffffff' },
     fyll: { flex: 1 },
     cta: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },

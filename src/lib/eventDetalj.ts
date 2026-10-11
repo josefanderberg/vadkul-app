@@ -65,3 +65,13 @@ export function descriptionText(text: string | null | undefined, pending: boolea
     if (t) return withRecoveredLineBreaks(t);
     return pending ? 'Hämtar beskrivning…' : 'Ingen beskrivning tillgänglig.';
 }
+
+/**
+ * Källans favicon till Värd-raden i kortets huvud - samma duckduckgo-tjänst
+ * som webben (utils/eventExpand.hostFaviconUrl). Värden plockas med regex i
+ * stället för new URL(), som hostLabelFor ovan (Hermes).
+ */
+export function hostFaviconUrl(url: string | null | undefined): string | null {
+    const m = (url ?? '').trim().match(/^https?:\/\/([^/:?#]+)/i);
+    return m ? `https://icons.duckduckgo.com/ip3/${m[1]}.ico` : null;
+}

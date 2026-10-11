@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { descriptionText, eventOutlink, hostLabelFor, withRecoveredLineBreaks } from './eventDetalj';
+import { descriptionText, eventOutlink, hostFaviconUrl, hostLabelFor, withRecoveredLineBreaks } from './eventDetalj';
 
 describe('eventOutlink', () => {
     it('föredrar detaljsvarets url (affiliate-redirecten)', () => {
@@ -31,6 +31,21 @@ describe('hostLabelFor', () => {
         expect(hostLabelFor('', '')).toBe('Okänd');
         expect(hostLabelFor(null, 'inte-en-url')).toBe('Okänd');
         expect(hostLabelFor(null, undefined)).toBe('Okänd');
+    });
+});
+
+describe('hostFaviconUrl', () => {
+    it('bygger duckduckgo-adressen av värden, med www kvar (som webben)', () => {
+        expect(hostFaviconUrl('https://www.modernamuseet.se/sv/stockholm/program/x/')).toBe(
+            'https://icons.duckduckgo.com/ip3/www.modernamuseet.se.ico',
+        );
+        expect(hostFaviconUrl('http://example.com:8080/a?b=c')).toBe('https://icons.duckduckgo.com/ip3/example.com.ico');
+    });
+    it('ger null utan användbar länk', () => {
+        expect(hostFaviconUrl('')).toBeNull();
+        expect(hostFaviconUrl('inte-en-url')).toBeNull();
+        expect(hostFaviconUrl(undefined)).toBeNull();
+        expect(hostFaviconUrl(null)).toBeNull();
     });
 });
 
