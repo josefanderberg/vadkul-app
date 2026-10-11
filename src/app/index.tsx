@@ -22,7 +22,7 @@ import type { CameraRef, Expression, FilterSpecification, MapRef, StyleSpecifica
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { hittaAnvändarEvent, useEvent } from '@/api/useEvent';
 import { fetchEventSomFlöde } from '@/api/eventDetalj';
-import { DagValjare } from '@/components/DagValjare';
+import { DagValjare, MAX_OFFSET } from '@/components/DagValjare';
 import { EventKort, type KortNav } from '@/components/EventKort';
 import { FilterBricka } from '@/components/FilterBricka';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
@@ -36,6 +36,7 @@ import { byggBrickor, byggÖnskningar } from '@/lib/kartlager';
 import { useKonto } from '@/lib/kontoContext';
 import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
 import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kartBanner';
+import { hoppDag, hoppPanorering, hoppStad, prenumereraKartHopp, taKartHopp, type HoppRetur, type KartHopp } from '@/lib/kartHopp';
 import { kartPrompt, type PromptÅtgärd } from '@/lib/kartPrompt';
 import { kategoriFor } from '@/lib/kategorier';
 import { useRegionVal } from '@/lib/regionContext';
@@ -51,6 +52,9 @@ interface Kort {
     grupp: AppFeedEvent[];
     /** Valt ur väljarlistan - tillbakapilen finns så länge man står kvar i gruppen. */
     frånLista: boolean;
+    /** Kom kortet via ett hopp från söket/stadssidan: ← ☰ tillbaka dit, så
+     *  länge man står kvar på just det eventet (webbens searchReturn). */
+    retur?: (HoppRetur & { eventId: string }) | null;
 }
 
 interface HistorikPost {
@@ -81,7 +85,7 @@ const ETIKETT_STIL = {
 };
 
 export default function KartScreen() {
-    const { city, region, fromGps, manuell, klar, introKlar } = useRegionVal();
+    const { city, region, fromGps, manuell, klar, introKlar, väljStad } = useRegionVal();
     const feed = useEvent(region);
     const filter = useFilter();
     const { ärSparad } = useSparade();
@@ -133,10 +137,21 @@ export default function KartScreen() {
     const cameraRef = useRef<CameraRef>(null);
     const förstaRef = useRef(true);
     const landningRef = useRef<string | null>(city.slug);
+    /** Satt när ett hopp (lib/kartHopp) bytte stad: kameran flyger till
+     *  EVENTET i stället för stadens mitt. */
+    const stadsHoppRef = useRef<AppFeedEvent | null>(null);
     useEffect(() => {
         if (!klar) return;
         if (förstaRef.current) {
             förstaRef.current = false;
+            return;
+        }
+        const hopp = stadsHoppRef.current;
+        if (hopp) {
+            // Dagen är eventets - inget auto-hopp till Imorgon vid landningen.
+            stadsHoppRef.current = null;
+            landningRef.current = null;
+            cameraRef.current?.flyTo({ center: [hopp.lng, hopp.lat], zoom: 11, duration: 1500 });
             return;
         }
         landningRef.current = city.slug;
@@ -245,6 +260,54 @@ export default function KartScreen() {
         if (inbjudan && kort?.event?.id !== inbjudan.eventId) setInbjudan(null);
     }, [kort, inbjudan]);
 
+    // ── Hoppet från söket, profilen och stadssidan (lib/kartHopp, webbens
+    // jumpToEvent): skärmen stänger sig och eventet väljs HÄR, på sin dag,
+    // som vid ett kartklick - kortet får Nästa och listan under kortet.
+    // Kameran står still om brickan syns ovanför kortet, annars panorerar den
+    // dit på samma zoom (webbens recenterOnSelected). Kom hoppet från en
+    // stadssida (eller sökets ort), eller ligger eventet i ett annat län,
+    // byter kartan stad och flyger till eventet.
+    /** Hoppet lade kortet på en dag där eventet inte finns (passerat event ur
+     *  profilens historik) - periodbytet får inte stänga det kortet. */
+    const hoppPeriodRef = useRef(false);
+    const utförHopp = (h: KartHopp) => {
+        const e = h.event;
+        const iFlödet = (feed.data ?? []).some(x => x.id === e.id);
+        const målStad = hoppStad(e, { iFlödet, stad: city, stadSlug: h.stadSlug });
+        const d = hoppDag(e, new Date(), MAX_OFFSET);
+        hoppPeriodRef.current = (d !== offset || längd !== 1) && !eventIPeriod(e.time, d, 1);
+        setLängd(1);
+        setOffset(d);
+        const period = filtrerade.filter(x => eventIPeriod(x.time, d, 1));
+        ankareRef.current = e;
+        setBesökta(new Set());
+        setHistorik([]);
+        setKort({
+            event: e,
+            grupp: iFlödet ? sammaPlats(period, e) : [e],
+            frånLista: false,
+            retur: h.retur ? { ...h.retur, eventId: e.id } : null,
+        });
+        if (målStad) {
+            stadsHoppRef.current = e;
+            väljStad(målStad);
+            return;
+        }
+        const mitt = ruta ? hoppPanorering(e, ruta) : [e.lng, e.lat] as [number, number];
+        if (mitt) cameraRef.current?.easeTo({ center: mitt, duration: 500 });
+    };
+    const utförHoppRef = useRef(utförHopp);
+    useEffect(() => { utförHoppRef.current = utförHopp; });
+    useEffect(() => {
+        if (!klar) return;
+        const ta = () => {
+            const h = taKartHopp();
+            if (h) utförHoppRef.current(h);
+        };
+        ta();
+        return prenumereraKartHopp(ta);
+    }, [klar]);
+
     // Nästa: närmaste obesökta i bild (ovanför kortet, inte passerat), sedan
     // nästa dag med event i bild - inget nytt varv, kameran står still.
     const poolIBild = useMemo(
@@ -323,6 +386,10 @@ export default function KartScreen() {
 
     // Dagbyte från väljaren stänger kortet om det valda inte längre syns.
     useEffect(() => {
+        if (hoppPeriodRef.current) {
+            hoppPeriodRef.current = false;
+            return;
+        }
         if (kort?.event && !eventIPeriod(kort.event.time, offset, längd)) stängKort();
         // bara vid periodbyte
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -672,7 +739,10 @@ export default function KartScreen() {
                     onVäljIGrupp={väljIGrupp}
                     onTillbakaTillLista={kort.frånLista && kort.grupp.length > 1
                         ? () => setKort({ event: null, grupp: kort.grupp, frånLista: false })
-                        : null}
+                        : kort.retur && kort.event?.id === kort.retur.eventId
+                            ? () => router.push(kort.retur!.href)
+                            : null}
+                    tillbakaEtikett={kort.frånLista && kort.grupp.length > 1 ? undefined : kort.retur?.etikett}
                     lista={iRutan}
                     listaFrånOffset={offset}
                     flöde={filtrerade}

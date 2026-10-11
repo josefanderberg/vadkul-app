@@ -1,14 +1,23 @@
 /**
  * Dag/vecka-kontrollen fast i botten - webbens mörka platta med BÅDA raderna
  * och antal i kartans ruta (vald rad = vit pill, allt rounded-full). Pilarna
- * stegar EN dag i båda lägena. ↺ svävar rakt ovanför bakåtpilen och tar en
- * till HEMMADAGEN (Imorgon om idag är slut i rutan, annars Idag) - göms när
- * man redan står där (kart-ui 24/9). "Tryck för att växla" är ENGÅNGS-
- * onboarding: första trycket på någon av väljarens knappar släcker den för
- * gott på enheten (kart-ui 1/9).
+ * stegar EN dag i båda lägena. "Tryck för att växla" är ENGÅNGS-onboarding:
+ * första trycket på någon av väljarens knappar släcker den för gott på
+ * enheten (kart-ui 1/9).
+ *
+ * KALENDERN (webbens 2b, kart-ui 31/8): på IDAG står kalenderknappen där
+ * bakåtpilen annars står och öppnar månadskalendern - trycket växlar också
+ * till dagläge, och ett valt datum blir den dagen (passerade dygn går inte
+ * att välja; appflödet räcker 14 dagar, så kalendern slutar där). Har man
+ * bytt dag är knappen i stället ↺ rakt ovanför bakåtpilen, som tar en till
+ * HEMMADAGEN (Imorgon om idag är slut i rutan, annars Idag) och göms när
+ * man redan står där (24/9). Vill man till ett annat datum nollställer man
+ * först - kalendern finns på idag-läget.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { periodLabel } from '@/lib/dagar';
+import { useState } from 'react';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { dagStart, offsetFörDatum, periodLabel } from '@/lib/dagar';
 import { NYCKEL, useLagrad } from '@/lib/lagring';
 
 /** Flödets horisont är 14 dagar - längre än så kan väljaren inte stega. */
@@ -38,6 +47,35 @@ export function DagValjare({
     const [hintKlar, setHintKlar, hintLaddad] = useLagrad(NYCKEL.växlaHintKlar, false);
     const kvittera = () => { if (!hintKlar) setHintKlar(true); };
 
+    // Kalendern: iOS får månadsvyn (inline) i en ruta över kartan, Android
+    // sin egen datumdialog. Pickern står på den visade dagen.
+    const [kalenderÖppen, setKalenderÖppen] = useState(false);
+    const väljDatum = (d: Date) => {
+        const o = offsetFörDatum(d, MAX_OFFSET);
+        if (o === null) return; // passerat eller bortom horisonten - välj om
+        setKalenderÖppen(false);
+        onLängd(1);
+        onOffset(o);
+    };
+    const öppnaKalender = () => {
+        kvittera();
+        // Kalenderklicket ger dagläget direkt (webben: "hoppar samtidigt hem
+        // till idag" - knappen finns bara på idag, så dagen står redan rätt).
+        if (längd !== 1) onLängd(1);
+        const nu = new Date();
+        if (Platform.OS === 'android') {
+            DateTimePickerAndroid.open({
+                value: dagStart(nu, offset),
+                mode: 'date',
+                minimumDate: dagStart(nu, 0),
+                maximumDate: dagStart(nu, MAX_OFFSET),
+                onChange: (ev, d) => { if (ev.type === 'set' && d) väljDatum(d); },
+            });
+            return;
+        }
+        setKalenderÖppen(true);
+    };
+
     return (
         <View style={styles.yta} pointerEvents="box-none">
             {hintLaddad && !hintKlar ? (
@@ -46,7 +84,7 @@ export function DagValjare({
                 </View>
             ) : null}
             <View style={styles.rad}>
-                {offset !== hemmadag ? (
+                {offset > 0 && offset !== hemmadag ? (
                     <Pressable
                         style={styles.nollKnapp}
                         onPress={() => { kvittera(); onOffset(hemmadag); }}
@@ -62,15 +100,25 @@ export function DagValjare({
                     <Text style={styles.skapaText}>＋</Text>
                 </Pressable>
                 <View style={styles.platta}>
-                    <Pressable
-                        onPress={() => { kvittera(); onOffset(Math.max(0, offset - 1)); }}
-                        disabled={offset === 0}
-                        hitSlop={8}
-                        style={[styles.pil, offset === 0 && styles.pilDimmad]}
-                        accessibilityLabel="Föregående dag"
-                    >
-                        <Text style={styles.pilText}>‹</Text>
-                    </Pressable>
+                    {offset === 0 ? (
+                        <Pressable
+                            onPress={öppnaKalender}
+                            hitSlop={8}
+                            style={[styles.pil, styles.kalender, kalenderÖppen && styles.kalenderÖppen]}
+                            accessibilityLabel="Välj datum i kalendern"
+                        >
+                            <KalenderIkon färg={kalenderÖppen ? '#0f172a' : '#ffffff'} />
+                        </Pressable>
+                    ) : (
+                        <Pressable
+                            onPress={() => { kvittera(); onOffset(Math.max(0, offset - 1)); }}
+                            hitSlop={8}
+                            style={styles.pil}
+                            accessibilityLabel="Föregående dag"
+                        >
+                            <Text style={styles.pilText}>‹</Text>
+                        </Pressable>
+                    )}
                     <Pressable style={styles.radKolumn} onPress={() => { kvittera(); onLängd(längd === 1 ? 7 : 1); }}>
                         {([1, 7] as const).map(l => {
                             const vald = längd === l;
@@ -96,9 +144,59 @@ export function DagValjare({
                     </Pressable>
                 </View>
             </View>
+            {Platform.OS === 'ios' ? (
+                <Modal visible={kalenderÖppen} transparent animationType="fade" onRequestClose={() => setKalenderÖppen(false)}>
+                    <Pressable style={styles.kalenderBakgrund} onPress={() => setKalenderÖppen(false)} accessibilityLabel="Stäng kalendern">
+                        {/* Rutan sväljer sina egna tryck - bara utanför stänger. */}
+                        <Pressable style={styles.kalenderRuta} onPress={() => {}}>
+                            <Text style={styles.kalenderRubrik}>Välj dag</Text>
+                            <DateTimePicker
+                                value={dagStart(new Date(), offset)}
+                                mode="date"
+                                display="inline"
+                                locale="sv-SE"
+                                minimumDate={dagStart(new Date(), 0)}
+                                maximumDate={dagStart(new Date(), MAX_OFFSET)}
+                                themeVariant="light"
+                                accentColor="#006AA7"
+                                onChange={(ev, d) => { if (ev.type === 'set' && d) väljDatum(d); }}
+                            />
+                            <Pressable style={styles.kalenderStäng} onPress={() => setKalenderÖppen(false)}>
+                                <Text style={styles.kalenderStängText}>Stäng</Text>
+                            </Pressable>
+                        </Pressable>
+                    </Pressable>
+                </Modal>
+            ) : null}
         </View>
     );
 }
+
+/**
+ * Lucides CalendarDays ritad med vyer (som PersonPlus i RsvpFooter - appen
+ * har inget ikonbibliotek): ram, två upphängningar, skiljelinje, dagprickar.
+ */
+function KalenderIkon({ färg }: { färg: string }) {
+    return (
+        <View style={ikon.ram} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <View style={[ikon.kropp, { borderColor: färg }]} />
+            <View style={[ikon.ögla, { left: 4, backgroundColor: färg }]} />
+            <View style={[ikon.ögla, { right: 4, backgroundColor: färg }]} />
+            <View style={[ikon.linje, { backgroundColor: färg }]} />
+            {[0, 1, 2].map(k => [0, 1].map(r => (
+                <View key={`${k}${r}`} style={[ikon.prick, { left: 4.5 + k * 4, top: 10.5 + r * 3.5, backgroundColor: färg }]} />
+            )))}
+        </View>
+    );
+}
+
+const ikon = StyleSheet.create({
+    ram: { width: 20, height: 20 },
+    kropp: { position: 'absolute', left: 1, top: 3, width: 18, height: 16, borderRadius: 3.5, borderWidth: 2 },
+    ögla: { position: 'absolute', top: 0.5, width: 2, height: 5, borderRadius: 1 },
+    linje: { position: 'absolute', left: 1, top: 7.5, width: 18, height: 2 },
+    prick: { position: 'absolute', width: 2.5, height: 2.5, borderRadius: 1.25 },
+});
 
 const MÖRK = 'rgba(36,42,51,0.92)';
 
@@ -158,6 +256,33 @@ const styles = StyleSheet.create({
     },
     pil: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
     pilDimmad: { opacity: 0.35 },
+    /** Webbens kalenderknapp: bg-white/15, VIT när kalendern är öppen. */
+    kalender: { backgroundColor: 'rgba(255,255,255,0.15)' },
+    kalenderÖppen: { backgroundColor: '#ffffff' },
+    kalenderBakgrund: {
+        flex: 1,
+        backgroundColor: 'rgba(15,23,42,0.45)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+    },
+    kalenderRuta: {
+        width: '100%',
+        maxWidth: 380,
+        backgroundColor: '#ffffff',
+        borderRadius: 24,
+        paddingHorizontal: 12,
+        paddingTop: 16,
+        paddingBottom: 12,
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 6 },
+        elevation: 12,
+    },
+    kalenderRubrik: { fontSize: 16, fontWeight: '900', color: '#0f172a', paddingHorizontal: 8, marginBottom: 4 },
+    kalenderStäng: { alignSelf: 'center', marginTop: 4, paddingHorizontal: 20, paddingVertical: 10 },
+    kalenderStängText: { fontSize: 15, fontWeight: '800', color: '#006AA7' },
     pilText: { fontSize: 24, fontWeight: '700', color: '#ffffff', marginTop: -3 },
     radKolumn: { minWidth: 210, gap: 2 },
     periodRad: {

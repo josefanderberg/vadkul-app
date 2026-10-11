@@ -4,18 +4,22 @@
  * Samma kategorirad och filter som kartan (kyrkan/PRO/Korpen via FLER), bara
  * event som inte varit (webbens freshDays). "Visa på kartan" lägger staden
  * på kartan; "Saknar du något?" är webbens önska/skapa-pitch.
+ *
+ * Ett event härifrån öppnas PÅ KARTAN i stadens vy (lib/kartHopp - som
+ * webbens ?event=-länk från stadssidorna): kortet får Nästa + listan under
+ * kortet, och ← ☰ tar en tillbaka hit.
  */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { CITIES, type AppFeedEvent } from '@vadkul/kontrakt';
 import { useEvent } from '@/api/useEvent';
-import { EventKort } from '@/components/EventKort';
 import { EventRad } from '@/components/EventRad';
 import { KategoriRad } from '@/components/KategoriRad';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast } from '@/lib/harVarit';
 import { matcharFilter } from '@/lib/kartFilter';
+import { begärKartHopp } from '@/lib/kartHopp';
 import { useRegionVal } from '@/lib/regionContext';
 import { grupperaPerDag, stadensEvent } from '@/lib/stadsUtbud';
 
@@ -25,7 +29,6 @@ export default function StadScreen() {
     const { väljStad } = useRegionVal();
     const filter = useFilter();
     const feed = useEvent(stad?.region ?? '');
-    const [valt, setValt] = useState<AppFeedEvent | null>(null);
 
     const iOrten = useMemo(() => {
         if (!stad) return [];
@@ -42,6 +45,15 @@ export default function StadScreen() {
             </View>
         );
     }
+
+    const öppna = (e: AppFeedEvent) => {
+        begärKartHopp({
+            event: e,
+            stadSlug: stad.slug,
+            retur: { etikett: 'Tillbaka till stadssidan', href: { pathname: '/stad/[slug]', params: { slug: stad.slug } } },
+        });
+        router.dismissTo('/');
+    };
 
     const visaPåKartan = () => {
         väljStad(stad);
@@ -112,20 +124,8 @@ export default function StadScreen() {
                     </View>
                 }
                 renderSectionHeader={({ section }) => <Text style={styles.dagRubrik}>{section.label}</Text>}
-                renderItem={({ item }) => <EventRad event={item} onPress={() => setValt(item)} />}
+                renderItem={({ item }) => <EventRad event={item} onPress={() => öppna(item)} />}
             />
-            {/* flöde = ortens event för arrangörsraden; ingen stad-länk (man
-                är redan här) och ingen lista (sidan ÄR listan). Raden byter
-                event via onVäljIGrupp - samma kort, nytt val. */}
-            {valt ? (
-                <EventKort
-                    event={valt}
-                    grupp={[valt]}
-                    flöde={iOrten}
-                    onVäljIGrupp={e => setValt(e)}
-                    onClose={() => setValt(null)}
-                />
-            ) : null}
         </View>
     );
 }

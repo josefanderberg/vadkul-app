@@ -38,3 +38,18 @@ export function eventIPeriod(timeIso: string, offset: number, längd: number, nu
     if (Number.isNaN(t)) return false;
     return t >= dagStart(nu, offset).getTime() && t < dagStart(nu, offset + längd).getTime();
 }
+
+/**
+ * Kalenderns val (webbens handleCalendarPick i dagväljaren): datumet blir
+ * dagens offset från idag. Passerade dygn ger null ("passerade dygn visas
+ * inte"), liksom dagar bortom flödets horisont (appflödet är 14 dagar -
+ * webben har ingen övre gräns, där hämtas resten av tidslinjen).
+ */
+export function offsetFörDatum(datum: Date, maxOffset: number, nu: Date = new Date()): number | null {
+    if (Number.isNaN(datum.getTime())) return null;
+    const dag = new Date(datum);
+    dag.setHours(0, 0, 0, 0);
+    // Math.round: ett sommartidsbyte emellan ger 23/25-timmarsdygn.
+    const offset = Math.round((dag.getTime() - dagStart(nu, 0).getTime()) / 86_400_000);
+    return offset < 0 || offset > maxOffset ? null : offset;
+}

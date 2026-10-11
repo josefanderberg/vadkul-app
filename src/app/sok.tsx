@@ -6,18 +6,21 @@
  *  - Träffarna: webbens rankning (lib/sok), träffen i fetstil, samma filter
  *    som kartan (kategori/🔥/källor) och bara event som inte varit.
  *  - "jazz i göteborg" söker i ortens län även om kartan står någon annanstans.
+ *  - En träff öppnas PÅ KARTAN (lib/kartHopp, webbens listval "som ett
+ *    kartklick"): panelen stängs, kortet får Nästa + listan under kortet och
+ *    ← ☰ tar en tillbaka hit med samma sökord (webbens searchReturn).
  */
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useEvent } from '@/api/useEvent';
-import { EventKort } from '@/components/EventKort';
 import { EventRad } from '@/components/EventRad';
 import { KategoriRad } from '@/components/KategoriRad';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast } from '@/lib/harVarit';
 import { matcharFilter } from '@/lib/kartFilter';
+import { begärKartHopp } from '@/lib/kartHopp';
 import { useRegionVal } from '@/lib/regionContext';
 import { distanceKm } from '@/lib/regionVal';
 import { normalizeSearchQuery, searchCities, sokEvent, splitCityFromQuery } from '@/lib/sok';
@@ -25,8 +28,9 @@ import { normalizeSearchQuery, searchCities, sokEvent, splitCityFromQuery } from
 export default function SokScreen() {
     const { city, region, väljStad, minPos } = useRegionVal();
     const filter = useFilter();
-    const [fråga, setFråga] = useState('');
-    const [valt, setValt] = useState<AppFeedEvent | null>(null);
+    // ?q= = tillbaka från kortet (← ☰ "Tillbaka till sökningen").
+    const { q: frånKortet } = useLocalSearchParams<{ q?: string }>();
+    const [fråga, setFråga] = useState(frånKortet ?? '');
 
     const q = normalizeSearchQuery(fråga);
     const { city: sökOrt, text: sökText } = splitCityFromQuery(q);
@@ -39,6 +43,15 @@ export default function SokScreen() {
     const träffar = useMemo(() => sokEvent(underlag, fråga), [underlag, fråga]);
     const städer = searchCities(fråga);
     const markera = sökText || q;
+
+    const öppna = (e: AppFeedEvent) => {
+        begärKartHopp({
+            event: e,
+            stadSlug: sökOrt?.slug ?? null,
+            retur: { etikett: 'Tillbaka till sökningen', href: { pathname: '/sok', params: { q: fråga } } },
+        });
+        router.dismissTo('/');
+    };
 
     const visaStad = (slug: string) => {
         const c = städer.find(s => s.slug === slug);
@@ -113,11 +126,10 @@ export default function SokScreen() {
                         event={item}
                         fråga={markera}
                         km={minPos ? distanceKm(minPos.lat, minPos.lng, item.lat, item.lng) : null}
-                        onPress={() => setValt(item)}
+                        onPress={() => öppna(item)}
                     />
                 )}
             />
-            {valt ? <EventKort event={valt} grupp={[valt]} onClose={() => setValt(null)} /> : null}
         </View>
     );
 }

@@ -21,6 +21,7 @@ export function EventRad({
     fråga,
     km,
     dimmad = false,
+    harVarit = false,
     höger,
 }: {
     event: AppFeedEvent;
@@ -31,6 +32,8 @@ export function EventRad({
     /** Avstånd (från dig) att visa före platsen. */
     km?: number | null;
     dimmad?: boolean;
+    /** "· har varit" efter tiden (väljarlistans historik, webbens infoRow). */
+    harVarit?: boolean;
     /** Extra kontroll längst till höger (t.ex. hjärtat i sparade). */
     höger?: React.ReactNode;
 }) {
@@ -60,6 +63,7 @@ export function EventRad({
                 {plats ? <Text style={s.meta} numberOfLines={1}>📍 {plats}</Text> : null}
                 <Text style={s.meta} numberOfLines={1}>
                     🕐 {formatEventTid(e.time, e.hasSpecificTime)}
+                    {harVarit ? ' · har varit' : ''}
                     {e.pop ? '  🔥' : ''}
                 </Text>
             </View>

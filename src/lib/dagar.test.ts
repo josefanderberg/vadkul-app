@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventIPeriod, periodLabel } from './dagar';
+import { eventIPeriod, offsetFörDatum, periodLabel } from './dagar';
 
 const NU = new Date(2026, 8, 27, 14, 0); // sön 27 sep 2026, lokal tid
 const iso = (d: Date) => d.toISOString();
@@ -40,5 +40,24 @@ describe('eventIPeriod', () => {
     });
     it('tål trasiga tider', () => {
         expect(eventIPeriod('inte-en-tid', 0, 1, NU)).toBe(false);
+    });
+});
+
+describe('offsetFörDatum (kalendern i dagväljaren)', () => {
+    it('datumet blir dagens offset, oavsett klockslag', () => {
+        expect(offsetFörDatum(new Date(2026, 8, 27, 0, 0), 13, NU)).toBe(0);
+        expect(offsetFörDatum(new Date(2026, 8, 29, 23, 59), 13, NU)).toBe(2);
+        expect(offsetFörDatum(new Date(2026, 9, 10, 12, 0), 13, NU)).toBe(13);
+    });
+    it('passerade dygn och dagar bortom horisonten ger null', () => {
+        expect(offsetFörDatum(new Date(2026, 8, 26, 12, 0), 13, NU)).toBeNull();
+        expect(offsetFörDatum(new Date(2026, 9, 11, 12, 0), 13, NU)).toBeNull();
+    });
+    it('tål sommartidsbytet (25 okt 2026)', () => {
+        const fre = new Date(2026, 9, 23, 14, 0);
+        expect(offsetFörDatum(new Date(2026, 9, 26, 9, 0), 13, fre)).toBe(3);
+    });
+    it('trasigt datum ger null', () => {
+        expect(offsetFörDatum(new Date('x'), 13, NU)).toBeNull();
     });
 });

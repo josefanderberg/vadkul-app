@@ -20,7 +20,6 @@ import * as WebBrowser from 'expo-web-browser';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { glömAnvändarEvent, useAnvändarEvent } from '@/api/useEvent';
-import { EventKort } from '@/components/EventKort';
 import { EventRad } from '@/components/EventRad';
 import { VannerSektion } from '@/components/VannerSektion';
 import { ärSerie } from '@/lib/anvandarEvent';
@@ -28,6 +27,7 @@ import { useFilter } from '@/lib/filterContext';
 import { KONTON_PÅ } from '@/lib/funktioner';
 import { isEventPast } from '@/lib/harVarit';
 import { KÄLLOR } from '@/lib/kartFilter';
+import { begärKartHopp } from '@/lib/kartHopp';
 import { useKonto } from '@/lib/kontoContext';
 import { felText } from '@/lib/kontoFel';
 import { minaEventRader } from '@/lib/minaEvent';
@@ -110,7 +110,12 @@ export default function ProfilScreen() {
     const filter = useFilter();
     const konto = useKonto();
     const qc = useQueryClient();
-    const [valt, setValt] = useState<AppFeedEvent | null>(null);
+    // Ett event härifrån öppnas PÅ KARTAN (webbens jumpToEvent: profilen
+    // stängs och eventet väljs) - kortet får Nästa + listan under kortet.
+    const öppna = (e: AppFeedEvent) => {
+        begärKartHopp({ event: e });
+        router.dismissTo('/');
+    };
 
     // Mina event (webbens ProfilePanel-sektion): egna skapade event ur den
     // delade Firestore-listan, HOPGRUPPERADE till en rad per sak man skapat
@@ -238,7 +243,7 @@ export default function ProfilScreen() {
                                     key={rad.evt.id}
                                     event={rad.evt}
                                     dimmad={isEventPast(rad.evt, nu)}
-                                    onPress={() => setValt(rad.evt)}
+                                    onPress={() => öppna(rad.evt)}
                                     höger={
                                         <View style={styles.minaKnappar}>
                                             {rad.tag ? <Text style={styles.minaTag}>{rad.tag}</Text> : null}
@@ -275,7 +280,7 @@ export default function ProfilScreen() {
                 {KONTON_PÅ && konto.användare ? (
                     <>
                         <Text style={styles.sektion}>Vänner</Text>
-                        <VannerSektion uid={konto.användare.uid} onVälj={e => setValt(e)} />
+                        <VannerSektion uid={konto.användare.uid} onVälj={öppna} />
                     </>
                 ) : null}
 
@@ -290,7 +295,7 @@ export default function ProfilScreen() {
                             key={e.id}
                             event={e}
                             dimmad={isEventPast(e, nu)}
-                            onPress={() => setValt(e)}
+                            onPress={() => öppna(e)}
                             höger={
                                 <Pressable onPress={() => växla(e)} hitSlop={10} accessibilityLabel="Ta bort från sparade">
                                     <Text style={styles.hjärta}>♥</Text>
@@ -331,7 +336,6 @@ export default function ProfilScreen() {
                     </Pressable>
                 </View>
             </ScrollView>
-            {valt ? <EventKort event={valt} grupp={[valt]} onClose={() => setValt(null)} /> : null}
         </View>
     );
 }

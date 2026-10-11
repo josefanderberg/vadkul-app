@@ -75,6 +75,7 @@ import { FlerFran } from '@/components/FlerFran';
 import { Rapportera } from '@/components/Rapportera';
 import { HelskarmsBild } from '@/components/HelskarmsBild';
 import { KategoriRad } from '@/components/KategoriRad';
+import { ListRad } from '@/components/ListRad';
 import { RsvpFooter } from '@/components/RsvpFooter';
 import { arrangörsRad, källDomän } from '@/lib/arrangorsRad';
 import { periodLabel } from '@/lib/dagar';
@@ -87,8 +88,10 @@ import { formatKm } from '@/lib/flerEvent';
 import { isEventPast } from '@/lib/harVarit';
 import { kategoriFor } from '@/lib/kategorier';
 import { matcharKortSök } from '@/lib/kortSok';
+import { NYCKEL, useLagrad } from '@/lib/lagring';
+import { bildflöde, delaVäljarlista, väljarRäknare } from '@/lib/listRad';
 import { useRegionVal } from '@/lib/regionContext';
-import { distanceKm } from '@/lib/regionVal';
+import { distanceKm, nearestCity } from '@/lib/regionVal';
 import { höjdEfterHuvudbyte, landning, sheetStops } from '@/lib/sheetSnap';
 import { useSparade } from '@/lib/sparadeContext';
 import { AFFILIATE_DISCLOSURE, isAffiliateUrl, isTicketmasterEvent } from '@/lib/ticketmaster';
@@ -130,6 +133,7 @@ export function EventKort({
     grupp = [],
     onVäljIGrupp,
     onTillbakaTillLista,
+    tillbakaEtikett = 'Tillbaka till listan',
     lista = [],
     listaFrånOffset = 0,
     flöde = [],
@@ -147,6 +151,9 @@ export function EventKort({
     onVäljIGrupp?: (e: AppFeedEvent) => void;
     /** Satt när man valt ur väljarlistan och står kvar i gruppen. */
     onTillbakaTillLista?: (() => void) | null;
+    /** ← ☰-pilens etikett - "Tillbaka till sökningen" när kortet kom från
+     *  söket (webbens searchReturn), annars multievent-listan. */
+    tillbakaEtikett?: string;
     /** Underlaget för Månaden/Populärt (kartans filter + ruta). */
     lista?: AppFeedEvent[];
     /** Visad dag - listorna börjar här. */
@@ -383,7 +390,7 @@ export function EventKort({
                             <Pressable
                                 onPress={onTillbakaTillLista}
                                 hitSlop={8}
-                                accessibilityLabel="Tillbaka till listan"
+                                accessibilityLabel={tillbakaEtikett}
                                 style={({ pressed }) => [styles.glasPill, pressed && styles.tryckt]}
                             >
                                 <Text style={styles.glasPillText}>← ☰</Text>
@@ -504,13 +511,37 @@ function Handtag() {
 }
 
 /** Månaden-flikens tal: samma eventDagar-underlag som listan under kortet.
- *  `utesluten` är det valda eventet (räknas som passerat, som i fliken). */
+ *  `utesluten` är det valda eventet (räknas som passerat, som i fliken).
+ *  Stadsknappen visas bara i infovyn, där listan är BILDFLÖDET - talet
+ *  räknar då bildraderna, exakt som fliken (webbens cityCount =
+ *  tabDays.all.count). */
 function månadsTal(lista: AppFeedEvent[], frånOffset: number, utesluten: string): number | null {
     if (lista.length === 0) return null;
     const nu = new Date();
     const nuMs = nu.getTime();
-    const dagar = eventDagar(lista, frånOffset, nu, e => isEventPast(e, nuMs) || e.id === utesluten);
+    const dagar = eventDagar(bildflöde(lista), frånOffset, nu, e => isEventPast(e, nuMs) || e.id === utesluten);
     return dagar.reduce((n, d) => n + d.events.length, 0);
+}
+
+/** Dagrubriken i kortets listor - webbens blå streck + dagen i fetstil. */
+function DagRubrik({ offset }: { offset: number }) {
+    const text = periodLabel(offset, 1);
+    return (
+        <View style={styles.dagRubrik}>
+            <View style={styles.dagStreck} />
+            <Text style={styles.dagRubrikText}>{text.charAt(0).toUpperCase() + text.slice(1)}</Text>
+        </View>
+    );
+}
+
+/** Väljarlistans rubrik: lokalen när HELA högen delar namn, annars orten
+ *  (webbens placeName - event geokodade till ortens mitt hamnar i samma hög). */
+function platsNamn(grupp: AppFeedEvent[]): string | null {
+    const först = grupp[0];
+    if (!först) return null;
+    const namn = först.locationName?.trim() ?? '';
+    if (namn && grupp.every(e => (e.locationName?.trim() ?? '') === namn)) return namn;
+    return Number.isFinite(först.lat) && Number.isFinite(först.lng) ? nearestCity(först.lat, först.lng).name : null;
 }
 
 function Väljarlista({
@@ -541,8 +572,15 @@ function Väljarlista({
     onHuvudHöjd: (h: number) => void;
     scrollRef: React.RefObject<ScrollView | null>;
 }) {
-    const plats = grupp[0]?.locationName;
-    const nu = Date.now();
+    const plats = platsNamn(grupp);
+    // Kommande dag för dag, passerade HOPFÄLLDA längst ner (webbens
+    // EventCardGroupList: "Passerade event ligger hopfällda tills man ber om
+    // dem"). Dagrubrikerna bara när högen spänner över flera dagar.
+    const { dagar, passerade } = useMemo(() => delaVäljarlista(grupp, new Date()), [grupp]);
+    // Utfällningen gäller bara den hög den gjordes i (ny bricka = hopfällt).
+    const högNyckel = `${grupp[0]?.id ?? ''}:${grupp.length}`;
+    const [utfälldHög, setUtfälldHög] = useState<string | null>(null);
+    const visaPasserade = utfälldHög === högNyckel;
     /** Arrangörsraden bara när HELA högen delar källdomän (webbens
      *  chooserOrganizerRow, som matchar värdnamn - flödet har bara domänen). */
     const gruppRad = useMemo(() => {
@@ -558,8 +596,10 @@ function Väljarlista({
                 <Handtag />
                 <View style={styles.rad}>
                     <View style={styles.textkol}>
-                        <Text style={styles.titel} numberOfLines={2}>{grupp.length} event här</Text>
-                        {plats ? <Text style={[styles.meta, styles.väljarMeta]} numberOfLines={1}>📍 {plats}</Text> : null}
+                        <Text style={styles.titel} numberOfLines={2}>{plats ? `📍 ${plats}` : `${grupp.length} event här`}</Text>
+                        <Text style={styles.väljarRäknare} numberOfLines={1}>
+                            {väljarRäknare(grupp.length, dagar.length, passerade.length).toUpperCase()}
+                        </Text>
                     </View>
                     <Pressable onPress={onClose} hitSlop={12} style={styles.stang} accessibilityLabel="Stäng">
                         <Text style={styles.stangText}>✕</Text>
@@ -576,9 +616,35 @@ function Väljarlista({
                 Platsrubriken är redan "sticky": den ligger utanför den här
                 scrollvyn och följer alltså aldrig med upp. */}
             <ScrollView ref={scrollRef} {...dubbeltapp} style={styles.innehåll} contentContainerStyle={styles.innehållInre}>
-                {grupp.map(e => (
-                    <EventRad key={e.id} event={e} tema="ljus" dimmad={isEventPast(e, nu)} onPress={() => onVälj(e)} />
+                {dagar.map(d => (
+                    <View key={d.offset}>
+                        {dagar.length > 1 ? <DagRubrik offset={d.offset} /> : null}
+                        {d.events.map(e => (
+                            <EventRad key={e.id} event={e} tema="ljus" onPress={() => onVälj(e)} />
+                        ))}
+                    </View>
                 ))}
+                {/* Historiken: det som redan varit ligger hopfällt längst ner -
+                    passerade rader går fortfarande att trycka (webben, medvetet). */}
+                {passerade.length > 0 ? (
+                    <>
+                        <Pressable
+                            onPress={() => setUtfälldHög(visaPasserade ? null : högNyckel)}
+                            style={styles.passeradeKnapp}
+                            accessibilityRole="button"
+                            accessibilityState={{ expanded: visaPasserade }}
+                        >
+                            <Text style={styles.passeradeText}>
+                                🕐 {passerade.length} har redan varit · {visaPasserade ? 'Dölj' : 'Visa'}
+                            </Text>
+                        </Pressable>
+                        {visaPasserade
+                            ? passerade.map(e => (
+                                <EventRad key={e.id} event={e} tema="ljus" dimmad harVarit onPress={() => onVälj(e)} />
+                            ))
+                            : null}
+                    </>
+                ) : null}
                 {onVäljUrLista ? (
                     <>
                         <FlerFran
@@ -588,7 +654,7 @@ function Väljarlista({
                             onVälj={onVäljUrLista}
                         />
                         {lista.length > 0 ? (
-                            <FlerEvent lista={lista} valtId="" frånOffset={listaFrånOffset} onVälj={onVäljUrLista} />
+                            <FlerEvent lista={lista} valtId="" frånOffset={listaFrånOffset} bildflödesLäge onVälj={onVäljUrLista} />
                         ) : null}
                     </>
                 ) : null}
@@ -984,7 +1050,15 @@ function EventInnehåll({
                     </>
                 ) : null}
                 {onVälj && lista.length > 0 ? (
-                    <FlerEvent lista={lista} valtId={event.id} frånOffset={listaFrånOffset} sök={sök} pill={!filtreradBort} onVälj={onVälj} />
+                    <FlerEvent
+                        lista={lista}
+                        valtId={event.id}
+                        frånOffset={listaFrånOffset}
+                        sök={sök}
+                        pill={!filtreradBort}
+                        bildflödesLäge={!listLäge}
+                        onVälj={onVälj}
+                    />
                 ) : null}
             </ScrollView>
             {/* Footern pinnas mot skärmens botten: arket är tak-högt och
@@ -1009,13 +1083,21 @@ function EventInnehåll({
 }
 
 /** Månaden · 🔥 Populärt - dag för dag i kartans ruta (webbens popularList).
- *  `sök` = kortsökets term (6/10): smalnar båda flikarna (lib/kortSok). */
+ *  `sök` = kortsökets term (6/10): smalnar båda flikarna (lib/kortSok).
+ *
+ *  BILDFLÖDET (webben 26/8, `bildflödesLäge`): i kortets infovy och i
+ *  väljarlistan är listan bara event MED bild, bilderna på och ingen
+ *  bildknapp. I listvyn (kortsöket, eller filtret har valt bort eventet)
+ *  visas ALLA rader och "Visa bilder"/"Dölj bilder" längst till höger i
+ *  flikraden styr layouten - AV som default, valet sparas på enheten
+ *  (webbens vadkul_narhetslista_bilder). Flikarnas tal räknar det som visas. */
 function FlerEvent({
     lista,
     valtId,
     frånOffset,
     sök = '',
     pill = true,
+    bildflödesLäge = false,
     onVälj,
 }: {
     lista: AppFeedEvent[];
@@ -1024,18 +1106,20 @@ function FlerEvent({
     sök?: string;
     /** false när listan redan ÄR innehållet (filtret valde bort eventet). */
     pill?: boolean;
+    bildflödesLäge?: boolean;
     onVälj: (e: AppFeedEvent) => void;
 }) {
     const { minPos } = useRegionVal();
     const [flik, setFlik] = useState<ListFlik>('månaden');
     const [antal, setAntal] = useState(SIDA);
-    useEffect(() => setAntal(SIDA), [flik, frånOffset, sök]);
+    const [visaBilder, setVisaBilder] = useLagrad(NYCKEL.listBilder, false);
+    useEffect(() => setAntal(SIDA), [flik, frånOffset, sök, bildflödesLäge]);
 
     const söker = sök.trim().length > 0;
-    const underlag = useMemo(
-        () => (söker ? lista.filter(e => matcharKortSök(e, sök)) : lista),
-        [lista, sök, söker],
-    );
+    const underlag = useMemo(() => {
+        const träffar = söker ? lista.filter(e => matcharKortSök(e, sök)) : lista;
+        return bildflödesLäge ? bildflöde(träffar) : träffar;
+    }, [lista, sök, söker, bildflödesLäge]);
 
     const nu = new Date();
     const nuMs = nu.getTime();
@@ -1068,31 +1152,51 @@ function FlerEvent({
                     <Text style={styles.scrollaText}>Fler event nedanför ⌄</Text>
                 </View>
             ) : null}
-            {/* Flikarna i webbens grå kapsel: aktiv flik = vit pill med
-                skugga, Populärt-fliken i eldfärg när den är vald. */}
+            <View style={styles.listYta}>
+            {/* Flikraden: flikarna i webbens grå kapsel (aktiv flik = vit
+                pill, Populärt i eldfärg) rullar i sidled när det blir trångt;
+                bildknappen står kvar längst till höger. */}
             <View style={styles.flerChipYta}>
-                <View style={styles.flerChipRad}>
-                    <Pressable onPress={() => setFlik('månaden')} style={[styles.flerChip, flik === 'månaden' && styles.flerChipVald]}>
-                        <Text style={[styles.flerChipText, flik === 'månaden' && styles.flerChipTextVald]}>
-                            MÅNADEN · {totalt(alla)}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flerChipScroll}>
+                    <View style={styles.flerChipRad}>
+                        <Pressable onPress={() => setFlik('månaden')} style={[styles.flerChip, flik === 'månaden' && styles.flerChipVald]}>
+                            <Text style={[styles.flerChipText, flik === 'månaden' && styles.flerChipTextVald]}>
+                                MÅNADEN · {totalt(alla)}
+                            </Text>
+                        </Pressable>
+                        <Pressable onPress={() => setFlik('populärt')} style={[styles.flerChip, flik === 'populärt' && styles.flerChipVald]}>
+                            <Text style={[styles.flerChipText, flik === 'populärt' && styles.flerChipTextEld]}>
+                                🔥 POPULÄRT · {totalt(populära)}
+                            </Text>
+                        </Pressable>
+                    </View>
+                </ScrollView>
+                {!bildflödesLäge ? (
+                    <Pressable
+                        onPress={() => setVisaBilder(v => !v)}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: visaBilder }}
+                        accessibilityLabel={visaBilder ? 'Dölj bilderna - kompakt lista' : 'Visa bilderna'}
+                        style={({ pressed }) => [styles.bildKnapp, visaBilder && styles.bildKnappPå, pressed && styles.knappTryckt]}
+                    >
+                        <Text style={[styles.bildKnappText, visaBilder && styles.bildKnappTextPå]}>
+                            {visaBilder ? '🖼 DÖLJ BILDER' : '🖼 VISA BILDER'}
                         </Text>
                     </Pressable>
-                    <Pressable onPress={() => setFlik('populärt')} style={[styles.flerChip, flik === 'populärt' && styles.flerChipVald]}>
-                        <Text style={[styles.flerChipText, flik === 'populärt' && styles.flerChipTextEld]}>
-                            🔥 POPULÄRT · {totalt(populära)}
-                        </Text>
-                    </Pressable>
-                </View>
+                ) : null}
             </View>
             {visade.map(d => (
                 <View key={d.offset}>
-                    <Text style={styles.dagRubrik}>{periodLabel(d.offset, 1).toUpperCase()}</Text>
+                    <DagRubrik offset={d.offset} />
                     {d.events.map(e => (
-                        <EventRad
+                        <ListRad
                             key={e.id}
                             event={e}
-                            tema="ljus"
                             km={minPos ? distanceKm(minPos.lat, minPos.lng, e.lat, e.lng) : null}
+                            nuMs={nuMs}
+                            visaBild={bildflödesLäge || visaBilder}
+                            baraMedBild={bildflödesLäge}
                             onPress={() => onVälj(e)}
                         />
                     ))}
@@ -1111,6 +1215,7 @@ function FlerEvent({
                         : 'Det var de närmaste två veckorna.'}
                 </Text>
             )}
+            </View>
         </>
     );
 }
@@ -1253,7 +1358,7 @@ const styles = StyleSheet.create({
     metaRad: { flexDirection: 'row', gap: 14, paddingHorizontal: 16 },
     meta: { fontSize: 13, fontWeight: '700', color: '#475569' },
     metaBruten: { paddingHorizontal: 16 },
-    väljarMeta: { marginTop: 5 },
+    väljarRäknare: { marginTop: 5, fontSize: 10, fontWeight: '900', color: '#94a3b8', letterSpacing: 1.2 },
     stang: {
         width: 36,
         height: 36,
@@ -1384,7 +1489,19 @@ const styles = StyleSheet.create({
     },
     scrollaText: { color: '#0f172a', fontSize: 13, fontWeight: '700' },
     /** Flikarna i webbens grå kapsel (bg-slate-200/70, aktiv = vit pill). */
-    flerChipYta: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6 },
+    /** Listans yta: webbens bg-slate-50 med kantlinje överst. */
+    listYta: { marginTop: 16, backgroundColor: '#f8fafc', borderTopWidth: 1, borderTopColor: KANT },
+    /** Flikraden (webbens h-11): flikarna rullar, bildknappen står. */
+    flerChipYta: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        height: 44,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: KANT,
+    },
+    flerChipScroll: { flexShrink: 1 },
     flerChipRad: {
         flexDirection: 'row',
         gap: 2,
@@ -1404,15 +1521,35 @@ const styles = StyleSheet.create({
     flerChipText: { fontSize: 12, fontWeight: '900', color: '#64748b', letterSpacing: 0.8 },
     flerChipTextVald: { color: '#1e293b' },
     flerChipTextEld: { color: '#c2410c' },
+    /** Dagrubriken: webbens blå streck i vänstermarginalen + dagen i fetstil. */
     dagRubrik: {
-        paddingHorizontal: 16,
-        paddingTop: 14,
-        paddingBottom: 4,
-        fontSize: 12,
-        fontWeight: '800',
-        color: '#64748b',
-        letterSpacing: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingLeft: 4,
+        paddingRight: 16,
+        paddingTop: 12,
+        paddingBottom: 8,
+        backgroundColor: '#f8fafc',
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: KANT,
     },
+    dagStreck: { width: 4, height: 16, borderRadius: 2, backgroundColor: BLÅ },
+    dagRubrikText: { fontSize: 14, fontWeight: '900', color: '#0f172a' },
+    /** "Visa bilder" (webbens pill: blå när bilderna är på). */
+    bildKnapp: { borderRadius: 999, backgroundColor: KANT, paddingHorizontal: 10, paddingVertical: 5 },
+    bildKnappPå: { backgroundColor: BLÅ },
+    bildKnappText: { fontSize: 10, fontWeight: '900', color: '#64748b', letterSpacing: 1 },
+    bildKnappTextPå: { color: '#ffffff' },
+    /** Väljarlistans hopfällda historik (webbens "🕐 N har redan varit · Visa"). */
+    passeradeKnapp: {
+        marginTop: 6,
+        marginHorizontal: 16,
+        paddingVertical: 10,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: KANT,
+    },
+    passeradeText: { fontSize: 12, fontWeight: '900', color: '#94a3b8' },
     visaFler: {
         alignSelf: 'center',
         marginTop: 14,

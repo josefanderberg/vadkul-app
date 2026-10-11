@@ -18,6 +18,8 @@ export const NYCKEL = {
     växlaHintKlar: 'vadkul.vaxlaHintKlar',
     välkomstKlar: 'vadkul.valkomstKlar',
     sverigeTipsKlar: 'vadkul.sverigeTipsKlar',
+    /** "Visa bilder" i listan under kortet (webbens vadkul_narhetslista_bilder). */
+    listBilder: 'vadkul.listBilder',
 } as const;
 
 export async function läs<T>(key: string, fallback: T): Promise<T> {
