@@ -30,7 +30,9 @@
  *    kategorichipsen (samma KategoriRad som sökpanelen - ett val smalnar
  *    listan OCH kartan bakom via det delade filtret). Första tecknet visar
  *    listan direkt (eventet göms), termen lever kvar vid eventbyte och
- *    nollas när kortet stängs.
+ *    nollas när kortet stängs. Sökläget har MELLANHÖJDEN som golv (11/10):
+ *    fokus lyfter dit, krympande huvud drar aldrig ner arket under
+ *    tangentbordet, och högre (taket) står kvar medan man skriver.
  *  - Bildtryck = helskärm (ägarbeslut 14/9), med webbens "Tryck för hela
  *    bilden"-chip på bilden.
  *  - CHATTEN (sociala lagret, 11/10): publik + privat chatt som två block
@@ -87,7 +89,7 @@ import { kategoriFor } from '@/lib/kategorier';
 import { matcharKortSök } from '@/lib/kortSok';
 import { useRegionVal } from '@/lib/regionContext';
 import { distanceKm } from '@/lib/regionVal';
-import { landning, sheetStops } from '@/lib/sheetSnap';
+import { höjdEfterHuvudbyte, landning, sheetStops } from '@/lib/sheetSnap';
 import { useSparade } from '@/lib/sparadeContext';
 import { AFFILIATE_DISCLOSURE, isAffiliateUrl, isTicketmasterEvent } from '@/lib/ticketmaster';
 import { eventDagar } from '@/lib/vy';
@@ -173,9 +175,13 @@ export function EventKort({
     const [minimerad, setMinimerad] = useState(false);
     const minimeradRef = useRef(false);
     minimeradRef.current = minimerad;
+    /** Mellanhöjden (~halva skärmen) - filterknappens lyft och kortsökets
+     *  golv. Fast värde: stopp[1] kan vara taket när sheetStops slagit ihop
+     *  default med mellanstoppet. */
+    const mellan = Math.round(fönsterHöjd * 0.55);
     const stopp = useMemo(
-        () => sheetStops([Math.min(tak, huvudHöjd + BILDREMSA), Math.round(fönsterHöjd * 0.55), tak]),
-        [huvudHöjd, fönsterHöjd, tak],
+        () => sheetStops([Math.min(tak, huvudHöjd + BILDREMSA), mellan, tak]),
+        [huvudHöjd, mellan, tak],
     );
 
     // Arket ritas i takets höjd och skjuts ner: translateY = tak - synlig höjd.
@@ -216,12 +222,23 @@ export function EventKort({
     // Filterknappen (11/10, Josef: "det räcker att den går upp till halvvägs,
     // inte hela vägen till toppen"): fäll ut chipsen UTAN att fokusera fältet
     // (inget tangentbord - webbens filtersymbol gör likadant, 7/10-beslutet)
-    // och lyft arket till MELLANSTOPPET om det står lägre. Aldrig till taket.
+    // och lyft arket till MELLANHÖJDEN om det står lägre. Aldrig till taket.
     const växlaFilter = () => {
         const öppnar = !sökÖppen;
         const varMinimerad = minimeradRef.current;
         växlaSök();
-        if ((öppnar || varMinimerad) && höjdRef.current < stoppRef.current[1]) gåTill(stoppRef.current[1]);
+        if ((öppnar || varMinimerad) && höjdRef.current < mellan) gåTill(mellan);
+    };
+
+    // Sökfältet får fokus (11/10, Josef: "om fönstret är uppe och man skriver
+    // så ska den inte hoppa ner längst ner, för då hamnar den under
+    // tangentbordet ... är den längst upp så kan den fortsatt vara där"):
+    // tangentbordet täcker nedre ~40 % av skärmen, så arket lyfts till
+    // MELLANHÖJDEN om det står lägre - också ur mini-läget. Högre står still.
+    const sökFokus = () => {
+        if (!sökÖppen) setSökÖppen(true);
+        setMinimerad(false);
+        if (höjdRef.current < mellan) gåTill(mellan);
     };
 
     // Dubbeltapp på listan fäller ihop arket till default-stoppet (11/10,
@@ -268,11 +285,18 @@ export function EventKort({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [nyckel]);
     // Default-stoppet följer huvudets höjd (chipsen fälls ut/in, sökning
-    // gömmer eventet) - men synka BARA när arket står under mellanstoppet
-    // och inte är minimerat: filterknappens halvvägslyft, mini-läget och
-    // takläget ska inte dras runt av att headern växte (11/10).
+    // gömmer eventet) - men bara under mellanhöjden och aldrig i mini-läget,
+    // och i sökläget är mellanhöjden golvet så fältet inte hamnar under
+    // tangentbordet (lib/sheetSnap höjdEfterHuvudbyte, 11/10).
     useEffect(() => {
-        if (!minimeradRef.current && höjdRef.current < stopp[1]) gåTill(stopp[0]);
+        const mål = höjdEfterHuvudbyte({
+            höjd: höjdRef.current,
+            nyttDefault: stopp[0],
+            mellan,
+            minimerad: minimeradRef.current,
+            sökläge: sökÖppen || sök.trim().length > 0,
+        });
+        if (mål !== null) gåTill(mål);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [stopp[0]]);
     // Karttrycket (11/10): glid ner till MINI-läget. Väcks av drag uppåt,
@@ -429,7 +453,7 @@ export function EventKort({
                         sök={sök}
                         sökÖppen={sökÖppen}
                         onSök={handleSök}
-                        onVäxlaSök={växlaSök}
+                        onSökFokus={sökFokus}
                         onVäxlaFilter={växlaFilter}
                         sökFältRef={sökFältRef}
                         footerSkjut={translate}
@@ -584,7 +608,7 @@ function EventInnehåll({
     sök,
     sökÖppen,
     onSök,
-    onVäxlaSök,
+    onSökFokus,
     onVäxlaFilter,
     sökFältRef,
     footerSkjut,
@@ -607,7 +631,8 @@ function EventInnehåll({
     sök: string;
     sökÖppen: boolean;
     onSök: (v: string) => void;
-    onVäxlaSök: () => void;
+    /** Fältet fick fokus: chipsen fram + arket upp till mellanhöjden. */
+    onSökFokus: () => void;
     /** Filtersymbolen: chips utan tangentbord + lyft till mellanstoppet. */
     onVäxlaFilter: () => void;
     sökFältRef: React.RefObject<TextInput | null>;
@@ -792,7 +817,7 @@ function EventInnehåll({
                                 placeholderTextColor="#94a3b8"
                                 autoCorrect={false}
                                 returnKeyType="search"
-                                onFocus={() => { if (!sökÖppen) onVäxlaSök(); }}
+                                onFocus={onSökFokus}
                                 style={styles.sökFält}
                             />
                             <Pressable

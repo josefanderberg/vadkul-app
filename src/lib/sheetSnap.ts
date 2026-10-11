@@ -39,6 +39,31 @@ export function snapDown(stops: number[], start: number, h: number, tolerance = 
     return best;
 }
 
+/**
+ * Var arket ska stå när default-stoppet flyttat sig (huvudet växte eller
+ * krympte: chipsen fälldes ut, sökningen gömde eventet). null = stå kvar.
+ *
+ *  - Mini-läget och allt från mellanhöjden och uppåt står still -
+ *    filterknappens halvvägslyft och taket dras inte runt (11/10).
+ *  - Under mellanhöjden följer arket default-stoppet - UTOM i sökläget
+ *    (chipsen ute eller en term i fältet): där är mellanhöjden golvet.
+ *    Annars sjunker arket under tangentbordet när första tecknet gömmer
+ *    eventet (Josef 11/10: "ha den i typ mellanhöjd när man söker").
+ *
+ * `mellan` är den FASTA mellanhöjden, inte stopp[1]: sheetStops slår ihop
+ * stopp som ligger nära, och då kan stopp[1] vara taket.
+ */
+export function höjdEfterHuvudbyte(läge: {
+    höjd: number;
+    nyttDefault: number;
+    mellan: number;
+    minimerad: boolean;
+    sökläge: boolean;
+}): number | null {
+    if (läge.minimerad || läge.höjd >= läge.mellan) return null;
+    return läge.sökläge ? läge.mellan : läge.nyttDefault;
+}
+
 /** px/ms - snabbare svep än så avgör riktningen även för ett kort ryck. */
 const SNABB = 0.5;
 /** Kortare drag än så (och långsamt) är ett tryck, inget steg. */

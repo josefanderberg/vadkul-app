@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { landning, sheetStops, snapDown, snapUp } from './sheetSnap';
+import { höjdEfterHuvudbyte, landning, sheetStops, snapDown, snapUp } from './sheetSnap';
 
 const STOPP = [335, 450, 720];
 
@@ -32,5 +32,24 @@ describe('landning', () => {
     });
     it('ett tryck utan rörelse stannar', () => {
         expect(landning(STOPP, 450, 3, 0.1)).toBe(450);
+    });
+});
+
+describe('höjdEfterHuvudbyte - arket när huvudet byter höjd', () => {
+    const bas = { höjd: 340, nyttDefault: 226, mellan: 481, minimerad: false, sökläge: false };
+
+    it('under mellanhöjden följer arket default-stoppet', () => {
+        expect(höjdEfterHuvudbyte(bas)).toBe(226);
+    });
+    it('sökläget lyfter till mellanhöjden i stället för att sjunka under tangentbordet', () => {
+        expect(höjdEfterHuvudbyte({ ...bas, sökläge: true })).toBe(481);
+    });
+    it('från mellanhöjden och uppåt står arket still, även i sökläget', () => {
+        expect(höjdEfterHuvudbyte({ ...bas, höjd: 481, sökläge: true })).toBeNull();
+        expect(höjdEfterHuvudbyte({ ...bas, höjd: 769, sökläge: true })).toBeNull();
+        expect(höjdEfterHuvudbyte({ ...bas, höjd: 769 })).toBeNull();
+    });
+    it('mini-läget står still', () => {
+        expect(höjdEfterHuvudbyte({ ...bas, höjd: 112, minimerad: true, sökläge: true })).toBeNull();
     });
 });
