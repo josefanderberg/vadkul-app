@@ -62,3 +62,13 @@ export function useEvent(region: string) {
 export function hittaAnvändarEvent(id: string): AppEvent | null {
     return senaste?.events.find(e => e.id === id || e.docId === id) ?? null;
 }
+
+/**
+ * Glöm den senaste hämtningen så nästa poll hämtar ALLT - anropas efter egna
+ * skrivningar (skapa/redigera/ta bort). Redigeringar ändrar inte antalet, så
+ * utan den hade ändringen varit osynlig tills säkerhetsnätet löpt ut.
+ * Invalidera queryn ['anvandar-event'] direkt efteråt så kartan uppdateras nu.
+ */
+export function glömAnvändarEvent(): void {
+    senaste = null;
+}

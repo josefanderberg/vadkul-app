@@ -28,8 +28,8 @@ export const MAX_REPEAT_DAYS = 14;
  */
 const HORISONT_VECKOR = 12;
 
-const VECKODAG_LÅNG = ['söndag', 'måndag', 'tisdag', 'onsdag', 'torsdag', 'fredag', 'lördag'];
-const MÅNAD_KORT = ['jan.', 'feb.', 'mars', 'apr.', 'maj', 'juni', 'juli', 'aug.', 'sep.', 'okt.', 'nov.', 'dec.'];
+export const VECKODAG_LÅNG = ['söndag', 'måndag', 'tisdag', 'onsdag', 'torsdag', 'fredag', 'lördag'];
+export const MÅNAD_KORT = ['jan.', 'feb.', 'mars', 'apr.', 'maj', 'juni', 'juli', 'aug.', 'sep.', 'okt.', 'nov.', 'dec.'];
 
 /** Seriefälten med riktiga Date - räknandet jobbar på dem, AppEvent bär ISO-strängar. */
 export interface SerieRegel {
@@ -167,6 +167,13 @@ export function seriensRytm(e: AppEvent, nu: Date = new Date()): string | null {
         repeatDays: e.repeatDays,
         seriesEndsAt: tolkaTid(e.seriesEndsAt) ?? undefined,
     }, nu);
+}
+
+/** Kort rytm-chip till Mina event (seriesRhythmLabel): "2 dagar" / "Varannan vecka" / "Varje vecka". */
+export function seriensRytmKort(e: Pick<AppEvent, 'repeatIntervalWeeks' | 'repeatDays'>): string {
+    const dagar = normaliseraDagar(e.repeatDays);
+    if (dagar !== null) return `${dagar} dagar`;
+    return normaliseraRytm(e.repeatIntervalWeeks) === 2 ? 'Varannan vecka' : 'Varje vecka';
 }
 
 /**

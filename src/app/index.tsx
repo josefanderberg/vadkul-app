@@ -16,7 +16,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
 import type { CameraRef, Expression, FilterSpecification, MapRef, StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
@@ -384,8 +383,17 @@ export default function KartScreen() {
         cameraRef.current?.flyTo({ center: [mitt.lng, mitt.lat], zoom: ZOOM_IN_MÅL, duration: 1200 });
     };
 
-    const skapa = () =>
-        WebBrowser.openBrowserAsync(`https://vadkul.se/?plats=${city.lat},${city.lng},13&skapa=1`);
+    // Skapa event-arket (native sedan 11/10 - förr öppnades webben). Formuläret
+    // öppnas på KARTANS MITT, precis som webbens placerings-varv landar där.
+    const skapa = () => {
+        const mitt = ruta
+            ? { lat: (ruta[1] + ruta[3]) / 2, lng: (ruta[0] + ruta[2]) / 2 }
+            : { lat: city.lat, lng: city.lng };
+        router.push({
+            pathname: '/skapa',
+            params: { lat: String(mitt.lat), lng: String(mitt.lng), zoom: String(zoom ?? 13) },
+        });
+    };
 
     return (
         <View style={styles.root}>

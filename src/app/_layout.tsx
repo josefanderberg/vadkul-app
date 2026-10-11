@@ -31,6 +31,7 @@ export default function RootLayout() {
                                     <Stack.Screen name="sok" options={{ presentation: 'modal' }} />
                                     <Stack.Screen name="stader" options={{ presentation: 'modal' }} />
                                     <Stack.Screen name="profil" options={{ presentation: 'modal' }} />
+                                    <Stack.Screen name="skapa" options={{ presentation: 'modal' }} />
                                     <Stack.Screen name="konto" options={{ presentation: 'modal' }} />
                                     <Stack.Screen name="stad/[slug]" />
                                     <Stack.Screen
