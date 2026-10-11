@@ -33,7 +33,10 @@
  *    nollas när kortet stängs.
  *  - Bildtryck = helskärm (ägarbeslut 14/9), med webbens "Tryck för hela
  *    bilden"-chip på bilden.
- *  - Under beskrivningen: FLER FRÅN SAMMA ARRANGÖR + stadssidelänken
+ *  - CHATTEN (sociala lagret, 11/10): publik + privat chatt som två block
+ *    direkt under beskrivningen (components/EventChat) - låsta rader för
+ *    utloggade, Bjud in/Kopiera länk i privata blocket.
+ *  - Under chatten: FLER FRÅN SAMMA ARRANGÖR + stadssidelänken
  *    (components/FlerFran, 6/10) och Månaden · 🔥 Populärt, dag för dag i
  *    kartans ruta från visad dag och framåt (Josef 23-24/9).
  *
@@ -60,6 +63,7 @@ import type { AppEvent } from '@/lib/appEvent';
 import { seriensRytm } from '@/lib/anvandarEvent';
 import { useEventDetalj } from '@/api/eventDetalj';
 import { hämtaEngagemang } from '@/data/eventStats';
+import { EventChat } from '@/components/EventChat';
 import { EventRad } from '@/components/EventRad';
 import { FlerFran } from '@/components/FlerFran';
 import { Rapportera } from '@/components/Rapportera';
@@ -855,7 +859,15 @@ function EventInnehåll({
                 </>
                 ) : null}
             </View>
-            <ScrollView ref={scrollRef} {...dubbeltapp} style={styles.innehåll} contentContainerStyle={styles.innehållMedFooter}>
+            {/* automaticallyAdjustKeyboardInsets (iOS): chattens skrivfält bor
+                mitt i arket - utan insetsen täcker tangentbordet fältet. */}
+            <ScrollView
+                ref={scrollRef}
+                {...dubbeltapp}
+                style={styles.innehåll}
+                contentContainerStyle={styles.innehållMedFooter}
+                automaticallyAdjustKeyboardInsets
+            >
                 {/* Under sökning - och när filtret valt bort eventet - visas
                     listan direkt (webbens listvy-växling). */}
                 {!listLäge ? (
@@ -870,6 +882,11 @@ function EventInnehåll({
                             </Pressable>
                         ) : null}
                         <Text style={styles.beskrivning}>{beskrivning}</Text>
+                        {/* Chatten DIREKT efter beskrivningen (webbens ordning:
+                            eventinfo → svarsrad → chatt → arrangörsrad → listan;
+                            svarsraden här är den fasta RsvpFooter-plattan).
+                            Avmonteras i listläget → lyssnarna rivs (egress). */}
+                        <EventChat event={event} fran={inbjudan?.fran ?? null} />
                         <FlerFran
                             rad={flerFrån}
                             stad={stad}

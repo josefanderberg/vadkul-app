@@ -3,7 +3,9 @@
  * radering - App Store 5.1.1 kräver radering inifrån appen), MINA EVENT
  * (sedan 11/10, webbens Mina event-sektion: en rad per sak man skapat via
  * lib/minaEvent, soptunnan raderar hela raden, pennan öppnar skapa-arket i
- * redigeringsläge), sparade event (hjärtat, sparat på enheten), "Visa även på
+ * redigeringsläge), VÄNNER (sedan 11/10, webbens FriendsSection - förfrågningar,
+ * vänlista med vännens kommande svar, integritetsreglaget;
+ * components/VannerSektion), sparade event (hjärtat, sparat på enheten), "Visa även på
  * kartan" (Svenska kyrkan/PRO - opt-in-källorna, kart-ui 15/9), din stad och
  * - för inloggade - NOTISER (sedan 8/10, webbens två reglage): påminnelse 1 h
  * före sparade event är per ENHET (FCM-token, data/push) och veckans helgtips
@@ -20,6 +22,7 @@ import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { glömAnvändarEvent, useAnvändarEvent } from '@/api/useEvent';
 import { EventKort } from '@/components/EventKort';
 import { EventRad } from '@/components/EventRad';
+import { VannerSektion } from '@/components/VannerSektion';
 import { ärSerie } from '@/lib/anvandarEvent';
 import { useFilter } from '@/lib/filterContext';
 import { KONTON_PÅ } from '@/lib/funktioner';
@@ -262,6 +265,17 @@ export default function ProfilScreen() {
                                 />
                             ))
                         )}
+                    </>
+                ) : null}
+
+                {/* VÄNNER (sociala lagret, 11/10): webbens FriendsSection -
+                    förfrågningar, vänlista med vännens kommande svar och
+                    reglaget rsvpVisibleToFriends. Läser Firestore först när
+                    mappen fälls ut. */}
+                {KONTON_PÅ && konto.användare ? (
+                    <>
+                        <Text style={styles.sektion}>Vänner</Text>
+                        <VannerSektion uid={konto.användare.uid} onVälj={e => setValt(e)} />
                     </>
                 ) : null}
 

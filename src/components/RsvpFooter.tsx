@@ -20,19 +20,24 @@
  *  - Pinnas mot SKÄRMENS botten av EventKorts footerHållare (arket ritas i
  *    takets höjd och skjuts ner, så arkets egen botten ligger under
  *    skärmkanten på de lägre stoppen - hållaren counter-translaterar).
+ *  - VÄNKNAPPEN i inbjudningsbannern (sociala lagret, 11/10): mottagaren kan
+ *    lägga till inbjudaren som vän direkt ur bannern (webbens
+ *    EventRsvpFooter) - utloggade skickas till inloggningen.
  */
 import { useEffect, useState } from 'react';
-import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import { getAuth } from '@react-native-firebase/auth';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useRsvp } from '@/lib/rsvpContext';
 import { useKonto } from '@/lib/kontoContext';
 import { inbjudningsUrl, rsvpShareId, type RsvpStatus } from '@/lib/rsvp';
 import { hämtaEngagemang, räknaKlick, type Engagemang } from '@/data/eventStats';
 import { hämtaAnsikten, type RsvpAnsikte } from '@/data/rsvp';
-import { läsFält } from '@/data/anvandare';
+import { accepteraVänförfrågan, hämtaAnvändareLite, hämtaMinVänrelation, skickaVänförfrågan } from '@/data/vanner';
 
 /** Räknaren efter eget tryck: baslinjen från läsningen, justerad för hur
  *  ens eget svar ändrats sedan dess (webbens countsMemo). */
@@ -52,7 +57,7 @@ export function RsvpFooter({
     inbjudan?: { fran: string | null; onStäng: () => void } | null;
 }) {
     const { minRsvp, svara } = useRsvp();
-    const { säkerställIdentitet } = useKonto();
+    const { säkerställIdentitet, användare } = useKonto();
     const insets = useSafeAreaInsets();
     const mitt = minRsvp(event.id);
 
@@ -72,17 +77,59 @@ export function RsvpFooter({
         // Läses en gång per event - eget tryck räknas om lokalt (räknat ovan).
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [event.id, event.userCreated]);
-    // Inbjudarens namn (users/{uid} är publikt läsbart, som på webben).
+    // Inbjudarens namn (users/{uid} är publikt läsbart, som på webben) -
+    // samma sessionscachade läsning som vänförfrågan (data/vanner).
     const [inbjudare, setInbjudare] = useState<string | null>(null);
     useEffect(() => {
         setInbjudare(null);
         if (!inbjudan?.fran) return;
         let aktiv = true;
-        void läsFält(inbjudan.fran)
-            .then(d => { if (aktiv && typeof d?.displayName === 'string' && d.displayName) setInbjudare(d.displayName); })
-            .catch(() => {});
+        void hämtaAnvändareLite(inbjudan.fran).then(lite => { if (aktiv) setInbjudare(lite.name); });
         return () => { aktiv = false; };
     }, [inbjudan?.fran]);
+
+    // VÄNKNAPPEN i bannern (sociala lagret - webbens EventRsvpFooter:
+    // "mottagaren kan lägga till inbjudaren"). Läget hämtas först när bannern
+    // faktiskt visas för en inloggad - en läsning av ens EGEN friends-rad.
+    // 'idle' = inget att visa (utredning pågår, eller inbjudaren är man själv).
+    const fran = inbjudan?.fran ?? null;
+    const [vänLäge, setVänLäge] = useState<'idle' | 'none' | 'outgoing' | 'incoming' | 'accepted' | 'busy'>('idle');
+    useEffect(() => {
+        setVänLäge('idle');
+        if (!fran || fran === användare?.uid) return;
+        // Utloggad/anonym: knappen visas men öppnar inloggningen (reglerna
+        // kräver riktigt konto för vänförfrågningar).
+        if (!användare) { setVänLäge('none'); return; }
+        let aktiv = true;
+        void hämtaMinVänrelation(användare.uid, fran).then(rad => {
+            if (aktiv) setVänLäge(rad?.status ?? 'none');
+        });
+        return () => { aktiv = false; };
+    }, [fran, användare]);
+
+    const vänKnapp = async () => {
+        if (!fran) return;
+        if (!användare) { router.push('/konto?lage=logga-in'); return; }
+        if (vänLäge !== 'none' && vänLäge !== 'incoming') return;
+        const accepterar = vänLäge === 'incoming';
+        setVänLäge('busy');
+        try {
+            if (accepterar) {
+                await accepteraVänförfrågan(användare.uid, fran, 'incoming');
+                setVänLäge('accepted');
+            } else {
+                await skickaVänförfrågan({
+                    uid: användare.uid,
+                    name: användare.displayName,
+                    photoURL: getAuth().currentUser?.photoURL ?? null,
+                }, fran);
+                setVänLäge('outgoing');
+            }
+        } catch {
+            setVänLäge(accepterar ? 'incoming' : 'none');
+            Alert.alert('Det gick inte just nu', 'Försök igen om en stund.');
+        }
+    };
 
     const antal = (status: RsvpStatus) =>
         bas ? räknat(bas.e[status], bas.mitt === status, mitt === status) : 0;
@@ -121,6 +168,25 @@ export function RsvpFooter({
                         {inbjudare ? `${inbjudare} undrar om du följer med` : 'Du är bjuden - följer du med?'}
                     </Text>
                     <Text style={styles.inbjudanHjälp}>Svara här nedanför - inget konto behövs.</Text>
+                    {/* Vänvägen (sociala lagret): lägg till inbjudaren direkt ur
+                        bannern. 'idle' = man själv/okänt läge → ingen rad alls. */}
+                    {vänLäge === 'accepted' ? (
+                        <Text style={styles.vänStatus}>✓ Ni är vänner</Text>
+                    ) : vänLäge === 'outgoing' ? (
+                        <Text style={styles.vänStatus}>Vänförfrågan skickad ✓</Text>
+                    ) : vänLäge !== 'idle' ? (
+                        <Pressable
+                            onPress={() => void vänKnapp()}
+                            disabled={vänLäge === 'busy'}
+                            style={({ pressed }) => [styles.vänKnapp, vänLäge === 'busy' && styles.vänKnappUpptagen, pressed && styles.tryckt]}
+                        >
+                            <Text style={styles.vänKnappText}>
+                                {vänLäge === 'incoming'
+                                    ? `Acceptera vänförfrågan${inbjudare ? ` från ${inbjudare}` : ''}`
+                                    : `+ Lägg till ${inbjudare ?? 'inbjudaren'} som vän`}
+                            </Text>
+                        </Pressable>
+                    ) : null}
                 </View>
                 <Pressable onPress={inbjudan.onStäng} hitSlop={10} accessibilityLabel="Stäng inbjudan">
                     <Text style={styles.inbjudanStäng}>✕</Text>
@@ -263,6 +329,17 @@ const styles = StyleSheet.create({
     inbjudanText: { flex: 1 },
     inbjudanRubrik: { fontSize: 13, fontWeight: '800', color: '#ffffff' },
     inbjudanHjälp: { marginTop: 1, fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.78)' },
+    vänStatus: { marginTop: 4, fontSize: 11, fontWeight: '800', color: 'rgba(255,255,255,0.85)' },
+    vänKnapp: {
+        alignSelf: 'flex-start',
+        marginTop: 5,
+        borderRadius: 999,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+    },
+    vänKnappUpptagen: { opacity: 0.6 },
+    vänKnappText: { fontSize: 11, fontWeight: '900', color: '#ffffff' },
     inbjudanStäng: { fontSize: 14, fontWeight: '900', color: '#ffffff' },
     ansiktsRad: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8 },
     ansikte: {
