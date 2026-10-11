@@ -68,4 +68,4 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
 
 - `npx tsc --noEmit` + `npm test` (vitest, ren logik — inget nät i tester)
   före varje "klart". Ny ren logik (lib/, api/-hjälpare) får tester direkt.
-- UI verifieras i EAS dev build på riktig enhet — inte i Expo Go, inte i tro.
+- **UI verifieras genom att granska koden, aldrig i simulatorn** (ägarbeslut 11/10 2026, Josef: "det tar så mycket på min dator. kontrollera koden istället"). Starta inte iOS-simulatorn, Android-emulatorn eller `expo run:*` om Josef inte uttryckligen ber om det. Josef testar själv på telefonen via TestFlight. Aldrig Expo Go.
