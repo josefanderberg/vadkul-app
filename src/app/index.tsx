@@ -14,8 +14,9 @@
  *    kortet. Passerade brickor dimmas.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
 import type { CameraRef, Expression, FilterSpecification, MapRef, StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
@@ -24,12 +25,15 @@ import { fetchEventSomFlöde } from '@/api/eventDetalj';
 import { DagValjare } from '@/components/DagValjare';
 import { EventKort, type KortNav } from '@/components/EventKort';
 import { FilterBricka } from '@/components/FilterBricka';
+import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
+import { prenumereraStjärnmärkta } from '@/data/stjarnor';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
 import { BRICKA_ICON_SIZE } from '@/lib/brickor';
 import { eventIPeriod, periodLabel } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
-import { byggBrickor } from '@/lib/kartlager';
+import { byggBrickor, byggÖnskningar } from '@/lib/kartlager';
+import { useKonto } from '@/lib/kontoContext';
 import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
 import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kartBanner';
 import { kartPrompt, type PromptÅtgärd } from '@/lib/kartPrompt';
@@ -325,11 +329,57 @@ export default function KartScreen() {
     }, [offset, längd]);
 
     // ── Brickorna ─────────────────────────────────────────────────────────
+    // Stjärnmärkta event (eventStars): guldbricka + representantlyft - delar
+    // prenumeration med eventkortet (EN Firestore-lyssnare i data/stjarnor).
+    const [stjärnmärkta, setStjärnmärkta] = useState<ReadonlySet<string>>(new Set());
+    useEffect(() => prenumereraStjärnmärkta(setStjärnmärkta), []);
     const valtId = kort ? kort.event?.id ?? kort.grupp[0]?.id ?? null : null;
     const brickor = useMemo(
-        () => byggBrickor(iPeriod, { nowMs: nuMs, valtId, ärSparad }),
-        [iPeriod, nuMs, valtId, ärSparad],
+        () => byggBrickor(iPeriod, { nowMs: nuMs, valtId, ärSparad, stjärnor: stjärnmärkta }),
+        [iPeriod, nuMs, valtId, ärSparad, stjärnmärkta],
     );
+
+    // ── Önskningarna (webbens drömska wish-brickor) ───────────────────────
+    // Egen liten collection, hämtas per kartbesök och efter egna ändringar
+    // (skapa-arket invaliderar nyckeln). Visas halvt genomskinliga.
+    const { användare } = useKonto();
+    const qc = useQueryClient();
+    const önskningar = useQuery({ queryKey: ['onskningar'], queryFn: hämtaÖnskningar, staleTime: 10 * 60_000 });
+    const önskeBrickor = useMemo(() => byggÖnskningar(önskningar.data ?? []), [önskningar.data]);
+    const trycktÖnskan = (id: string | undefined) => {
+        brickTryckRef.current = Date.now();
+        const w = (önskningar.data ?? []).find(x => x.id === id);
+        if (!w) return;
+        const tOm = new Date(w.expiresAt).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+        const knappar = [
+            {
+                text: 'Arrangera det här',
+                onPress: () => router.push({
+                    pathname: '/skapa',
+                    params: {
+                        lat: String(w.lat), lng: String(w.lng), zoom: String(zoom ?? 13),
+                        titel: w.title, kategori: w.category, onskanId: w.id,
+                    },
+                }),
+            },
+            ...(användare && w.uid === användare.uid
+                ? [{
+                    text: 'Ta bort min önskan',
+                    style: 'destructive' as const,
+                    onPress: async () => {
+                        try {
+                            await taBortÖnskan(w.id);
+                            await qc.invalidateQueries({ queryKey: ['onskningar'] });
+                        } catch {
+                            Alert.alert('Kunde inte ta bort önskan', 'Försök igen om en stund.');
+                        }
+                    },
+                }]
+                : []),
+            { text: 'Stäng', style: 'cancel' as const },
+        ];
+        Alert.alert(`✨ ${w.title}`, `Önskat av ${w.hostName} · ligger på kartan t.o.m. ${tOm}.`, knappar);
+    };
 
     // ── Prompten ovanför väljaren ─────────────────────────────────────────
     const iPeriodIRutan = längd === 1 ? räkna(offset, 1) : räkna(offset, 7);
@@ -483,6 +533,39 @@ export default function KartScreen() {
                             }}
                         />
                     </GeoJSONSource>
+                    {/* Önskningarna som eget drömskt lager (webbens wish-
+                        brickor): kategoribrickan halvt genomskinlig med
+                        "Önskas · {titel}" under. Egen källa - aldrig i
+                        event-strömmen eller Nästa-poolen. */}
+                    {önskeBrickor.features.length > 0 ? (
+                        <GeoJSONSource
+                            id="onskningar"
+                            data={önskeBrickor}
+                            onPress={ev => trycktÖnskan(ev.nativeEvent.features[0]?.properties?.id as string | undefined)}
+                        >
+                            <Layer
+                                type="symbol"
+                                id="onske-etikett"
+                                style={{
+                                    ...ETIKETT_STIL,
+                                    textField: ['get', 'etikett'] as unknown as Expression,
+                                    textOpacity: 0.85,
+                                }}
+                            />
+                            <Layer
+                                type="symbol"
+                                id="onske-brickor"
+                                style={{
+                                    iconImage: ['get', 'ikon'] as unknown as Expression,
+                                    iconSize: BRICKA_ICON_SIZE,
+                                    iconAnchor: 'bottom',
+                                    iconOpacity: 0.55,
+                                    iconAllowOverlap: true,
+                                    iconIgnorePlacement: true,
+                                }}
+                            />
+                        </GeoJSONSource>
+                    ) : null}
                 </Map>
             ) : (
                 <View style={styles.bootstrap} />

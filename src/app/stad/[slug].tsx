@@ -8,7 +8,6 @@
 import { useMemo, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { CITIES, type AppFeedEvent } from '@vadkul/kontrakt';
 import { useEvent } from '@/api/useEvent';
 import { EventKort } from '@/components/EventKort';
@@ -48,8 +47,18 @@ export default function StadScreen() {
         väljStad(stad);
         router.dismissTo('/');
     };
+    // Native sedan 11/10: skapa-arket äger båda vägarna (önska = egen flik),
+    // i stället för att öppna webben i en browser.
     const pitch = (vad: 'onska' | 'skapa') =>
-        WebBrowser.openBrowserAsync(`https://vadkul.se/?plats=${stad.lat},${stad.lng},13&${vad}=1`);
+        router.push({
+            pathname: '/skapa',
+            params: {
+                lat: String(stad.lat),
+                lng: String(stad.lng),
+                zoom: '13',
+                ...(vad === 'onska' ? { roll: 'wish' } : {}),
+            },
+        });
 
     return (
         <View style={styles.root}>

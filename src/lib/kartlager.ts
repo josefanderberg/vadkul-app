@@ -21,6 +21,7 @@ import { ärEgetVadkulEvent, type AppEvent } from './appEvent';
 import { brickaIkon } from './brickor';
 import { isEventPast } from './harVarit';
 import { kategoriFor } from './kategorier';
+import type { Önskan } from './onskningar';
 import { isTicketmasterEvent } from './ticketmaster';
 import { platsNyckel } from './vy';
 
@@ -60,7 +61,15 @@ export function antalIkon(antal: number): string {
 
 export function byggBrickor(
     events: readonly AppEvent[],
-    opts: { nowMs: number; valtId?: string | null; ärSparad?: (id: string) => boolean },
+    opts: {
+        nowMs: number;
+        valtId?: string | null;
+        ärSparad?: (id: string) => boolean;
+        /** Stjärnmärkta event-id:n (eventStars) - guldbricka, och stjärnan
+         *  LYFTER representanten i en grupp (kart-ui: "sortKey-lyftningen är
+         *  stjärnans/boostens privilegium"). */
+        stjärnor?: ReadonlySet<string>;
+    },
 ): GeoJSON.FeatureCollection<GeoJSON.Point, BrickProps> {
     const grupper = new Map<string, AppEvent[]>();
     for (const e of events) {
@@ -74,9 +83,10 @@ export function byggBrickor(
         grupp.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime() || (a.id < b.id ? -1 : 1));
         const levande = grupp.filter(e => !isEventPast(e, opts.nowMs));
         const vald = opts.valtId ? grupp.find(e => e.id === opts.valtId) : undefined;
-        const rep = vald ?? levande[0] ?? grupp[0];
+        const stjärnmärkt = opts.stjärnor ? levande.find(e => opts.stjärnor!.has(e.id)) : undefined;
+        const rep = vald ?? stjärnmärkt ?? levande[0] ?? grupp[0];
         const past = levande.length === 0;
-        const guld = isTicketmasterEvent(rep);
+        const guld = isTicketmasterEvent(rep) || !!(opts.stjärnor && opts.stjärnor.has(rep.id));
         const sparad = !!opts.ärSparad && grupp.some(e => opts.ärSparad!(e.id));
         const grön = ärEgetVadkulEvent(rep);
         const nivå = rep.pop || guld ? 0 : grön ? 1 : 2;
@@ -98,4 +108,35 @@ export function byggBrickor(
         });
     }
     return { type: 'FeatureCollection', features };
+}
+
+export interface ÖnskeProps {
+    /** Önskans dokument-id - trycket slår upp önskan i listan. */
+    id: string;
+    ikon: string;
+    /** "Önskas · {titel}" - etikettraden under den drömska brickan. */
+    etikett: string;
+}
+
+/**
+ * Önskningarna som eget lager (webbens drömska wish-brickor): kategorins
+ * vanliga bricka men renderad halvt genomskinlig av kartan (iconOpacity -
+ * appen bakar inga egna önske-ikoner), med "Önskas · {titel}" som etikett.
+ * Egen källa - blandas aldrig med event-brickorna eller Nästa-poolen.
+ */
+export function byggÖnskningar(
+    önskningar: readonly Önskan[],
+): GeoJSON.FeatureCollection<GeoJSON.Point, ÖnskeProps> {
+    return {
+        type: 'FeatureCollection',
+        features: önskningar.map(w => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [w.lng, w.lat] },
+            properties: {
+                id: w.id,
+                ikon: brickaIkon({ category: w.category, pop: false, guld: false, sparad: false, grön: false, vald: false }),
+                etikett: `Önskas · ${kapaEtikett(w.title)}`,
+            },
+        })),
+    };
 }

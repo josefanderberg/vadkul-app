@@ -66,6 +66,7 @@ import {
 } from '@/lib/skapaEvent';
 import { BOOTSTRAP_STYLE, fetchThemeParkStyle, STREETS_STYLE_URL, type StyleJson } from '@/lib/themeParkStyle';
 import { laddaUppEventBild, skapaEgetEvent, uppdateraEgetEvent } from '@/data/egnaEvent';
+import { markeraÖnskanUppfylld, skapaÖnskan } from '@/data/onskningar';
 
 /** "tors 15 okt. kl 19:00" - När?-radens text (Android; iOS visar systemväljaren). */
 const tidEtikett = (d: Date): string =>
@@ -78,7 +79,13 @@ interface Bildval {
 }
 
 export default function SkapaScreen() {
-    const params = useLocalSearchParams<{ lat?: string; lng?: string; zoom?: string; redigera?: string }>();
+    const params = useLocalSearchParams<{
+        lat?: string; lng?: string; zoom?: string; redigera?: string;
+        /** Önska-läget (webbens wish-gren i skapa-flödet): roll=wish öppnar
+         *  önske-fliken; titel/kategori förifylls från en önskebricka och
+         *  onskanId markerar önskan uppfylld när eventet skapats. */
+        roll?: string; titel?: string; kategori?: string; onskanId?: string;
+    }>();
     const { användare, säkerställIdentitet } = useKonto();
     const qc = useQueryClient();
 
@@ -110,14 +117,17 @@ export default function SkapaScreen() {
     }, []);
 
     // ── Formulärets fält (webbens newEvent*-state) ────────────────────────
-    const [roll, setRoll] = useState<'host' | 'tip'>(start?.roll ?? 'tip');
-    const [titel, setTitel] = useState(original?.title ?? '');
-    const [tid, setTid] = useState<Date>(() => start?.tid ?? nästaHelaTimmen());
-    const [kategori, setKategori] = useState<EventCategoryType>(
-        original?.category && (EVENT_CATEGORY_KEYS as readonly string[]).includes(original.category)
-            ? (original.category as EventCategoryType)
-            : 'other',
+    const [roll, setRoll] = useState<'host' | 'tip' | 'wish'>(
+        start?.roll ?? (params.roll === 'wish' ? 'wish' : 'tip'),
     );
+    const [titel, setTitel] = useState(original?.title ?? (typeof params.titel === 'string' ? params.titel : ''));
+    const [tid, setTid] = useState<Date>(() => start?.tid ?? nästaHelaTimmen());
+    const [kategori, setKategori] = useState<EventCategoryType>(() => {
+        const förifylld = original?.category ?? params.kategori;
+        return förifylld && (EVENT_CATEGORY_KEYS as readonly string[]).includes(förifylld)
+            ? (förifylld as EventCategoryType)
+            : 'other';
+    });
     const [kategoriÖppen, setKategoriÖppen] = useState(false);
     const [plats, setPlats] = useState(original?.locationName ?? '');
     const [pris, setPris] = useState(original?.price != null ? String(original.price) : '');
@@ -163,12 +173,15 @@ export default function SkapaScreen() {
 
     // ── Fält-logik portad från webben ─────────────────────────────────────
     const ärTips = roll === 'tip';
+    /** Önska-läget: bara titel, kategori, plats och beskrivning - önskan är
+     *  ingen tidssatt sak, den är "någon borde ordna det här". */
+    const ärÖnskan = roll === 'wish';
     const tipsLänk = normaliseraTipsLänk(länk);
     const länkTrasig = ärTips && !!länk.trim() && !tipsLänk;
 
-    // "Fler detaljer" fälls ihop BARA i tips-läget; arrangera/redigera visar
-    // allt, och ifyllda fält fälls aldrig ihop över innehållet.
-    const visaDetaljer = roll === 'host' || !!redigerar || visaFler
+    // "Fler detaljer" fälls ihop BARA i tips-läget; arrangera/önska/redigera
+    // visar allt, och ifyllda fält fälls aldrig ihop över innehållet.
+    const visaDetaljer = roll !== 'tip' || !!redigerar || visaFler
         || !!(länk.trim() || arrangör.trim() || beskrivning.trim());
 
     // Rytm-byte (webbens select-onChange): dagar har alltid ett antal och ett
@@ -213,9 +226,38 @@ export default function SkapaScreen() {
         setBildPreview(a.uri);
     };
 
-    // ── Spara (webbens handleCreateEvent, utan önske-grenen) ──────────────
+    // ── Spara (webbens handleCreateEvent, inklusive önske-grenen) ─────────
     const spara = async () => {
         if (!titel.trim() || sparar) return;
+        // ÖNSKA: egen gren mot eventWishes (webbens createWish) - kräver
+        // inloggning, reglerna verifierar uid == auth.uid.
+        if (ärÖnskan) {
+            if (!användare) {
+                router.push('/konto?lage=logga-in');
+                return;
+            }
+            setSparar(true);
+            try {
+                await skapaÖnskan({
+                    title: titel,
+                    category: kategori,
+                    description: beskrivning,
+                    lat: position.lat,
+                    lng: position.lng,
+                    uid: användare.uid,
+                    hostName: användare.displayName || 'VADKUL-användare',
+                });
+                await qc.invalidateQueries({ queryKey: ['onskningar'] });
+                router.dismissTo('/');
+                Alert.alert('Önskan ligger på kartan ✨', 'Den syns som en drömsk bricka i 7 dagar - kanske nappar någon.');
+            } catch (fel) {
+                console.warn('[önskan] sparandet stoppades:', skapaFelKod(fel));
+                Alert.alert('Kunde inte skapa önskan', skapaFelText(skapaFelKod(fel)));
+            } finally {
+                setSparar(false);
+            }
+            return;
+        }
         if (länkTrasig) {
             Alert.alert('Länken går inte att tolka', 'Ta bort den eller skriv hela adressen.');
             return;
@@ -284,6 +326,13 @@ export default function SkapaScreen() {
                 });
             }
 
+            // Skapades eventet ur en önskebricka: markera önskan uppfylld
+            // (webbens markFulfilled - reglerna tillåter bara den flippen).
+            if (!redigerar && typeof params.onskanId === 'string' && params.onskanId) {
+                await markeraÖnskanUppfylld(params.onskanId);
+                void qc.invalidateQueries({ queryKey: ['onskningar'] });
+            }
+
             // Glöm pollens lista och hämta om nu - redigeringar ändrar inte
             // antalet, så utan det hade ändringen dröjt till säkerhetsnätet.
             glömAnvändarEvent();
@@ -302,9 +351,11 @@ export default function SkapaScreen() {
 
     const sparaInaktiv = !titel.trim() || länkTrasig || sparar;
     const sparaText = sparar
-        ? (redigerar ? 'Sparar…' : 'Skapar…')
+        ? (redigerar ? 'Sparar…' : ärÖnskan ? 'Önskar…' : 'Skapar…')
         : redigerar
         ? 'Spara ändringar'
+        : ärÖnskan
+        ? (användare ? 'Önska' : 'Logga in & önska')
         : ärTips
         ? 'Tipsa'
         : användare
@@ -348,7 +399,7 @@ export default function SkapaScreen() {
     return (
         <View style={styles.root}>
             <View style={styles.huvud}>
-                <Text style={styles.rubrik}>{redigerar ? 'Ändra event' : 'Skapa event'}</Text>
+                <Text style={styles.rubrik}>{redigerar ? 'Ändra event' : ärÖnskan ? 'Önska ett event' : 'Skapa event'}</Text>
                 <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stängKnapp} accessibilityLabel="Stäng">
                     <Text style={styles.stängText}>✕</Text>
                 </Pressable>
@@ -366,11 +417,21 @@ export default function SkapaScreen() {
                         <Text style={[styles.flikText, roll === 'tip' && styles.flikTextVald]}>Jag tipsar bara</Text>
                         <View style={[styles.flikStreck, roll === 'tip' && styles.flikStreckTips]} />
                     </Pressable>
+                    {/* Önska (webbens wish-gren i skapa-flödet) - inte vid
+                        redigering, en önskan redigeras aldrig. */}
+                    {!redigerar ? (
+                        <Pressable style={styles.flik} onPress={() => setRoll('wish')} accessibilityRole="tab">
+                            <Text style={[styles.flikText, roll === 'wish' && styles.flikTextVald]}>Jag önskar</Text>
+                            <View style={[styles.flikStreck, roll === 'wish' && styles.flikStreckÖnska]} />
+                        </Pressable>
+                    ) : null}
                 </View>
                 <Text style={styles.hjälp}>
                     {roll === 'host'
                         ? 'Ditt event får en egen bricka på kartan och syns direkt för alla som tittar här - gratis synlighet för det du ordnar, med dig som arrangör.'
-                        : 'Tipsa om ett event som redan finns - du står inte som arrangör. Kräver inget konto, och länk behövs bara om det finns en sida att peka på.'}
+                        : roll === 'tip'
+                        ? 'Tipsa om ett event som redan finns - du står inte som arrangör. Kräver inget konto, och länk behövs bara om det finns en sida att peka på.'
+                        : 'Önska att någon ordnar något här. Önskan syns som en drömsk bricka på kartan i 7 dagar - kanske nappar en arrangör eller förening.'}
                 </Text>
 
                 {/* Platsen är redan vald (kartans mitt) - vill man flytta görs
@@ -389,8 +450,10 @@ export default function SkapaScreen() {
                     accessibilityLabel="Namn på event"
                 />
 
-                {/* När + Kategori två och två. */}
+                {/* När + Kategori två och två. Önskningar har ingen tid -
+                    kategorin tar hela bredden i önske-läget. */}
                 <View style={styles.parRad}>
+                    {!ärÖnskan ? (
                     <View style={styles.halv}>
                         <Text style={styles.etikett}>När?</Text>
                         {Platform.OS === 'ios' ? (
@@ -409,6 +472,7 @@ export default function SkapaScreen() {
                             </Pressable>
                         )}
                     </View>
+                    ) : null}
                     <View style={styles.halv}>
                         <Text style={styles.etikett}>Kategori</Text>
                         <Pressable
@@ -438,7 +502,8 @@ export default function SkapaScreen() {
                 ) : null}
 
                 {/* Serie: flera dagar i rad eller varje/varannan vecka. Klockslag
-                    och veckodag ärvs från När?. */}
+                    och veckodag ärvs från När?. Inte för önskningar. */}
+                {!ärÖnskan ? (
                 <View style={styles.serieKort}>
                     <View style={styles.serieRad}>
                         <View style={styles.serieTextKolumn}>
@@ -497,7 +562,10 @@ export default function SkapaScreen() {
                         </>
                     ) : null}
                 </View>
+                ) : null}
 
+                {/* Önskningar bär ingen platstext - läget är nålen på kartan. */}
+                {!ärÖnskan ? (
                 <TextInput
                     style={styles.fält}
                     value={plats}
@@ -507,9 +575,12 @@ export default function SkapaScreen() {
                     maxLength={120}
                     accessibilityLabel="Plats (valfritt)"
                 />
+                ) : null}
 
                 {/* Pris + Bild två och två. Tomt pris = inget pris-chip alls -
-                    vet inte är inte samma sak som gratis. */}
+                    vet inte är inte samma sak som gratis. Önskningar har
+                    varken pris eller bild. */}
+                {!ärÖnskan ? (
                 <View style={styles.parRad}>
                     <TextInput
                         style={[styles.fält, styles.halv]}
@@ -540,6 +611,7 @@ export default function SkapaScreen() {
                         ) : null}
                     </View>
                 </View>
+                ) : null}
 
                 {/* FLER DETALJER: när man TIPSAR fälls länk, arrangör och
                     beskrivning ihop - ett snabbt tips är några få fält. */}
@@ -592,6 +664,9 @@ export default function SkapaScreen() {
                 {!användare && ärTips ? (
                     <Text style={styles.tipsInfo}>Du behöver inget konto för att tipsa.</Text>
                 ) : null}
+                {!användare && ärÖnskan ? (
+                    <Text style={styles.tipsInfo}>Önskningar kräver ett konto - det skapas på en minut.</Text>
+                ) : null}
             </ScrollView>
 
             {/* Knapparna ligger fast i botten - bara fälten rullar. */}
@@ -634,6 +709,8 @@ const styles = StyleSheet.create({
     flikStreck: { alignSelf: 'stretch', height: 3, borderRadius: 2, backgroundColor: 'transparent' },
     flikStreckHost: { backgroundColor: '#16a34a' },
     flikStreckTips: { backgroundColor: '#f59e0b' },
+    /** Önska: drömskt lila, som önskebrickornas ton på webben. */
+    flikStreckÖnska: { backgroundColor: '#8b5cf6' },
     hjälp: { fontSize: 12, color: '#64748b', lineHeight: 17 },
     hjälpTät: { marginTop: 4, fontSize: 12, color: '#64748b', lineHeight: 16 },
     platsLänk: { fontSize: 13, fontWeight: '700', color: '#006aa7' },

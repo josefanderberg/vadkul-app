@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
-import { antalIkon, byggBrickor, kapaEtikett } from './kartlager';
+import type { Önskan } from './onskningar';
+import { antalIkon, byggBrickor, byggÖnskningar, kapaEtikett } from './kartlager';
 
 const ev = (id: string, h: number, extra: Partial<AppFeedEvent> = {}): AppFeedEvent => ({
     id,
@@ -31,6 +32,15 @@ describe('byggBrickor', () => {
         const fc = byggBrickor([ev('a', 17), ev('b', 18, { category: 'art' })], { nowMs: NU, valtId: 'b' });
         expect(fc.features[0].properties).toMatchObject({ id: 'b', ikon: 'bricka-art-vald', sort: 4, label: 'Konst' });
     });
+    it('stjärnmärkt → guldbricka, och stjärnan lyfter representanten i gruppen', () => {
+        const stjärnor = new Set(['sen']);
+        const fc = byggBrickor([ev('tidig', 17), ev('sen', 19)], { nowMs: NU, stjärnor });
+        expect(fc.features[0].properties).toMatchObject({ id: 'sen', ikon: 'bricka-music-guld', sort: 2 });
+        // Ett passerat stjärnevent lyfts inte - stjärnan lyser bara tills det varit.
+        const förbi = byggBrickor([ev('tidig', 17), ev('gammal', 10)], { nowMs: NU, stjärnor: new Set(['gammal']) });
+        expect(förbi.features[0].properties.id).toBe('tidig');
+        expect(förbi.features[0].properties.ikon).toBe('bricka-music');
+    });
     it('Ticketmaster → guld, pop → tjock kant, sparad → vit kropp', () => {
         const tm = byggBrickor([ev('https://www.ticketmaster.se/event/1', 17, { category: 'stage' })], { nowMs: NU });
         expect(tm.features[0].properties.ikon).toBe('bricka-stage-guld');
@@ -46,6 +56,19 @@ describe('byggBrickor', () => {
         expect(antalIkon(140)).toBe('antal-99plus');
         const fc = byggBrickor([ev('a', 17), ev('b', 18), ev('c', 19)], { nowMs: NU });
         expect(fc.features[0].properties.antalIkon).toBe('antal-3');
+    });
+    it('önskningarna blir ett eget lager med kategoribricka och Önskas-etikett', () => {
+        const w: Önskan = {
+            id: 'w1', title: 'Loppis i Vasaparken varje helg hela hösten', category: 'market',
+            description: '', lat: 59.34, lng: 18.05, uid: 'u1', hostName: 'Josef',
+            createdAt: NU, expiresAt: NU + 1, fulfilled: false,
+        };
+        const fc = byggÖnskningar([w]);
+        expect(fc.features).toHaveLength(1);
+        expect(fc.features[0].properties.id).toBe('w1');
+        expect(fc.features[0].properties.ikon).toBe('bricka-market');
+        expect(fc.features[0].properties.etikett).toBe('Önskas · Loppis i Vasaparke…');
+        expect(fc.features[0].geometry.coordinates).toEqual([18.05, 59.34]);
     });
     it('etiketten bär representantens kapade titel', () => {
         const fc = byggBrickor([ev('x', 17, { title: 'Luleå Hockey/MSSK – Färjestad BK' })], { nowMs: NU });

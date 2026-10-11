@@ -44,6 +44,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+    Alert,
     Animated,
     PanResponder,
     Pressable,
@@ -63,6 +64,9 @@ import type { AppEvent } from '@/lib/appEvent';
 import { seriensRytm } from '@/lib/anvandarEvent';
 import { useEventDetalj } from '@/api/eventDetalj';
 import { hämtaEngagemang } from '@/data/eventStats';
+import { hämtaStjärnorKvar, prenumereraStjärnmärkta, sättStjärna } from '@/data/stjarnor';
+import { kanSättaStjärna } from '@/lib/stjarnor';
+import { useKonto } from '@/lib/kontoContext';
 import { EventChat } from '@/components/EventChat';
 import { EventRad } from '@/components/EventRad';
 import { FlerFran } from '@/components/FlerFran';
@@ -659,6 +663,45 @@ function EventInnehåll({
         ? Math.max(0, gillaBas.n - (gillaBas.sparadDå ? 1 : 0) + (sparad ? 1 : 0))
         : 0;
 
+    // Stjärngåvan ⭐ (webbens LinkEventCard): prenumerationen på eventStars
+    // delas med kartan (EN Firestore-lyssnare i data/stjarnor), kvar-siffran
+    // läses en gång per konto och session. Knappen visas bara när man har en
+    // oanvänd stjärna och eventet inte varit; annars ren guld-indikator.
+    const { användare } = useKonto();
+    const [stjärnmärkta, setStjärnmärkta] = useState<ReadonlySet<string>>(new Set());
+    useEffect(() => prenumereraStjärnmärkta(setStjärnmärkta), []);
+    const [stjärnorKvar, setStjärnorKvar] = useState(0);
+    useEffect(() => {
+        if (!användare) { setStjärnorKvar(0); return; }
+        let aktiv = true;
+        void hämtaStjärnorKvar(användare.uid).then(n => { if (aktiv) setStjärnorKvar(n); });
+        return () => { aktiv = false; };
+    }, [användare]);
+    const harStjärna = stjärnmärkta.has(event.id);
+    const visaStjärnknapp = kanSättaStjärna(!!användare, stjärnorKvar, harVarit);
+    const sättStjärnan = () => {
+        // Placeringen är ENGÅNGS (webben: kan aldrig ångras eller flyttas)
+        // → alltid bekräftelse innan Cloud-funktionen kallas.
+        Alert.alert(
+            'Sätt din stjärna här?',
+            `Stjärnan sätts på "${event.title}" och lyser för alla tills eventet varit. Det går inte att ångra.`,
+            [
+                { text: 'Avbryt', style: 'cancel' },
+                {
+                    text: 'Sätt stjärnan',
+                    onPress: async () => {
+                        const svar = await sättStjärna(event.id);
+                        if (svar.success) {
+                            setStjärnorKvar(k => (typeof svar.starsLeft === 'number' ? Math.max(0, svar.starsLeft) : Math.max(0, k - 1)));
+                        } else {
+                            Alert.alert('Det gick inte', svar.message);
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
     const tid = formatTidSpann(event.time, event.hasSpecificTime, event.endDate);
     const km = minPos ? distanceKm(minPos.lat, minPos.lng, event.lat, event.lng) : null;
     const plats = [km != null ? `${formatKm(km)} bort` : null, event.locationName].filter(Boolean).join(' · ');
@@ -763,6 +806,25 @@ function EventInnehåll({
                     ) : (
                         <View style={styles.knappFyll} />
                     )}
+                    {/* Stjärngåvan ⭐ bredvid hjärtat (webbens ordning):
+                        klickbar när man har en oanvänd stjärna, annars ren
+                        guld-indikator på event som redan HAR en stjärna. */}
+                    {visaStjärnknapp ? (
+                        <Pressable
+                            style={({ pressed }) => [styles.knapp, styles.stjärnKnapp, pressed && styles.knappTryckt]}
+                            onPress={sättStjärnan}
+                            accessibilityLabel="Sätt din stjärna på eventet"
+                        >
+                            <Text style={styles.stjärnText}>{harStjärna ? '★' : '☆'}</Text>
+                        </Pressable>
+                    ) : harStjärna ? (
+                        <View
+                            style={[styles.knapp, styles.stjärnKnapp, styles.stjärnHar]}
+                            accessibilityLabel="Det här eventet har fått en stjärna"
+                        >
+                            <Text style={styles.stjärnText}>★</Text>
+                        </View>
+                    ) : null}
                     <Pressable
                         style={({ pressed }) => [styles.knapp, styles.hjärtKnapp, gillaAntal > 0 && styles.hjärtKnappBred, sparad && styles.hjärtSparad, pressed && styles.knappTryckt]}
                         onPress={() => växla(event)}
@@ -1229,6 +1291,10 @@ const styles = StyleSheet.create({
     filterKnappPå: { backgroundColor: BLÅ, borderColor: BLÅ },
     filterIkon: { fontSize: 15, color: '#64748b' },
     filterIkonPå: { color: '#ffffff' },
+    /** Stjärnan: amber som webbens (bg-amber-50/100, border amber-300). */
+    stjärnKnapp: { width: 36, height: 36, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fcd34d' },
+    stjärnHar: { backgroundColor: '#fef3c7' },
+    stjärnText: { fontSize: 17, color: '#f59e0b', marginTop: -1 },
     hjärtKnapp: { width: 36, height: 36, backgroundColor: '#ffffff', borderWidth: 1, borderColor: KANT },
     /** Med gilla-siffra: släpp fasta bredden (webbens px-2.5 + gap-1). */
     hjärtKnappBred: { width: undefined, flexDirection: 'row', gap: 4, paddingHorizontal: 10 },
