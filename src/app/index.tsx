@@ -28,7 +28,7 @@ import { FilterBricka } from '@/components/FilterBricka';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
 import { prenumereraStjärnmärkta } from '@/data/stjarnor';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
-import { BRICKA_ICON_SIZE } from '@/lib/brickor';
+import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE } from '@/lib/brickor';
 import { eventIPeriod, periodLabel } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
@@ -62,9 +62,6 @@ interface HistorikPost {
     offset: number;
 }
 
-/** "+N"-badgens mitt relativt spetsen (webbens COUNT_BADGE_CORNER_X/Y vid icon-size 1). */
-const BADGE_X = 20 * Math.SQRT1_2 + 4;
-const BADGE_Y = 7 + 20 * Math.SQRT2 + 20 * Math.SQRT1_2 + 5;
 const GRUPP_FILTER: FilterSpecification = ['>', ['get', 'antal'], 1];
 
 /** Passerade grupper får ingen text (en etikett över en släckt bricka svävar). */

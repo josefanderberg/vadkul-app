@@ -20,6 +20,11 @@ import { EVENT_CATEGORY_KEYS } from '@vadkul/kontrakt';
 /** PNG:erna bakades vid DPR 2,5 → rita dem i 1/2,5 så kroppen blir 40 pt. */
 export const BRICKA_ICON_SIZE = 1 / 2.5;
 
+/** "+N"-badgens mitt relativt spetsen i pt (webbens COUNT_BADGE_CORNER_X/Y
+ *  vid icon-size 1) - kartans antal-lager och stadsherons brickor. */
+export const BADGE_X = 20 * Math.SQRT1_2 + 4;
+export const BADGE_Y = 7 + 20 * Math.SQRT2 + 20 * Math.SQRT1_2 + 5;
+
 export interface BrickTillstånd {
     category: string;
     pop?: boolean;

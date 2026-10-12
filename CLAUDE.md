@@ -59,8 +59,11 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
   features återuppstår inte i appen. Kartan är MapLibre RN (aldrig Mapbox).
   Webbparitetens regler bor i lib/ med webbfilen angiven i huvudkommentaren
   (kartFilter ← matchesFilterFor/sources, harVarit ← isEventPast/autoDayBump,
-  vy ← viewportTour/popularList, sok ← eventSearch) - ändras webben ska
-  kopian följa.
+  vy ← viewportTour/popularList, sok ← eventSearch, stadsPeriod/stadsHero/
+  stadsSpotlight/stadsTopplista ← stadssidornas app/(v1)/evenemang/) - ändras
+  webben ska kopian följa. `HERO_STÄDER` i lib/stadsHero är en KOPIA av
+  webbens utils/cityPages (kartbildernas mittpunkter) - ny stadssida på
+  webben = ny rad här, annars hamnar brickorna fel på bilden.
 - **Brickorna bakas med WEBBENS ritkod**: `node scripts/baka-brickor.mjs`
   (headless Chrome ur huvudrepots node_modules) skriver assets/brickor/ +
   src/lib/brick*.generated.ts. Redigera aldrig de genererade filerna.
