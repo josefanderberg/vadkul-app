@@ -26,10 +26,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
     Alert,
-    // RN-kärnans Clipboard är deprecated men följer med bygget - expo-clipboard
-    // är en NY native-modul och dev-bygget från 9/10 är låst (ren JS-regeln).
-    // Byt till expo-clipboard när ett nytt dev-bygge ändå görs.
-    Clipboard,
     Pressable,
     ScrollView,
     Share,
@@ -39,6 +35,7 @@ import {
     View,
 } from 'react-native';
 import { router } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { getAuth } from '@react-native-firebase/auth';
 import type { ChatMessage } from '@vadkul/kontrakt';
 import type { AppEvent } from '@/lib/appEvent';
@@ -270,7 +267,7 @@ export function EventChat({ event, fran }: {
 
     const handleKopiera = () => {
         const url = privatInbjudningsLänk();
-        Clipboard.setString(url);
+        void Clipboard.setStringAsync(url);
         setKopierad(true);
     };
 
