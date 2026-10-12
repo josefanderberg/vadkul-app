@@ -20,6 +20,8 @@ export const NYCKEL = {
     sverigeTipsKlar: 'vadkul.sverigeTipsKlar',
     /** "Visa bilder" i listan under kortet (webbens vadkul_narhetslista_bilder). */
     listBilder: 'vadkul.listBilder',
+    /** Chattmeddelanden man anmält - dolda för en själv (data/moderering). */
+    doldaMeddelanden: 'vadkul.doldaMeddelanden',
 } as const;
 
 export async function läs<T>(key: string, fallback: T): Promise<T> {

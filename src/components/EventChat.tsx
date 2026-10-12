@@ -22,8 +22,13 @@
  *
  * Lyssnarna lever BARA medan blocket är monterat (kortets eventläge) och rivs
  * vid unmount/eventbyte - egress-disciplinen i CLAUDE.md.
+ *
+ * MODERERING (App Store-regel 1.2): långtryck på någon annans bubbla - i
+ * båda blocken - öppnar ChattMeny (anmäl meddelandet / blockera avsändaren).
+ * Blockerade avsändares meddelanden och de man själv anmält göms ur båda
+ * trådarna (lib/moderering synligaMeddelanden, listan i data/moderering).
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Alert,
     Pressable,
@@ -49,7 +54,10 @@ import {
     type PrivateThreadLite,
 } from '@/lib/privatChat';
 import { inbjudningsUrl } from '@/lib/rsvp';
+import { kanModereras, synligaMeddelanden } from '@/lib/moderering';
+import { ChattMeny, type ChattMenyMål } from '@/components/ChattMeny';
 import { lyssnaPåChatt, skickaChattMeddelande } from '@/data/eventChatt';
+import { useModerering } from '@/data/moderering';
 import {
     gåMedIPrivatTråd,
     lyssnaPåMinaPrivatTrådar,
@@ -59,12 +67,14 @@ import {
 } from '@/data/privatChatt';
 
 /** Meddelandelistan + skrivfältet - samma för publik och privat chatt. */
-function ChatTråd({ messages, myUid, tomText, platshållare, onSänd }: {
+function ChatTråd({ messages, myUid, tomText, platshållare, onSänd, onModerera }: {
     messages: ChatMessage[];
     myUid: string;
     tomText: string;
     platshållare: string;
     onSänd: (text: string) => Promise<void>;
+    /** Långtryck på någon annans bubbla - öppnar anmäl/blockera-menyn. */
+    onModerera: (msg: ChatMessage) => void;
 }) {
     const [text, setText] = useState('');
     const [skickar, setSkickar] = useState(false);
@@ -99,19 +109,42 @@ function ChatTråd({ messages, myUid, tomText, platshållare, onSänd }: {
                 {messages.map(msg => {
                     const mitt = msg.senderId === myUid;
                     const tid = meddelandeTid(msg.createdAt);
+                    const innehåll = (
+                        <>
+                            {/* Användarnamnet syns på ALLA kommentarer - även ens
+                                egna, så man ser hur man framstår för andra. */}
+                            <Text style={[styles.bubbelNamn, mitt ? styles.bubbelNamnMitt : null]}>
+                                {mitt ? `${msg.senderName || 'Du'} (du)` : (msg.senderName || 'Deltagare')}
+                            </Text>
+                            <Text style={[styles.bubbelText, mitt ? styles.bubbelTextMitt : null]}>{msg.text}</Text>
+                            {tid ? (
+                                <Text style={[styles.bubbelTid, mitt ? styles.bubbelTidMitt : null]}>{tid}</Text>
+                            ) : null}
+                        </>
+                    );
                     return (
                         <View key={msg.id} style={[styles.bubbelRad, mitt ? styles.bubbelRadMitt : null]}>
-                            <View style={[styles.bubbla, mitt ? styles.bubblaMitt : styles.bubblaAnnan]}>
-                                {/* Användarnamnet syns på ALLA kommentarer - även ens
-                                    egna, så man ser hur man framstår för andra. */}
-                                <Text style={[styles.bubbelNamn, mitt ? styles.bubbelNamnMitt : null]}>
-                                    {mitt ? `${msg.senderName || 'Du'} (du)` : (msg.senderName || 'Deltagare')}
-                                </Text>
-                                <Text style={[styles.bubbelText, mitt ? styles.bubbelTextMitt : null]}>{msg.text}</Text>
-                                {tid ? (
-                                    <Text style={[styles.bubbelTid, mitt ? styles.bubbelTidMitt : null]}>{tid}</Text>
-                                ) : null}
-                            </View>
+                            {kanModereras(msg, myUid) ? (
+                                // Andras bubblor: långtryck = anmäl/blockera (som
+                                // meddelandeappar). VoiceOver/TalkBack når samma
+                                // meny via den namngivna åtgärden.
+                                <Pressable
+                                    onLongPress={() => onModerera(msg)}
+                                    delayLongPress={350}
+                                    accessibilityHint="Håll inne för att anmäla meddelandet eller blockera avsändaren"
+                                    accessibilityActions={[{ name: 'longpress', label: 'Anmäl eller blockera' }]}
+                                    onAccessibilityAction={e => {
+                                        if (e.nativeEvent.actionName === 'longpress') onModerera(msg);
+                                    }}
+                                    style={({ pressed }) => [styles.bubbla, styles.bubblaAnnan, pressed && styles.bubblaTryckt]}
+                                >
+                                    {innehåll}
+                                </Pressable>
+                            ) : (
+                                <View style={[styles.bubbla, mitt ? styles.bubblaMitt : styles.bubblaAnnan]}>
+                                    {innehåll}
+                                </View>
+                            )}
                         </View>
                     );
                 })}
@@ -159,6 +192,8 @@ export function EventChat({ event, fran }: {
     const [gårMed, setGårMed] = useState(false);
     // "Kopierad ✓" på knappen en stund efter kopieringen.
     const [kopierad, setKopierad] = useState(false);
+    // Meddelandet vars anmäl/blockera-meny är öppen (null = stängd).
+    const [menyMål, setMenyMål] = useState<ChattMenyMål | null>(null);
 
     // uid (inte användare-objektet) som effekt-nyckel: kontexten byter
     // referens vid token-refresh och skulle annars riva upp lyssnaren i onödan.
@@ -174,6 +209,7 @@ export function EventChat({ event, fran }: {
         setPrivMessages([]);
         setPrivOtillgänglig(false);
         setKopierad(false);
+        setMenyMål(null);
         // Utloggad/anonym = ingen lyssnare alls: chatten är låst och en
         // prenumeration hade bara bränt läsningar. Loggar man in monteras
         // lyssnaren direkt (uid byter värde).
@@ -207,6 +243,18 @@ export function EventChat({ event, fran }: {
         const t = setTimeout(() => setKopierad(false), 2500);
         return () => clearTimeout(t);
     }, [kopierad]);
+
+    // Blockerade avsändare och meddelanden man själv anmält göms ur båda
+    // trådarna. Listan hämtas en gång per konto och session (data/moderering).
+    const { blockerade, dolda } = useModerering(uid);
+    const synligaPublik = useMemo(
+        () => synligaMeddelanden(messages, uid, blockerade, dolda),
+        [messages, uid, blockerade, dolda],
+    );
+    const synligaPrivat = useMemo(
+        () => synligaMeddelanden(privMessages, uid, blockerade, dolda),
+        [privMessages, uid, blockerade, dolda],
+    );
 
     // UTLOGGAD: båda chattarna är låsta (Josef 31/8) - rader med hänglås som
     // öppnar inloggningen. Gäller även den som kom via en inbjudningslänk:
@@ -290,10 +338,16 @@ export function EventChat({ event, fran }: {
         });
     };
 
+    const modereraPublik = (msg: ChatMessage) => setMenyMål({ meddelande: msg, chatt: 'publik', trådId: null });
+    const modereraPrivat = (msg: ChatMessage) => {
+        if (aktivTrådId) setMenyMål({ meddelande: msg, chatt: 'privat', trådId: aktivTrådId });
+    };
+
     // ── PUBLIK ─────────────────────────────────────────────────────────────
-    // Hopfällt läge: inga meddelanden och inte manuellt uppfälld - bara en
-    // rad som visar att chatten finns. Tryck fäller upp hela blocket.
-    const publikBlock = messages.length === 0 && !uppfälld ? (
+    // Hopfällt läge: inga (synliga) meddelanden och inte manuellt uppfälld -
+    // bara en rad som visar att chatten finns. Tryck fäller upp hela blocket.
+    // Räknaren och hopfällningen går på det man faktiskt ser.
+    const publikBlock = synligaPublik.length === 0 && !uppfälld ? (
         <Pressable onPress={() => setUppfälld(true)} style={({ pressed }) => [styles.rad, pressed && styles.tryckt]}>
             <Text style={styles.radIkon}>💬</Text>
             <Text style={styles.radEtikett}>CHATT</Text>
@@ -305,15 +359,21 @@ export function EventChat({ event, fran }: {
             <View style={styles.panelHuvud}>
                 <Text style={styles.radIkon}>💬</Text>
                 <Text style={styles.radEtikett}>
-                    CHATT{messages.length > 0 ? ` · ${messages.length}` : ''}
+                    CHATT{synligaPublik.length > 0 ? ` · ${synligaPublik.length}` : ''}
                 </Text>
+                {/* Diskret ledtråd till långtrycket - bara när det finns
+                    någon annans meddelande att trycka på. */}
+                {synligaPublik.some(m => kanModereras(m, uid)) ? (
+                    <Text style={styles.huvudTips} numberOfLines={1}>Håll inne ett meddelande för att anmäla</Text>
+                ) : null}
             </View>
             <ChatTråd
-                messages={messages}
+                messages={synligaPublik}
                 myUid={användare.uid}
                 tomText="Inga meddelanden än - bli först att säga hej! 👋"
                 platshållare="Skriv något …"
                 onSänd={sändPublik}
+                onModerera={modereraPublik}
             />
         </View>
     );
@@ -363,11 +423,12 @@ export function EventChat({ event, fran }: {
                 </Pressable>
             </View>
             <ChatTråd
-                messages={privMessages}
+                messages={synligaPrivat}
                 myUid={användare.uid}
                 tomText="Inga meddelanden än - säg hej till ditt sällskap! 👋"
                 platshållare="Skriv till ditt sällskap …"
                 onSänd={sändPrivat}
+                onModerera={modereraPrivat}
             />
         </View>
     ) : (
@@ -409,6 +470,15 @@ export function EventChat({ event, fran }: {
         <View style={styles.ytterst}>
             {publikBlock}
             {privatBlock}
+            {menyMål ? (
+                <ChattMeny
+                    mål={menyMål}
+                    eventId={eventId}
+                    eventTitle={event.title}
+                    myUid={användare.uid}
+                    onStäng={() => setMenyMål(null)}
+                />
+            ) : null}
         </View>
     );
 }
@@ -458,6 +528,7 @@ const styles = StyleSheet.create({
     privatHuvudVänster: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
     huvudFyll: { flex: 1 },
     huvudKnappText: { fontSize: 11, fontWeight: '900', color: BLÅ, paddingHorizontal: 4 },
+    huvudTips: { flex: 1, textAlign: 'right', fontSize: 10, fontWeight: '600', color: '#94a3b8' },
     /** Meddelandelistan: webbens max-h-56 - skrollar för sig inne i kortet. */
     lista: { maxHeight: 224 },
     listaInre: { padding: 10, gap: 6 },
@@ -480,6 +551,8 @@ const styles = StyleSheet.create({
         backgroundColor: BLÅ,
         borderBottomRightRadius: 4,
     },
+    /** Andras bubbla medan den hålls inne (anmäl/blockera-menyn). */
+    bubblaTryckt: { backgroundColor: '#f1f5f9' },
     bubbelNamn: { fontSize: 10, fontWeight: '900', color: BLÅ, marginBottom: 1 },
     bubbelNamnMitt: { color: 'rgba(255,255,255,0.85)' },
     bubbelText: { fontSize: 14, color: '#1e293b' },

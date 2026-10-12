@@ -13,6 +13,11 @@
  * Vännens event slås upp i den delade användarevent-listan först och
  * därefter via /api/event?id= (samma ~1 kB-uppslag som djuplänken) - ALDRIG
  * Firestore per event.
+ *
+ * BLOCKERING (App Store-regel 1.2, data/moderering): "Blockera" i den
+ * utfällda vänprofilen och långtryck på en förfrågan. Att blockera tar bort
+ * vänskapen/förfrågan och döljer personens chattmeddelanden; de blockerade
+ * listas sist med "Häv". Blockeringslistan hämtas först när mappen fälls ut.
  */
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
@@ -23,6 +28,7 @@ import { hittaAnvändarEvent } from '@/api/useEvent';
 import { formatEventTid } from '@/lib/eventTid';
 import { kategoriFor } from '@/lib/kategorier';
 import { bucketFriendRows, type FriendRow } from '@/lib/vanStatus';
+import { genitiv, sorteraBlockerade, type BlockRad } from '@/lib/moderering';
 import { friendRsvpVisible, upcomingFriendEvents, type FriendUpcomingEvent } from '@/lib/vanEvent';
 import { läsFält, sättFält } from '@/data/anvandare';
 import {
@@ -31,13 +37,14 @@ import {
     hämtaVänprofil,
     taBortVän,
 } from '@/data/vanner';
+import { avblockera, blockera, useModerering } from '@/data/moderering';
 
 interface VänDetalj {
     state: 'laddar' | 'klar' | 'dold';
     events: FriendUpcomingEvent[];
 }
 
-function VänAvatar({ row }: { row: FriendRow }) {
+function VänAvatar({ row }: { row: { name: string | null; photoURL?: string | null } }) {
     return row.photoURL ? (
         <Image source={{ uri: row.photoURL }} style={styles.avatarBild} contentFit="cover" />
     ) : (
@@ -61,6 +68,9 @@ export function VannerSektion({ uid, onVälj }: {
     // Integritetsgrinden - null tills users-dokumentet lästs.
     const [rsvpSynlig, setRsvpSynlig] = useState<boolean | null>(null);
     const [synligUpptagen, setSynligUpptagen] = useState(false);
+    // Blockeringslistan - hämtas först när mappen fälls ut (reads-budgeten).
+    const { rader: blockRader, blockerade } = useModerering(utfälld ? uid : null);
+    const blockLista = useMemo(() => sorteraBlockerade(blockRader), [blockRader]);
 
     const laddaVänner = async () => {
         const [vänner, mitt] = await Promise.all([
@@ -78,7 +88,11 @@ export function VannerSektion({ uid, onVälj }: {
         else { setÖppenVänUid(null); }
     };
 
-    const hinkar = useMemo(() => bucketFriendRows(rader ?? []), [rader]);
+    // Blockerade försvinner ur vänlistan även om en gammal rad skulle finnas kvar.
+    const hinkar = useMemo(
+        () => bucketFriendRows((rader ?? []).filter(r => !blockerade.has(r.uid))),
+        [rader, blockerade],
+    );
 
     const acceptera = async (row: FriendRow) => {
         setUpptagenUid(row.uid);
@@ -111,6 +125,45 @@ export function VannerSektion({ uid, onVälj }: {
         Alert.alert('Ta bort vän?', `${row.name ?? 'Vännen'} försvinner ur din lista - och du ur hens.`, [
             { text: 'Avbryt', style: 'cancel' },
             { text: 'Ta bort', style: 'destructive', onPress: () => void taBort(row) },
+        ]);
+    };
+
+    /** Blockera med bekräftelse - vänskapen/förfrågan rivs i samma batch. */
+    const blockeraMedFråga = (row: FriendRow) => {
+        const namn = row.name ?? 'personen';
+        const relation = row.status === 'accepted' ? 'Ni är inte vänner längre' : 'Förfrågan tas bort';
+        Alert.alert(`Blockera ${namn}?`, `${relation} och du ser inte ${genitiv(namn)} meddelanden i chattarna. ${namn} får inget besked om det.`, [
+            { text: 'Avbryt', style: 'cancel' },
+            {
+                text: 'Blockera',
+                style: 'destructive',
+                onPress: () => {
+                    setUpptagenUid(row.uid);
+                    blockera(uid, { uid: row.uid, name: row.name })
+                        .then(() => {
+                            setRader(prev => prev?.filter(r => r.uid !== row.uid) ?? prev);
+                            setÖppenVänUid(cur => cur === row.uid ? null : cur);
+                        })
+                        .catch(() => Alert.alert('Kunde inte blockera', 'Försök igen om en stund.'))
+                        .finally(() => setUpptagenUid(null));
+                },
+            },
+        ]);
+    };
+
+    const hävBlockering = (rad: BlockRad) => {
+        const namn = rad.name ?? 'personen';
+        Alert.alert(`Häv blockeringen av ${namn}?`, `Du ser ${genitiv(namn)} meddelanden igen. Ni blir inte vänner igen av det.`, [
+            { text: 'Avbryt', style: 'cancel' },
+            {
+                text: 'Häv',
+                onPress: () => {
+                    setUpptagenUid(rad.uid);
+                    avblockera(uid, rad.uid)
+                        .catch(() => Alert.alert('Kunde inte häva blockeringen', 'Försök igen om en stund.'))
+                        .finally(() => setUpptagenUid(null));
+                },
+            },
         ]);
     };
 
@@ -173,7 +226,12 @@ export function VannerSektion({ uid, onVälj }: {
                     <View style={styles.innehåll}>
                         {/* Förfrågningar TILL mig - överst, de kräver svar. */}
                         {hinkar.incoming.map(row => (
-                            <View key={row.uid} style={styles.vänRad}>
+                            <Pressable
+                                key={row.uid}
+                                onLongPress={() => blockeraMedFråga(row)}
+                                accessibilityHint="Håll inne för att blockera"
+                                style={styles.vänRad}
+                            >
                                 <VänAvatar row={row} />
                                 <View style={styles.vänText}>
                                     <Text style={styles.vänNamn} numberOfLines={1}>{row.name ?? 'En VADKUL-användare'}</Text>
@@ -194,7 +252,7 @@ export function VannerSektion({ uid, onVälj }: {
                                 >
                                     <Text style={styles.kryss}>✕</Text>
                                 </Pressable>
-                            </View>
+                            </Pressable>
                         ))}
 
                         {/* Vännerna - varje rad fälls ut till vännens kommande svar. */}
@@ -240,13 +298,23 @@ export function VannerSektion({ uid, onVälj }: {
                                                     </Pressable>
                                                 ))
                                             )}
-                                            <Pressable
-                                                onPress={() => taBortMedFråga(row)}
-                                                disabled={upptagenUid === row.uid}
-                                                hitSlop={6}
-                                            >
-                                                <Text style={styles.taBortLänk}>Ta bort vän</Text>
-                                            </Pressable>
+                                            <View style={styles.länkRad}>
+                                                <Pressable
+                                                    onPress={() => taBortMedFråga(row)}
+                                                    disabled={upptagenUid === row.uid}
+                                                    hitSlop={6}
+                                                >
+                                                    <Text style={styles.taBortLänk}>Ta bort vän</Text>
+                                                </Pressable>
+                                                <Pressable
+                                                    onPress={() => blockeraMedFråga(row)}
+                                                    disabled={upptagenUid === row.uid}
+                                                    hitSlop={6}
+                                                    accessibilityLabel={`Blockera ${row.name ?? 'vännen'}`}
+                                                >
+                                                    <Text style={styles.blockeraLänk}>Blockera</Text>
+                                                </Pressable>
+                                            </View>
                                         </View>
                                     ) : null}
                                 </View>
@@ -268,6 +336,28 @@ export function VannerSektion({ uid, onVälj }: {
                                     accessibilityLabel="Ångra vänförfrågan"
                                 >
                                     <Text style={styles.kryss}>✕</Text>
+                                </Pressable>
+                            </View>
+                        ))}
+
+                        {/* Blockerade - dämpade, med häv. */}
+                        {blockLista.length > 0 ? (
+                            <Text style={styles.underRubrik}>Blockerade</Text>
+                        ) : null}
+                        {blockLista.map(rad => (
+                            <View key={rad.uid} style={[styles.vänRad, styles.dämpad]}>
+                                <VänAvatar row={rad} />
+                                <View style={styles.vänText}>
+                                    <Text style={styles.vänNamn} numberOfLines={1}>{rad.name ?? 'En VADKUL-användare'}</Text>
+                                    <Text style={styles.vänUnder}>Blockerad</Text>
+                                </View>
+                                <Pressable
+                                    onPress={() => hävBlockering(rad)}
+                                    disabled={upptagenUid === rad.uid}
+                                    hitSlop={8}
+                                    accessibilityLabel={`Häv blockeringen av ${rad.name ?? 'användaren'}`}
+                                >
+                                    <Text style={styles.hävText}>Häv</Text>
                                 </Pressable>
                             </View>
                         ))}
@@ -332,7 +422,11 @@ const styles = StyleSheet.create({
     eventRad: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
     eventEmoji: { fontSize: 15 },
     eventTitel: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
-    taBortLänk: { marginTop: 6, fontSize: 11, fontWeight: '700', color: '#94a3b8' },
+    länkRad: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 6 },
+    taBortLänk: { fontSize: 11, fontWeight: '700', color: '#94a3b8' },
+    blockeraLänk: { fontSize: 11, fontWeight: '700', color: '#dc2626' },
+    underRubrik: { marginTop: 8, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, color: '#94a3b8', textTransform: 'uppercase' },
+    hävText: { fontSize: 12, fontWeight: '800', color: BLÅ, paddingHorizontal: 4 },
     synligRad: {
         flexDirection: 'row',
         alignItems: 'center',

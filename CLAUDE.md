@@ -36,6 +36,10 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
 - **Rapportvägen måste finnas** (App Store 1.2, appen visar användarskapade
   event): `components/Rapportera` under beskrivningen i eventkortet, mejl till
   hej@vadkul.se via `lib/rapportera`. Tas den bort faller granskningen.
+  Samma regel för chatten (12/10 2026): långtryck på någon annans bubbla
+  (publik och privat) öppnar `components/ChattMeny` - anmäl till
+  `reports` + blockera till `users/{uid}/blocked` (`lib/moderering`,
+  `data/moderering`); Vänner i profilen har Blockera och Häv. Riv inte.
 - När kontot är på igen gäller: det är FRIVILLIGT (ägarbeslut 29/9), introt erbjuder det men
   "Fortsätt utan konto" finns alltid - Apples regel 5.1.1. Inloggning: e-post
   + Google överallt, Sign in with Apple bara på iOS (regel 4.8). Kontot
