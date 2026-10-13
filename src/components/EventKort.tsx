@@ -47,7 +47,7 @@
  *
  * HÅRD REGEL (CLAUDE.md): appen säljer ingenting - ingen boost, inga priser.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
     Alert,
     Animated,
@@ -94,6 +94,7 @@ import { NYCKEL, useLagrad } from '@/lib/lagring';
 import { bildflöde, delaVäljarlista, väljarRäknare } from '@/lib/listRad';
 import { useRegionVal } from '@/lib/regionContext';
 import { distanceKm, nearestCity } from '@/lib/regionVal';
+import { klistradDag, type DagPlats } from '@/lib/klistradDag';
 import { höjdEfterHuvudbyte, landning, sheetStops } from '@/lib/sheetSnap';
 import { useSparade } from '@/lib/sparadeContext';
 import { AFFILIATE_DISCLOSURE, isAffiliateUrl, isTicketmasterEvent } from '@/lib/ticketmaster';
@@ -109,6 +110,9 @@ const BILDREMSA = 110;
 const SIDA = 30;
 /** Så länge efter ett tryck i navraden ett eventbyte räknas som dess steg. */
 const NAV_STEG_MS = 1000;
+/** Inom så många punkter från taket räknas arket som PÅ taket - där och
+ *  bara där scrollar innehållet (sheetSnaps tolerans). */
+const TAK_MARGINAL = 8;
 
 type ListFlik = 'månaden' | 'populärt';
 
@@ -194,6 +198,13 @@ export function EventKort({
     const stäng = useRef(onClose);
     stäng.current = onClose;
     const scrollRef = useRef<ScrollView>(null);
+    /** Innehållets scrollläge - neddrag på taket tar arket först i toppen. */
+    const scrollYRef = useRef(0);
+    /** Innehållet scrollar FÖRST på taket (webbens regel, kart-ui): under
+     *  det drar varje lodrätt svep i kortet arket (Josef 13/10: "jag vil att
+     *  hela fönstrat ska vara grab så man kan slida ner det längre ner på
+     *  eventkortet"). */
+    const [påTaket, setPåTaket] = useState(false);
 
     // Kortsöket (6/10 + 7/10): termen lever kvar vid eventbyte och nollas
     // när kortet stängs (EventKort avmonteras). Första tecknet lägger
@@ -215,6 +226,7 @@ export function EventKort({
 
     const gåTill = (h: number) => {
         höjdRef.current = h;
+        setPåTaket(h >= tak - TAK_MARGINAL);
         Animated.spring(translate, { toValue: tak - h, bounciness: 3, useNativeDriver: true }).start();
     };
 
@@ -291,6 +303,7 @@ export function EventKort({
         const viaNav = Date.now() - navTryckRef.current < NAV_STEG_MS;
         navTryckRef.current = 0;
         scrollRef.current?.scrollTo({ y: 0, animated: false });
+        scrollYRef.current = 0;
         if (!viaNav) gåTill(stoppRef.current[0]);
         // gåTill är stabil nog
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -326,23 +339,48 @@ export function EventKort({
         glidUt();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [stängNonce]);
-    const pan = useMemo(() => PanResponder.create({
-        onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx),
-        onPanResponderMove: (_e, g) => {
-            const h = Math.min(tak, höjdRef.current - g.dy);
-            translate.setValue(tak - Math.max(0, h));
-        },
-        onPanResponderRelease: (_e, g) => {
-            const mål = landning(stoppRef.current, höjdRef.current, g.dy, g.vy);
-            if (mål === null) {
-                glidUt();
-                return;
-            }
-            gåTill(mål);
-        },
-        onPanResponderTerminate: () => gåTill(höjdRef.current),
+    // TVÅ dragytor med samma drag (Josef 13/10, "hela fönstret ska vara
+    // grab"): huvudet och footern drar arket i alla lägen, innehållet
+    // (CAPTURE - knappar, rader och bilden släpper ett lodrätt svep till
+    // arket) gör det under taket och på taket bara för neddrag med listan i
+    // toppen. Webbens touchstart-regel i EventCard, samma uppdelning.
+    const { pan, innehållsPan } = useMemo(() => {
+        const lodrätt = (g: { dx: number; dy: number }) => Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx);
+        const drag = {
+            onPanResponderMove: (_e: GestureResponderEvent, g: { dy: number }) => {
+                const h = Math.min(tak, höjdRef.current - g.dy);
+                translate.setValue(tak - Math.max(0, h));
+            },
+            onPanResponderRelease: (_e: GestureResponderEvent, g: { dy: number; vy: number }) => {
+                const mål = landning(stoppRef.current, höjdRef.current, g.dy, g.vy);
+                if (mål === null) {
+                    glidUt();
+                    return;
+                }
+                gåTill(mål);
+            },
+            onPanResponderTerminate: () => gåTill(höjdRef.current),
+            // Ett pågående arkdrag lämnas aldrig bort - en rad som börjar
+            // rulla i sidled får inte släppa kortet mitt i luften.
+            onPanResponderTerminationRequest: () => false,
+        };
+        return {
+            pan: PanResponder.create({ onMoveShouldSetPanResponder: (_e, g) => lodrätt(g), ...drag }),
+            innehållsPan: PanResponder.create({
+                onMoveShouldSetPanResponderCapture: (_e, g) => lodrätt(g)
+                    && (höjdRef.current < tak - TAK_MARGINAL || (g.dy > 0 && scrollYRef.current <= 0)),
+                ...drag,
+            }),
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [tak, translate]);
+    }, [tak, translate]);
+    const grepp: ArkGrepp = {
+        innehållsPan: innehållsPan.panHandlers,
+        påTaket,
+        scrollYRef,
+        scrollRef,
+        dubbeltapp,
+    };
 
     // Multievent-pagern "1/3 →" - bor i navraden ovanför arket (webben 16/9:
     // den trängde undan tid/plats på kortets platsrad).
@@ -477,9 +515,8 @@ export function EventKort({
                         inbjudan={inbjudan}
                         onClose={onClose}
                         panHandlers={pan.panHandlers}
-                        dubbeltapp={dubbeltapp}
+                        grepp={grepp}
                         onHuvudHöjd={setHuvudHöjd}
-                        scrollRef={scrollRef}
                     />
                 ) : (
                     <Väljarlista
@@ -492,9 +529,8 @@ export function EventKort({
                         onVäljUrLista={onVälj ?? null}
                         onClose={onClose}
                         panHandlers={pan.panHandlers}
-                        dubbeltapp={dubbeltapp}
+                        grepp={grepp}
                         onHuvudHöjd={setHuvudHöjd}
-                        scrollRef={scrollRef}
                     />
                 )}
             </Animated.View>
@@ -507,6 +543,149 @@ type Dubbeltapp = {
     onTouchStart: (ev: GestureResponderEvent) => void;
     onTouchEnd: (ev: GestureResponderEvent) => void;
 };
+/** Det arkets scrollyta behöver av EventKort: innehållsdraget, om arket
+ *  står på taket (då och bara då scrollar innehållet) och scrolläget. */
+type ArkGrepp = {
+    innehållsPan: PanHandlers;
+    påTaket: boolean;
+    scrollYRef: React.RefObject<number>;
+    scrollRef: React.RefObject<ScrollView | null>;
+    dubbeltapp: Dubbeltapp;
+};
+
+/** Dagsektionerna anmäler sig hit så scrollytan kan lägga den aktuella
+ *  dagens rubrik klistrad överst (lib/klistradDag). */
+type DagRegister = { anmäl: (nyckel: string, vy: View | null, offset: number) => void; mät: () => void };
+const DagRegisterCtx = createContext<DagRegister | null>(null);
+
+/** En dag i kortets listor: rubriken + raderna. `rubrik` false = ingen
+ *  rubrik (väljarlistan med en enda dag) och då heller ingen klistrad. */
+function DagSektion({ offset, rubrik = true, children }: { offset: number; rubrik?: boolean; children: React.ReactNode }) {
+    const register = useContext(DagRegisterCtx);
+    const vy = useRef<View>(null);
+    const nyckel = useId();
+    useEffect(() => {
+        if (!register || !rubrik) return;
+        register.anmäl(nyckel, vy.current, offset);
+        return () => register.anmäl(nyckel, null, offset);
+    }, [register, rubrik, nyckel, offset]);
+    return (
+        <View ref={vy} onLayout={() => register?.mät()}>
+            {rubrik ? <DagRubrik offset={offset} /> : null}
+            {children}
+        </View>
+    );
+}
+
+/**
+ * Arkets scrollyta - delas av eventkortet och väljarlistan.
+ *  - Under taket scrollar den inte: innehållsdraget (capture) tar varje
+ *    lodrätt svep till arket. På taket scrollar den, och ett neddrag med
+ *    innehållet i toppen tar arket ner (bounces av, annars studsade
+ *    innehållet samtidigt som arket drogs).
+ *  - Dagrubriken klistras överst när man scrollat förbi den (Josef 13/10).
+ *    Sektionerna mäts om när de själva eller innehållets höjd ändras.
+ */
+function ArkScroll({
+    grepp,
+    contentContainerStyle,
+    tangentbordsInsets = false,
+    children,
+}: {
+    grepp: ArkGrepp;
+    contentContainerStyle: object;
+    tangentbordsInsets?: boolean;
+    children: React.ReactNode;
+}) {
+    const { innehållsPan, påTaket, scrollYRef, scrollRef, dubbeltapp } = grepp;
+    const inreRef = useRef<View>(null);
+    const sektioner = useRef(new Map<string, { vy: View; offset: number }>());
+    const platser = useRef<DagPlats[]>([]);
+    const rubrikHöjd = useRef(40);
+    const mätRaf = useRef<number | null>(null);
+    const [klistrad, setKlistrad] = useState<{ offset: number; skjut: number } | null>(null);
+
+    const uppdatera = () => {
+        const nästa = klistradDag(platser.current, scrollYRef.current, rubrikHöjd.current);
+        setKlistrad(f => (f?.offset === nästa?.offset && f?.skjut === nästa?.skjut ? f : nästa));
+    };
+    const register = useMemo<DagRegister>(() => {
+        const mät = () => {
+            if (mätRaf.current !== null) return;
+            mätRaf.current = requestAnimationFrame(() => {
+                mätRaf.current = null;
+                const inre = inreRef.current;
+                const poster = [...sektioner.current.values()];
+                if (!inre || poster.length === 0) {
+                    platser.current = [];
+                    uppdatera();
+                    return;
+                }
+                const nya: DagPlats[] = [];
+                let kvar = poster.length;
+                const klar = () => {
+                    if (--kvar > 0) return;
+                    platser.current = nya;
+                    uppdatera();
+                };
+                for (const p of poster) {
+                    p.vy.measureLayout(inre, (_x, y, _b, h) => {
+                        nya.push({ y, höjd: h, offset: p.offset });
+                        klar();
+                    }, klar);
+                }
+            });
+        };
+        return {
+            anmäl: (nyckel, vy, offset) => {
+                if (vy) sektioner.current.set(nyckel, { vy, offset });
+                else sektioner.current.delete(nyckel);
+                mät();
+            },
+            mät,
+        };
+        // Refs och setState - registret byggs en gång per scrollyta.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    useEffect(() => () => {
+        if (mätRaf.current !== null) cancelAnimationFrame(mätRaf.current);
+    }, []);
+
+    return (
+        <View style={styles.scrollYta} {...innehållsPan}>
+            <DagRegisterCtx.Provider value={register}>
+                <ScrollView
+                    ref={scrollRef}
+                    // RN:s typ kräver en icke-null-ref; den är satt när mätningen körs.
+                    innerViewRef={inreRef as React.RefObject<View>}
+                    {...dubbeltapp}
+                    style={styles.innehåll}
+                    contentContainerStyle={contentContainerStyle}
+                    scrollEnabled={påTaket}
+                    bounces={false}
+                    scrollEventThrottle={16}
+                    onScroll={ev => {
+                        scrollYRef.current = ev.nativeEvent.contentOffset.y;
+                        uppdatera();
+                    }}
+                    onContentSizeChange={register.mät}
+                    automaticallyAdjustKeyboardInsets={tangentbordsInsets}
+                >
+                    {children}
+                </ScrollView>
+            </DagRegisterCtx.Provider>
+            {klistrad ? (
+                <View
+                    style={[styles.klistradDag, { transform: [{ translateY: klistrad.skjut }] }]}
+                    pointerEvents="none"
+                    onLayout={ev => { rubrikHöjd.current = ev.nativeEvent.layout.height; }}
+                >
+                    <DagRubrik offset={klistrad.offset} />
+                </View>
+            ) : null}
+        </View>
+    );
+}
 
 /** Två dragstreck - webbens grip-indikator ("dra upp/ner"-affordance). */
 function Handtag() {
@@ -562,9 +741,8 @@ function Väljarlista({
     onVäljUrLista,
     onClose,
     panHandlers,
-    dubbeltapp,
+    grepp,
     onHuvudHöjd,
-    scrollRef,
 }: {
     grupp: AppFeedEvent[];
     onVälj: (e: AppFeedEvent) => void;
@@ -576,9 +754,8 @@ function Väljarlista({
     onVäljUrLista: ((e: AppFeedEvent) => void) | null;
     onClose: () => void;
     panHandlers: PanHandlers;
-    dubbeltapp: Dubbeltapp;
+    grepp: ArkGrepp;
     onHuvudHöjd: (h: number) => void;
-    scrollRef: React.RefObject<ScrollView | null>;
 }) {
     const plats = platsNamn(grupp);
     // Kommande dag för dag, passerade HOPFÄLLDA längst ner (webbens
@@ -623,14 +800,13 @@ function Väljarlista({
                 arrangörsraden + stadsknappen mellan högen och listan.
                 Platsrubriken är redan "sticky": den ligger utanför den här
                 scrollvyn och följer alltså aldrig med upp. */}
-            <ScrollView ref={scrollRef} {...dubbeltapp} style={styles.innehåll} contentContainerStyle={styles.innehållInre}>
+            <ArkScroll grepp={grepp} contentContainerStyle={styles.innehållInre}>
                 {dagar.map(d => (
-                    <View key={d.offset}>
-                        {dagar.length > 1 ? <DagRubrik offset={d.offset} /> : null}
+                    <DagSektion key={d.offset} offset={d.offset} rubrik={dagar.length > 1}>
                         {d.events.map(e => (
                             <EventRad key={e.id} event={e} tema="ljus" onPress={() => onVälj(e)} />
                         ))}
-                    </View>
+                    </DagSektion>
                 ))}
                 {/* Historiken: det som redan varit ligger hopfällt längst ner -
                     passerade rader går fortfarande att trycka (webben, medvetet). */}
@@ -666,7 +842,7 @@ function Väljarlista({
                         ) : null}
                     </>
                 ) : null}
-            </ScrollView>
+            </ArkScroll>
         </>
     );
 }
@@ -690,9 +866,8 @@ function EventInnehåll({
     inbjudan,
     onClose,
     panHandlers,
-    dubbeltapp,
+    grepp,
     onHuvudHöjd,
-    scrollRef,
 }: {
     event: AppEvent;
     grupp: AppFeedEvent[];
@@ -715,9 +890,8 @@ function EventInnehåll({
     inbjudan: { fran: string | null; onStäng: () => void } | null;
     onClose: () => void;
     panHandlers: PanHandlers;
-    dubbeltapp: Dubbeltapp;
+    grepp: ArkGrepp;
     onHuvudHöjd: (h: number) => void;
-    scrollRef: React.RefObject<ScrollView | null>;
 }) {
     const { minPos } = useRegionVal();
     const { ärSparad, växla } = useSparade();
@@ -833,8 +1007,8 @@ function EventInnehåll({
     const filtreradBort = !matcharFilter(event, filter);
     const listLäge = söker || filtreradBort;
     useEffect(() => {
-        if (filtreradBort) scrollRef.current?.scrollTo({ y: 0, animated: false });
-    }, [filtreradBort, scrollRef]);
+        if (filtreradBort) grepp.scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, [filtreradBort, grepp.scrollRef]);
     /** Stadsknappens tal = Månaden-flikens: samma eventDagar-underlag, utan
      *  kortsökets smalning (headern är ändå gömd medan man söker). */
     const månadsAntal = useMemo(
@@ -889,6 +1063,10 @@ function EventInnehåll({
                                 autoCorrect={false}
                                 returnKeyType="search"
                                 onFocus={onSökFokus}
+                                // iOS-fältet vägrar annars lämna ifrån sig
+                                // gesten - svepet i sökrutan ska dra arket
+                                // som resten av huvudet (Josef 13/10).
+                                rejectResponderTermination={false}
                                 style={styles.sökFält}
                             />
                             <Pressable
@@ -1019,13 +1197,7 @@ function EventInnehåll({
             </View>
             {/* automaticallyAdjustKeyboardInsets (iOS): chattens skrivfält bor
                 mitt i arket - utan insetsen täcker tangentbordet fältet. */}
-            <ScrollView
-                ref={scrollRef}
-                {...dubbeltapp}
-                style={styles.innehåll}
-                contentContainerStyle={styles.innehållMedFooter}
-                automaticallyAdjustKeyboardInsets
-            >
+            <ArkScroll grepp={grepp} contentContainerStyle={styles.innehållMedFooter} tangentbordsInsets>
                 {/* Under sökning - och när filtret valt bort eventet - visas
                     listan direkt (webbens listvy-växling). */}
                 {!listLäge ? (
@@ -1065,11 +1237,13 @@ function EventInnehåll({
                         onVälj={onVälj}
                     />
                 ) : null}
-            </ScrollView>
+            </ArkScroll>
             {/* Footern pinnas mot skärmens botten: arket är tak-högt och
                 nedskjutet, så arkets botten ligger under skärmkanten - footern
-                skjuts lika långt åt andra hållet. */}
+                skjuts lika långt åt andra hållet. Den drar arket som huvudet
+                (13/10, hela kortet är greppbart). */}
             <Animated.View
+                {...panHandlers}
                 style={[styles.footerHållare, { transform: [{ translateY: Animated.multiply(footerSkjut, -1) }] }]}
                 pointerEvents="box-none"
             >
@@ -1189,8 +1363,7 @@ function FlerEvent({
                 ) : null}
             </View>
             {visade.map(d => (
-                <View key={d.offset}>
-                    <DagRubrik offset={d.offset} />
+                <DagSektion key={d.offset} offset={d.offset}>
                     {d.events.map(e => (
                         <ListRad
                             key={e.id}
@@ -1202,7 +1375,7 @@ function FlerEvent({
                             onPress={() => onVälj(e)}
                         />
                     ))}
-                </View>
+                </DagSektion>
             ))}
             {finnsFler ? (
                 <Pressable style={styles.visaFler} onPress={() => setAntal(a => a + SIDA)}>
@@ -1453,6 +1626,10 @@ const styles = StyleSheet.create({
         textAlignVertical: 'center',
     },
     footerHållare: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+    /** Arkets scrollyta: ramen för den klistrade dagrubriken, som klipps
+     *  när nästa dag trycker upp den. */
+    scrollYta: { flex: 1, overflow: 'hidden' },
+    klistradDag: { position: 'absolute', top: 0, left: 0, right: 0 },
     väljarPill: {
         alignSelf: 'flex-start',
         marginHorizontal: 16,
