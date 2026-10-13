@@ -7,8 +7,11 @@
  *
  *  - TRE STOPP (lib/sheetSnap, ägarbeslut 2/9): default = kortets huvud +
  *    110 pt bildremsa (webbens 335 px), tapp-höjden ~halva skärmen, taket.
- *    Ett stopp per gest; nedåt från default stänger. Dragytan är handtaget +
- *    huvudet; innehållet skrollar för sig.
+ *    Minst ett stopp per gest, ett långt eller snabbt drag hoppar vidare och
+ *    ett långt neddrag uppifrån stänger direkt (11/10); nedåt från default
+ *    stänger. Dragytan är handtaget + huvudet; innehållet skrollar för sig.
+ *    Ett tryck på TOM karta stänger kortet helt (13/10, som webben) - inget
+ *    mini-läge, dagväljaren ska synas.
  *  - VÄLJARLISTAN: trycker man en bricka med flera event är kortets innehåll
  *    listan över platsen tills man valt (ägarbeslut 31/8).
  *  - NAVRADEN LIGGER OVANPÅ ARKET sedan 10/10 (webbens navrad ovanför
@@ -58,7 +61,6 @@ import {
     View,
     type GestureResponderEvent,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { eventShareSlug, type AppFeedEvent } from '@vadkul/kontrakt';
@@ -105,6 +107,8 @@ export function eventUrl(e: AppFeedEvent): string {
 const BILDREMSA = 110;
 /** Rader per sida i listorna - "Visa fler" laddar nästa sida. */
 const SIDA = 30;
+/** Så länge efter ett tryck i navraden ett eventbyte räknas som dess steg. */
+const NAV_STEG_MS = 1000;
 
 type ListFlik = 'månaden' | 'populärt';
 
@@ -140,7 +144,7 @@ export function EventKort({
     stad = null,
     onVälj,
     nav,
-    minimeraNonce = 0,
+    stängNonce = 0,
     inbjudan = null,
     onClose,
 }: {
@@ -165,23 +169,16 @@ export function EventKort({
     stad?: { slug: string; name: string } | null;
     onVälj?: (e: AppFeedEvent) => void;
     nav?: KortNav;
-    /** Bumpas av kartskärmen vid tryck på tom karta (11/10): arket glider
-     *  ner till MINI-läget där bara filterraden syns. */
-    minimeraNonce?: number;
+    /** Bumpas av kartskärmen vid tryck på tom karta (13/10): arket glider
+     *  ut och kortet stängs, så dagväljaren syns igen. */
+    stängNonce?: number;
     /** Kom man via en Bjud med-länk (?inb=1&fran=) - bannern i svarsraden. */
     inbjudan?: { fran: string | null; onStäng: () => void } | null;
     onClose: () => void;
 }) {
     const { height: fönsterHöjd } = useWindowDimensions();
-    const insets = useSafeAreaInsets();
     const tak = Math.round(fönsterHöjd * 0.88);
     const [huvudHöjd, setHuvudHöjd] = useState(230);
-    /** MINI-läget (karttrycket): handtaget + knappraden med sökfält/filter/
-     *  hjärta synliga ovanför hemindikatorn - resten under skärmkanten. */
-    const miniHöjd = 78 + insets.bottom;
-    const [minimerad, setMinimerad] = useState(false);
-    const minimeradRef = useRef(false);
-    minimeradRef.current = minimerad;
     /** Mellanhöjden (~halva skärmen) - filterknappens lyft och kortsökets
      *  golv. Fast värde: stopp[1] kan vara taket när sheetStops slagit ihop
      *  default med mellanstoppet. */
@@ -214,11 +211,6 @@ export function EventKort({
             if (!nästa) setSök('');
             return nästa;
         });
-        // Sökfältet väcker ur mini-läget (fältet är ju synligt där).
-        if (minimeradRef.current) {
-            setMinimerad(false);
-            gåTill(stoppRef.current[0]);
-        }
     };
 
     const gåTill = (h: number) => {
@@ -232,19 +224,17 @@ export function EventKort({
     // och lyft arket till MELLANHÖJDEN om det står lägre. Aldrig till taket.
     const växlaFilter = () => {
         const öppnar = !sökÖppen;
-        const varMinimerad = minimeradRef.current;
         växlaSök();
-        if ((öppnar || varMinimerad) && höjdRef.current < mellan) gåTill(mellan);
+        if (öppnar && höjdRef.current < mellan) gåTill(mellan);
     };
 
     // Sökfältet får fokus (11/10, Josef: "om fönstret är uppe och man skriver
     // så ska den inte hoppa ner längst ner, för då hamnar den under
     // tangentbordet ... är den längst upp så kan den fortsatt vara där"):
     // tangentbordet täcker nedre ~40 % av skärmen, så arket lyfts till
-    // MELLANHÖJDEN om det står lägre - också ur mini-läget. Högre står still.
+    // MELLANHÖJDEN om det står lägre. Högre står still.
     const sökFokus = () => {
         if (!sökÖppen) setSökÖppen(true);
-        setMinimerad(false);
         if (höjdRef.current < mellan) gåTill(mellan);
     };
 
@@ -282,39 +272,60 @@ export function EventKort({
     const stoppRef = useRef(stopp);
     stoppRef.current = stopp;
 
-    // Nytt event eller ny grupp → default-höjd, innehållet överst.
+    // Navraden (Nästa, Föregående, pagern) STEGAR mellan event och arket står
+    // kvar på höjden man valt (Josef 13/10: "om den är på halvhöjd med
+    // eventkortet och klickar nästa ... ska det inte hoppa ner", samma som
+    // webbens EventCard). Trycket stämplas här och eventbytet strax efter
+    // läser stämpeln - ett tryck som inte bytte event blir inaktuellt.
+    const navTryckRef = useRef(0);
+    const stega = (gör: () => void) => {
+        navTryckRef.current = Date.now();
+        gör();
+    };
+
+    // Nytt event eller ny grupp → default-höjd, innehållet överst. Ett steg
+    // i navraden behåller höjden; står arket på default följer det ändå
+    // nya huvudets default-stopp (effekten nedan).
     const nyckel = event?.id ?? `grupp:${grupp[0]?.id ?? ''}`;
     useEffect(() => {
+        const viaNav = Date.now() - navTryckRef.current < NAV_STEG_MS;
+        navTryckRef.current = 0;
         scrollRef.current?.scrollTo({ y: 0, animated: false });
-        setMinimerad(false);
-        gåTill(stoppRef.current[0]);
+        if (!viaNav) gåTill(stoppRef.current[0]);
         // gåTill är stabil nog
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [nyckel]);
     // Default-stoppet följer huvudets höjd (chipsen fälls ut/in, sökning
-    // gömmer eventet) - men bara under mellanhöjden och aldrig i mini-läget,
-    // och i sökläget är mellanhöjden golvet så fältet inte hamnar under
-    // tangentbordet (lib/sheetSnap höjdEfterHuvudbyte, 11/10).
+    // gömmer eventet) - men bara under mellanhöjden, och i sökläget är
+    // mellanhöjden golvet så fältet inte hamnar under tangentbordet
+    // (lib/sheetSnap höjdEfterHuvudbyte, 11/10).
     useEffect(() => {
         const mål = höjdEfterHuvudbyte({
             höjd: höjdRef.current,
             nyttDefault: stopp[0],
             mellan,
-            minimerad: minimeradRef.current,
             sökläge: sökÖppen || sök.trim().length > 0,
         });
         if (mål !== null) gåTill(mål);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [stopp[0]]);
-    // Karttrycket (11/10): glid ner till MINI-läget. Väcks av drag uppåt,
-    // sökfältet/filterknappen eller ett eventbyte.
+
+    // Arket glider ut under skärmkanten och kortet stängs - neddraget förbi
+    // default och karttrycket delar samma utgång.
+    const glidUt = () => {
+        Animated.timing(translate, { toValue: tak, duration: 160, useNativeDriver: true })
+            .start(() => stäng.current());
+    };
+    // Karttrycket (13/10): kortet stänger helt så dagväljaren syns. Noncen
+    // jämförs mot den kortet monterades med - annars stänger ett tidigare
+    // tryck på tom karta nästa kort i samma stund som det öppnas.
+    const sedd = useRef(stängNonce);
     useEffect(() => {
-        if (minimeraNonce > 0) {
-            setMinimerad(true);
-            gåTill(Math.min(miniHöjd, tak));
-        }
+        if (stängNonce === sedd.current) return;
+        sedd.current = stängNonce;
+        glidUt();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [minimeraNonce]);
+    }, [stängNonce]);
     const pan = useMemo(() => PanResponder.create({
         onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx),
         onPanResponderMove: (_e, g) => {
@@ -324,12 +335,9 @@ export function EventKort({
         onPanResponderRelease: (_e, g) => {
             const mål = landning(stoppRef.current, höjdRef.current, g.dy, g.vy);
             if (mål === null) {
-                Animated.timing(translate, { toValue: tak, duration: 160, useNativeDriver: true })
-                    .start(() => stäng.current());
+                glidUt();
                 return;
             }
-            // Ett drag upp till ett riktigt stopp väcker ur mini-läget.
-            if (mål >= stoppRef.current[0]) setMinimerad(false);
             gåTill(mål);
         },
         onPanResponderTerminate: () => gåTill(höjdRef.current),
@@ -342,6 +350,7 @@ export function EventKort({
     const pager = event && grupp.length > 1 && gruppIndex >= 0
         ? { text: `${gruppIndex + 1}/${grupp.length}`, nästa: grupp[(gruppIndex + 1) % grupp.length] }
         : null;
+    const tryckNästa = () => { if (nav) stega(nav.onNästa); };
 
     return (
         <>
@@ -360,7 +369,7 @@ export function EventKort({
                             finns, dämpad pil annars. */}
                         {nav ? (
                             <Pressable
-                                onPress={nav.onBakåt ?? undefined}
+                                onPress={nav.onBakåt ? () => stega(nav.onBakåt!) : undefined}
                                 disabled={!nav.onBakåt}
                                 hitSlop={6}
                                 accessibilityLabel={nav.bakåtEvent ? `Tillbaka till ${nav.bakåtEvent.title}` : 'Inget föregående event än'}
@@ -398,7 +407,7 @@ export function EventKort({
                         ) : null}
                         {pager ? (
                             <Pressable
-                                onPress={() => onVäljIGrupp?.(pager.nästa)}
+                                onPress={() => stega(() => onVäljIGrupp?.(pager.nästa))}
                                 hitSlop={6}
                                 accessibilityLabel="Nästa event på samma plats"
                                 style={({ pressed }) => [styles.glasPill, pressed && styles.tryckt]}
@@ -414,7 +423,7 @@ export function EventKort({
                             const dagByte = !släckt && nav.nästaEtikett !== 'NÄSTA';
                             return (
                                 <Pressable
-                                    onPress={nav.onNästa}
+                                    onPress={tryckNästa}
                                     disabled={släckt}
                                     hitSlop={6}
                                     accessibilityLabel={nav.nästaEvent ? `Nästa: ${nav.nästaEvent.title}` : nav.nästaEtikett ?? 'Inget mer i bild'}
@@ -464,7 +473,6 @@ export function EventKort({
                         onVäxlaFilter={växlaFilter}
                         sökFältRef={sökFältRef}
                         footerSkjut={translate}
-                        minimerad={minimerad}
                         onVälj={onVälj}
                         inbjudan={inbjudan}
                         onClose={onClose}
@@ -678,7 +686,6 @@ function EventInnehåll({
     onVäxlaFilter,
     sökFältRef,
     footerSkjut,
-    minimerad,
     onVälj,
     inbjudan,
     onClose,
@@ -704,8 +711,6 @@ function EventInnehåll({
     sökFältRef: React.RefObject<TextInput | null>;
     /** Arkets translateY - footern counter-translaterar mot skärmens botten. */
     footerSkjut: Animated.Value;
-    /** Mini-läget (karttrycket): footern göms så filterraden inte täcks. */
-    minimerad: boolean;
     onVälj?: (e: AppFeedEvent) => void;
     inbjudan: { fran: string | null; onStäng: () => void } | null;
     onClose: () => void;
@@ -1063,9 +1068,7 @@ function EventInnehåll({
             </ScrollView>
             {/* Footern pinnas mot skärmens botten: arket är tak-högt och
                 nedskjutet, så arkets botten ligger under skärmkanten - footern
-                skjuts lika långt åt andra hållet. GÖMS i mini-läget, annars
-                täcker den precis filterraden som ska synas (11/10). */}
-            {minimerad ? null : (
+                skjuts lika långt åt andra hållet. */}
             <Animated.View
                 style={[styles.footerHållare, { transform: [{ translateY: Animated.multiply(footerSkjut, -1) }] }]}
                 pointerEvents="box-none"
@@ -1076,7 +1079,6 @@ function EventInnehåll({
                     cta={utlänk ? { url: utlänk, label: tm ? 'BOKA' : 'ANMÄL', guld: tm, annons: annons ? AFFILIATE_DISCLOSURE : null } : null}
                 />
             </Animated.View>
-            )}
             <HelskarmsBild uri={helskärm} onClose={() => setHelskärm(null)} />
         </>
     );

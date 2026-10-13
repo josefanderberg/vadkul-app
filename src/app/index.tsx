@@ -195,18 +195,19 @@ export default function KartScreen() {
         if (e) öppna(e, iPeriod);
     };
 
-    // Tryck på TOM karta MINIMERAR kortet till filterraden (Josef 11/10:
-    // "om man klickar på kartan så ska eventkortet åka ner ... men lämna så
-    // man ser översta filterraden") - kortet stängs bara med ✕ eller
-    // neddrag. Fördröjningen släpper fram brickans callback först så ett
-    // brickbyte aldrig minimeras i förbifarten.
-    const [minimeraNonce, setMinimeraNonce] = useState(0);
+    // Tryck på TOM karta STÄNGER kortet helt (Josef 13/10: "när jag klicka
+    // på kartan ska eventKORTET försvinna helt. annars döljs ju datumväljaren
+    // hela tiden" - ersätter 11/10:s mini-läge som lämnade filterraden kvar).
+    // Samma som webbens handleSelectEventFromMap(null). Kortet glider ut som
+    // vid neddrag. Fördröjningen släpper fram brickans callback först så ett
+    // brickbyte aldrig stänger kortet i förbifarten.
+    const [stängNonce, setStängNonce] = useState(0);
     const karttryck = () => {
         if (banner) stängBanner();
         const vid = Date.now();
         setTimeout(() => {
             if (brickTryckRef.current > vid - 400) return;
-            setMinimeraNonce(n => n + 1);
+            setStängNonce(n => n + 1);
         }, 120);
     };
 
@@ -746,7 +747,7 @@ export default function KartScreen() {
                     stad={{ slug: city.slug, name: city.name }}
                     onVälj={väljUrLista}
                     nav={nav}
-                    minimeraNonce={minimeraNonce}
+                    stängNonce={stängNonce}
                     inbjudan={inbjudan && kort.event?.id === inbjudan.eventId
                         ? { fran: inbjudan.fran, onStäng: () => setInbjudan(null) }
                         : null}
