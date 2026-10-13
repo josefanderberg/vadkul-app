@@ -62,6 +62,16 @@ describe('landning', () => {
         // Kortare: släppt på 570, projicerat 470 → mellanstoppet.
         expect(landning(STOPP, 720, 150, 1)).toBe(450);
     });
+    it('ett långsamt drag ända ner stänger från mellanhöjden och taket (Josef 13/10)', () => {
+        // iPhone 844 pt: default 340, mellan 464 (55 %), taket 743 (88 %).
+        // Fingret står still vid skärmens botten innan släppet (vy 0) -
+        // build 8 snäppte här tillbaka upp till default.
+        const telefon = [340, 464, 743];
+        expect(landning(telefon, 464, 444, 0)).toBeNull();
+        expect(landning(telefon, 743, 723, 0)).toBeNull();
+        // Ända upp från default i ett drag landar på taket.
+        expect(landning(telefon, 340, -380, 0)).toBe(743);
+    });
     it('projektionen har tak - ett vilt ryck tar inte hela arket', () => {
         // 690 - 140 = 550 → bara ett steg ner.
         expect(landning(STOPP, 720, 30, 6)).toBe(450);
