@@ -18,7 +18,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
-import type { CameraRef, Expression, FilterSpecification, MapRef, StyleSpecification } from '@maplibre/maplibre-react-native';
+import type { CameraRef, Expression, FilterSpecification, LngLat, MapRef, StyleSpecification } from '@maplibre/maplibre-react-native';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { hittaAnvändarEvent, useEvent } from '@/api/useEvent';
 import { fetchEventSomFlöde } from '@/api/eventDetalj';
@@ -41,6 +41,7 @@ import { kartPrompt, type PromptÅtgärd } from '@/lib/kartPrompt';
 import { kategoriFor } from '@/lib/kategorier';
 import { useRegionVal } from '@/lib/regionContext';
 import { kartansOrt, rutansMitt } from '@/lib/kartOrt';
+import { avståndPt, FÖRFILTER_PT, träffadBricka, type Kandidat } from '@/lib/kartTryck';
 import { nearestCityPoint } from '@/lib/orter';
 import { distanceKm, nearestCity } from '@/lib/regionVal';
 import { useSparade } from '@/lib/sparadeContext';
@@ -193,31 +194,11 @@ export default function KartScreen() {
         setKort(grupp.length > 1 ? { event: null, grupp, frånLista: false } : { event: e, grupp, frånLista: false });
     };
 
-    // Kartans onPress eldar OCKSÅ när trycket träffade en bricka (källans
-    // onPress är en separat callback) - stämpeln låter karttrycket skilja
-    // "tom karta" från "bricka", oavsett i vilken ordning de två eldar.
-    const brickTryckRef = useRef(0);
-    const trycktBricka = (id: string | undefined) => {
-        brickTryckRef.current = Date.now();
-        const e = id ? iPeriod.find(x => x.id === id) : undefined;
+    const trycktBricka = (id: string) => {
+        const e = iPeriod.find(x => x.id === id);
         if (e) öppna(e, iPeriod);
     };
 
-    // Tryck på TOM karta STÄNGER kortet helt (Josef 13/10: "när jag klicka
-    // på kartan ska eventKORTET försvinna helt. annars döljs ju datumväljaren
-    // hela tiden" - ersätter 11/10:s mini-läge som lämnade filterraden kvar).
-    // Samma som webbens handleSelectEventFromMap(null). Kortet glider ut som
-    // vid neddrag. Fördröjningen släpper fram brickans callback först så ett
-    // brickbyte aldrig stänger kortet i förbifarten.
-    const [stängNonce, setStängNonce] = useState(0);
-    const karttryck = () => {
-        if (banner) stängBanner();
-        const vid = Date.now();
-        setTimeout(() => {
-            if (brickTryckRef.current > vid - 400) return;
-            setStängNonce(n => n + 1);
-        }, 120);
-    };
 
     const väljIGrupp = (e: AppFeedEvent) => {
         if (!ankareRef.current) ankareRef.current = e;
@@ -419,8 +400,57 @@ export default function KartScreen() {
     const qc = useQueryClient();
     const önskningar = useQuery({ queryKey: ['onskningar'], queryFn: hämtaÖnskningar, staleTime: 10 * 60_000 });
     const önskeBrickor = useMemo(() => byggÖnskningar(önskningar.data ?? []), [önskningar.data]);
-    const trycktÖnskan = (id: string | undefined) => {
-        brickTryckRef.current = Date.now();
+
+    // EGEN TRÄFF på brickorna (Josef 13/10: "när jag klickar på
+    // eventmarkören så markerar den inte den. men om jag klickar lite ner åt
+    // vänster då markeras den"): källornas onPress (MapLibres features)
+    // missade den synliga brickan, så kartans tryck räknar själv - spetsarna
+    // nära trycket projiceras till skärmen och trycket prövas mot brickans
+    // synliga kropp (lib/kartTryck, webbens pickHoverKey-princip). Önskningarna
+    // ritas ovanpå event-brickorna och prövas först.
+    // Tryck på TOM karta STÄNGER kortet helt (Josef 13/10: "när jag klicka
+    // på kartan ska eventKORTET försvinna helt. annars döljs ju datumväljaren
+    // hela tiden" - ersätter 11/10:s mini-läge som lämnade filterraden kvar).
+    // Samma som webbens handleSelectEventFromMap(null). Kortet glider ut som
+    // vid neddrag.
+    const [stängNonce, setStängNonce] = useState(0);
+    const karttryck = (ev: { nativeEvent: { lngLat: LngLat; point: [number, number] } }) => {
+        if (banner) stängBanner();
+        const [lng, lat] = ev.nativeEvent.lngLat;
+        const [tx, ty] = ev.nativeEvent.point;
+        void träffPåKartan({ lng, lat }, tx, ty);
+    };
+    const träffPåKartan = async (tryck: { lng: number; lat: number }, tx: number, ty: number) => {
+        const karta = mapRef.current;
+        const z = zoom ?? 11;
+        const kandidater = async (
+            fs: readonly GeoJSON.Feature<GeoJSON.Point, { id: string; sort?: number; antal?: number }>[],
+        ): Promise<Kandidat[]> => {
+            if (!karta) return [];
+            const nära = fs.filter(f => {
+                const [flng, flat] = f.geometry.coordinates;
+                return avståndPt({ lng: flng, lat: flat }, tryck, z) <= FÖRFILTER_PT;
+            });
+            const projicerade = await Promise.all(nära.map(async f => {
+                try {
+                    const [x, y] = await karta.project(f.geometry.coordinates as LngLat);
+                    return { id: f.properties.id, sort: f.properties.sort ?? 0, grupp: (f.properties.antal ?? 1) > 1, x, y };
+                } catch {
+                    return null;
+                }
+            }));
+            return projicerade.filter((k): k is Kandidat => k !== null);
+        };
+        const önskan = träffadBricka(await kandidater(önskeBrickor.features), tx, ty);
+        if (önskan) {
+            trycktÖnskan(önskan);
+            return;
+        }
+        const id = träffadBricka(await kandidater(brickor.features), tx, ty);
+        if (id) trycktBricka(id);
+        else setStängNonce(n => n + 1);
+    };
+    const trycktÖnskan = (id: string) => {
         const w = (önskningar.data ?? []).find(x => x.id === id);
         if (!w) return;
         const tOm = new Date(w.expiresAt).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
@@ -548,11 +578,7 @@ export default function KartScreen() {
                 >
                     <Camera ref={cameraRef} initialViewState={{ center: [city.lng, city.lat], zoom: 11 }} />
                     <Images images={BRICKA_IMAGES} />
-                    <GeoJSONSource
-                        id="events"
-                        data={brickor}
-                        onPress={ev => trycktBricka(ev.nativeEvent.features[0]?.properties?.id as string | undefined)}
-                    >
+                    <GeoJSONSource id="events" data={brickor}>
                         {/* Etiketterna (webbens LABEL_LAYER_IDS): TITEL FÖRE
                             KATEGORI NÄR DEN FÅR PLATS, annars kategorin, annars
                             inget. Båda ligger UNDER brickorna (en etikett får
@@ -625,11 +651,7 @@ export default function KartScreen() {
                         "Önskas · {titel}" under. Egen källa - aldrig i
                         event-strömmen eller Nästa-poolen. */}
                     {önskeBrickor.features.length > 0 ? (
-                        <GeoJSONSource
-                            id="onskningar"
-                            data={önskeBrickor}
-                            onPress={ev => trycktÖnskan(ev.nativeEvent.features[0]?.properties?.id as string | undefined)}
-                        >
+                        <GeoJSONSource id="onskningar" data={önskeBrickor}>
                             <Layer
                                 type="symbol"
                                 id="onske-etikett"
