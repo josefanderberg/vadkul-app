@@ -104,7 +104,12 @@ export function ListRad({
                         />
                     ) : null}
                     <View style={styles.bildToning} pointerEvents="none">
-                        <Text style={styles.bildEmoji}>{emoji}</Text>
+                        {/* Vit platta bakom emojin (Josef 13/10: "så att det är en
+                            vitbakgrund på den, så ser man den tydligare. kanske
+                            lite opacity") - på bildens mörka toning försvann den. */}
+                        <View style={styles.bildEmojiPlatta}>
+                            <Text style={styles.bildEmoji}>{emoji}</Text>
+                        </View>
                         <Text style={styles.bildTitel} numberOfLines={1}>{e.title}</Text>
                         {brickor(true)}
                     </View>
@@ -151,7 +156,15 @@ const styles = StyleSheet.create({
         paddingBottom: 8,
         experimental_backgroundImage: 'linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0.35) 55%, rgba(0,0,0,0))',
     },
-    bildEmoji: { fontSize: 18 },
+    bildEmojiPlatta: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: 'rgba(255,255,255,0.85)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    bildEmoji: { fontSize: 17 },
     bildTitel: {
         flex: 1,
         minWidth: 0,
