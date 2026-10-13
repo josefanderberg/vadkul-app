@@ -40,7 +40,9 @@ import { hoppDag, hoppPanorering, hoppStad, prenumereraKartHopp, taKartHopp, typ
 import { kartPrompt, type PromptÅtgärd } from '@/lib/kartPrompt';
 import { kategoriFor } from '@/lib/kategorier';
 import { useRegionVal } from '@/lib/regionContext';
-import { distanceKm } from '@/lib/regionVal';
+import { kartansOrt, rutansMitt } from '@/lib/kartOrt';
+import { nearestCityPoint } from '@/lib/orter';
+import { distanceKm, nearestCity } from '@/lib/regionVal';
 import { useSparade } from '@/lib/sparadeContext';
 import { useNu } from '@/lib/useNu';
 import { BOOTSTRAP_STYLE, fetchThemeParkStyle, STREETS_STYLE_URL, type StyleJson } from '@/lib/themeParkStyle';
@@ -137,6 +139,10 @@ export default function KartScreen() {
     /** Satt när ett hopp (lib/kartHopp) bytte stad: kameran flyger till
      *  EVENTET i stället för stadens mitt. */
     const stadsHoppRef = useRef<AppFeedEvent | null>(null);
+    /** Mitt i ett stadshopp är MÅLET sanningen för plattans ortsnamn
+     *  (webbens liveCityName) - kartans mitt beskriver ännu förra stället.
+     *  Släpps när kartan stannat. */
+    const [hoppNamn, setHoppNamn] = useState<string | null>(null);
     useEffect(() => {
         if (!klar) return;
         if (förstaRef.current) {
@@ -148,12 +154,14 @@ export default function KartScreen() {
             // Dagen är eventets - inget auto-hopp till Imorgon vid landningen.
             stadsHoppRef.current = null;
             landningRef.current = null;
+            setHoppNamn(nearestCityPoint(hopp.lat, hopp.lng).name);
             cameraRef.current?.flyTo({ center: [hopp.lng, hopp.lat], zoom: 11, duration: 1500 });
             return;
         }
         landningRef.current = city.slug;
+        setHoppNamn(city.name);
         cameraRef.current?.flyTo({ center: [city.lng, city.lat], zoom: 11, duration: 1500 });
-    }, [klar, city.slug, city.lng, city.lat, fromGps, manuell]);
+    }, [klar, city.slug, city.name, city.lng, city.lat, fromGps, manuell]);
 
     // Auto-hoppet till Imorgon: en gång per landning, när rutan står över
     // staden och flödet finns (webbens utils/autoDayBump - kartans ruta).
@@ -489,6 +497,17 @@ export default function KartScreen() {
         })
         : null;
     const stängBanner = () => setStängdaBanners(s => new Set(s).add(city.slug));
+
+    // PLATTANS ORT FÖLJER KARTAN (Josef 13/10: "när jag tar mig över kartan
+    // så står det fortfarande kvar växjö även om jag är över göteborg") -
+    // webbens liveCityName: närmaste ort till kartans mitt, "Sverige"
+    // utzoomat (lib/kartOrt). Innan kartan rapporterat sin vy står
+    // startstaden. Trycket går till stadssidan för den visade orten
+    // (närmaste stad i kontraktets lista), i Sverige-läget till startstadens.
+    const kartMitt = ruta ? rutansMitt(ruta) : null;
+    const kartOrt = kartMitt && zoom !== null ? kartansOrt(kartMitt, zoom) : null;
+    const plattNamn = hoppNamn ?? (kartMitt && zoom !== null ? kartOrt?.name ?? 'Sverige' : city.name);
+    const plattStad = !hoppNamn && kartOrt && kartMitt ? nearestCity(kartMitt.lat, kartMitt.lng).slug : city.slug;
     const bannerTryck = (b: KartBanner) => {
         if (b.typ === 'populärVecka') {
             setLängd(7);
@@ -523,6 +542,7 @@ export default function KartScreen() {
                     onRegionDidChange={ev => {
                         setRuta(ev.nativeEvent.bounds);
                         setZoom(ev.nativeEvent.zoom);
+                        setHoppNamn(null);
                     }}
                     onPress={karttryck}
                 >
@@ -654,9 +674,9 @@ export default function KartScreen() {
                     </Pressable>
                 </View>
                 <View style={styles.mittKolumn} pointerEvents="box-none">
-                    <Pressable style={styles.periodPlatta} onPress={() => router.push(`/stad/${city.slug}`)}>
+                    <Pressable style={styles.periodPlatta} onPress={() => router.push(`/stad/${plattStad}`)}>
                         <View style={styles.stadRad}>
-                            <Text style={styles.stadText} numberOfLines={1}>{city.name}</Text>
+                            <Text style={styles.stadText} numberOfLines={1}>{plattNamn}</Text>
                         </View>
                         <View style={styles.dagChip}>
                             <Text style={styles.dagText}>{periodLabel(offset, längd).toUpperCase()}</Text>
@@ -709,7 +729,7 @@ export default function KartScreen() {
                             >
                                 {banner.typ === 'populärVecka'
                                     ? `🔥 Visa alla ${banner.antal} populära event i veckan →`
-                                    : `🔍 Zooma in över ${city.name} →`}
+                                    : `🔍 Zooma in över ${kartOrt?.name ?? city.name} →`}
                             </Text>
                         </Pressable>
                         <Pressable style={styles.bannerStäng} onPress={stängBanner} hitSlop={8} accessibilityLabel="Stäng">
