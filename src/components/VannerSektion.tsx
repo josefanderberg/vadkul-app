@@ -20,7 +20,7 @@
  * listas sist med "Häv". Blockeringslistan hämtas först när mappen fälls ut.
  */
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { fetchEventSomFlöde } from '@/api/eventDetalj';
@@ -38,6 +38,7 @@ import {
     taBortVän,
 } from '@/data/vanner';
 import { avblockera, blockera, useModerering } from '@/data/moderering';
+import { VÄN_INBJUDAN_TEXT, vänInbjudningsUrl } from '@/lib/vanInbjudan';
 
 interface VänDetalj {
     state: 'laddar' | 'klar' | 'dold';
@@ -207,6 +208,15 @@ export function VannerSektion({ uid, onVälj }: {
 
     const förfrågningsBadge = rader !== null && hinkar.incoming.length > 0;
 
+    // BJUD IN EN VÄN (Josef 13/10): länken vadkul.se/?van=<uid> - den som
+    // går med via den blir din vän direkt, och nya konton ger en stjärna var
+    // (du högst 5 gånger; acceptFriendInvite i functions). Webbens knapp i
+    // FriendsSection gör samma sak.
+    const bjudIn = () => {
+        const url = vänInbjudningsUrl(uid);
+        void Share.share({ title: 'VADKUL', message: `${VÄN_INBJUDAN_TEXT} ${url}`, url });
+    };
+
     return (
         <View style={styles.kort}>
             <Pressable onPress={växlaUtfälld} style={({ pressed }) => [styles.huvudRad, pressed && styles.tryckt]}>
@@ -224,6 +234,16 @@ export function VannerSektion({ uid, onVälj }: {
                     <Text style={styles.hjälp}>Hämtar …</Text>
                 ) : (
                     <View style={styles.innehåll}>
+                        <Pressable
+                            onPress={bjudIn}
+                            style={({ pressed }) => [styles.bjudInKnapp, pressed && styles.tryckt]}
+                            accessibilityRole="button"
+                        >
+                            <Text style={styles.bjudInText}>👋 Bjud in en vän</Text>
+                        </Pressable>
+                        <Text style={styles.bjudInHjälp}>
+                            Ni får en stjärna var ⭐ när en vän skapar konto via länken (upp till 5).
+                        </Text>
                         {/* Förfrågningar TILL mig - överst, de kräver svar. */}
                         {hinkar.incoming.map(row => (
                             <Pressable
@@ -258,7 +278,7 @@ export function VannerSektion({ uid, onVälj }: {
                         {/* Vännerna - varje rad fälls ut till vännens kommande svar. */}
                         {hinkar.accepted.length === 0 && hinkar.incoming.length === 0 ? (
                             <Text style={styles.hjälpUtanLuft}>
-                                Inga vänner än - bjud med någon på ett event, så kan ni lägga till varandra där.
+                                Inga vänner än - bjud in någon med knappen ovan, eller bjud med någon på ett event.
                             </Text>
                         ) : null}
                         {hinkar.accepted.map(row => {
@@ -415,6 +435,9 @@ const styles = StyleSheet.create({
     vänNamn: { fontSize: 13, fontWeight: '700', color: '#0f172a' },
     vänUnder: { fontSize: 11, fontWeight: '600', color: '#94a3b8', marginTop: 1 },
     accepteraKnapp: { borderRadius: 999, backgroundColor: BLÅ, paddingHorizontal: 11, paddingVertical: 7 },
+    bjudInKnapp: { borderRadius: 999, backgroundColor: BLÅ, paddingVertical: 10, alignItems: 'center', marginTop: 4 },
+    bjudInText: { fontSize: 13, fontWeight: '900', color: '#ffffff' },
+    bjudInHjälp: { fontSize: 11, fontWeight: '600', color: '#94a3b8', textAlign: 'center', paddingTop: 6, paddingBottom: 8 },
     accepteraText: { fontSize: 11, fontWeight: '900', color: '#ffffff' },
     kryss: { fontSize: 14, fontWeight: '800', color: '#94a3b8', paddingHorizontal: 4 },
     detalj: { paddingLeft: 42, paddingBottom: 6 },
