@@ -22,6 +22,8 @@ export const NYCKEL = {
     listBilder: 'vadkul.listBilder',
     /** Chattmeddelanden man anmält - dolda för en själv (data/moderering). */
     doldaMeddelanden: 'vadkul.doldaMeddelanden',
+    /** Prefix: + '.<region>' = när CDN:et senast tillfrågades om appflödet (lib/flodesDisk). */
+    flödesKontroll: 'vadkul.flodesKontroll',
 } as const;
 
 export async function läs<T>(key: string, fallback: T): Promise<T> {
