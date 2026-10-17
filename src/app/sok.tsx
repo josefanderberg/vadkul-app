@@ -2,6 +2,9 @@
  * Sökpanelen - webbens FloatingNavbar-sök + SearchResults:
  *  - Kategoriraden överst, även utan söktext (kategorifiltret BOR i sökpanelen,
  *    ägarbeslut 16/9): 🔥 Populära först, FLER sist. Valet gäller kartan.
+ *  - Filter på utan söktext = träffarna visas DIREKT i tidsordning (webbens
+ *    ägarbeslut 7/10 "kategorival visar listan", hit 18/10) - inte först när
+ *    man skrivit något.
  *  - Stadsraden: orter som matchar texten - tryck lägger staden på kartan.
  *  - Träffarna: webbens rankning (lib/sok), träffen i fetstil, samma filter
  *    som kartan (kategori/🔥/källor) och bara event som inte varit.
@@ -41,6 +44,14 @@ export default function SokScreen() {
         return (feed.data ?? []).filter(e => matcharFilter(e, filter) && !isEventPast(e, nu));
     }, [feed.data, filter]);
     const träffar = useMemo(() => sokEvent(underlag, fråga), [underlag, fråga]);
+    // Utan söktext men med filtret på: hela det filtrerade underlaget i
+    // tidsordning (sokEvent ger tom lista på tom fråga).
+    const filterTräffar = useMemo(
+        () => (filter.aktivt
+            ? [...underlag].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+            : []),
+        [underlag, filter.aktivt],
+    );
     const städer = searchCities(fråga);
     const markera = sökText || q;
 
@@ -84,7 +95,7 @@ export default function SokScreen() {
                 <KategoriRad events={feed.data ?? []} />
             </View>
             <FlatList
-                data={q ? träffar : []}
+                data={q ? träffar : filterTräffar}
                 keyExtractor={e => e.id}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
@@ -105,16 +116,12 @@ export default function SokScreen() {
                     ) : null
                 }
                 ListEmptyComponent={
-                    !q ? (
-                        filter.aktivt ? (
-                            <Pressable style={styles.kartKnapp} onPress={() => router.back()}>
-                                <Text style={styles.kartKnappText}>Visa på kartan</Text>
-                            </Pressable>
-                        ) : (
-                            <Text style={styles.tomt}>Skriv titel, plats eller ort - eller välj en kategori.</Text>
-                        )
+                    !q && !filter.aktivt ? (
+                        <Text style={styles.tomt}>Skriv titel, plats eller ort - eller välj en kategori.</Text>
                     ) : feed.isLoading ? (
                         <Text style={styles.tomt}>Hämtar event …</Text>
+                    ) : !q ? (
+                        <Text style={styles.tomt}>Inga kommande event matchar filtret just nu.</Text>
                     ) : (
                         <Text style={styles.tomt}>
                             Inga träffar på "{fråga.trim()}"{filter.aktivt ? ' med filtret som är på' : ''}.
@@ -175,13 +182,4 @@ const styles = StyleSheet.create({
     stadLänk: { fontSize: 13, fontWeight: '700', color: '#0369a1' },
     tryckt: { opacity: 0.7 },
     tomt: { textAlign: 'center', color: '#64748b', marginTop: 32, paddingHorizontal: 24, fontSize: 14 },
-    kartKnapp: {
-        alignSelf: 'center',
-        marginTop: 24,
-        borderRadius: 999,
-        backgroundColor: '#0f172a',
-        paddingHorizontal: 22,
-        paddingVertical: 12,
-    },
-    kartKnappText: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
 });

@@ -718,8 +718,8 @@ export default function KartScreen() {
                 </View>
                 <View style={styles.topKolumn}>
                     {/* Filtersymbolen öppnar sökskärmen - appens motsvarighet
-                        till webbens sökark (sökfält + kategorichips, inga
-                        event förrän man sökt). Blå när kartfiltret är på. */}
+                        till webbens sökark (sökfält + kategorichips; filter på
+                        visar träffarna direkt). Blå när kartfiltret är på. */}
                     <Pressable
                         style={[styles.rundKnapp, filter.aktivt && styles.rundKnappPå]}
                         onPress={() => router.push('/sok')}
