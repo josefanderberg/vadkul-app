@@ -137,7 +137,7 @@ export function ChattMeny({ mål, eventId, eventTitle, myUid, onStäng }: {
                 <>
                     <Text style={styles.rubrik}>Tack för din anmälan</Text>
                     <Text style={styles.brödtext}>
-                        Vi går igenom den och tar bort innehåll som bryter mot våra regler. Meddelandet är dolt för dig.
+                        Vi går igenom den inom 24 timmar och tar bort innehåll som bryter mot våra regler. Meddelandet är dolt för dig.
                     </Text>
                     {!blockerad ? (
                         <Knapp text={`Blockera ${namn} också`} typ="fara" onPress={() => setSteg('blockera')} />

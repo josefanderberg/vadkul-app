@@ -20,6 +20,7 @@ import {
     TextInput,
     View,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
@@ -133,9 +134,20 @@ function KontoInnehåll() {
                 {fel ? <Text style={styles.fel}>{fel}</Text> : null}
                 {upptagen ? <ActivityIndicator style={styles.snurra} color="#006aa7" /> : null}
                 {läge === 'skapa' ? (
+                    // App Store-regel 1.2: villkoren (nolltolerans mot stötande
+                    // innehåll) måste godkännas vid kontoskapandet, inte bara
+                    // integritetspolicyn. Länkarna öppnas i appens webbläsarark
+                    // (samma väg som Integritet i profilen).
                     <Text style={styles.villkor}>
-                        Genom att skapa ett konto godkänner du hur vi hanterar dina uppgifter (vadkul.se/integritet).
-                        Du kan radera kontot när du vill under Profil.
+                        Genom att skapa ett konto godkänner du{' '}
+                        <Text style={styles.villkorLänk} onPress={() => void WebBrowser.openBrowserAsync('https://vadkul.se/villkor')}>
+                            användarvillkoren
+                        </Text>
+                        {' '}och{' '}
+                        <Text style={styles.villkorLänk} onPress={() => void WebBrowser.openBrowserAsync('https://vadkul.se/integritet')}>
+                            integritetspolicyn
+                        </Text>
+                        . Du kan radera kontot när du vill under Profil.
                     </Text>
                 ) : null}
             </ScrollView>
@@ -321,6 +333,7 @@ const styles = StyleSheet.create({
     kvitto: { marginTop: 14, color: '#047857', fontSize: 14, fontWeight: '700', textAlign: 'center' },
     snurra: { marginTop: 14 },
     villkor: { marginTop: 22, fontSize: 12, color: '#94a3b8', textAlign: 'center', lineHeight: 17 },
+    villkorLänk: { color: '#64748b', textDecorationLine: 'underline' },
     chipRad: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
     chip: { borderRadius: 999, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 12, paddingVertical: 7 },
     chipVald: { backgroundColor: '#0f172a', borderColor: '#0f172a' },

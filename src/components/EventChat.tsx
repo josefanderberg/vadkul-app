@@ -42,7 +42,7 @@ import {
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { getAuth } from '@react-native-firebase/auth';
-import type { ChatMessage } from '@vadkul/kontrakt';
+import { hittaStötandeOrd, ORDFILTER_STOPP, type ChatMessage } from '@vadkul/kontrakt';
 import type { AppEvent } from '@/lib/appEvent';
 import { useKonto } from '@/lib/kontoContext';
 import {
@@ -88,6 +88,13 @@ function ChatTråd({ messages, myUid, tomText, platshållare, onSänd, onModerer
     const sänd = async () => {
         const t = text.trim();
         if (!t || skickar) return;
+        // Ordfiltret (App Store-regel 1.2, samma lista som webben via
+        // kontraktet): stoppas meddelandet skrivs inget till Firestore, och
+        // texten står kvar i fältet så den går att redigera.
+        if (hittaStötandeOrd(t)) {
+            Alert.alert('Hoppsan', ORDFILTER_STOPP);
+            return;
+        }
         setSkickar(true);
         try {
             await onSänd(t);

@@ -330,6 +330,12 @@ export default function ProfilScreen() {
                     <Text style={styles.kortHjalp}>Kartdata © OpenStreetMap-bidragsgivare · © CARTO</Text>
                     <Pressable
                         style={({ pressed }) => [styles.knapp, pressed && styles.tryckt]}
+                        onPress={() => WebBrowser.openBrowserAsync('https://vadkul.se/villkor')}
+                    >
+                        <Text style={styles.knappText}>Användarvillkor</Text>
+                    </Pressable>
+                    <Pressable
+                        style={({ pressed }) => [styles.knapp, pressed && styles.tryckt]}
                         onPress={() => WebBrowser.openBrowserAsync('https://vadkul.se/integritet')}
                     >
                         <Text style={styles.knappText}>Integritet</Text>
