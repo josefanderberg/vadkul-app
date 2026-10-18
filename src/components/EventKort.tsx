@@ -32,7 +32,9 @@
  *    (sticky bottom-0): raden bor egentligen mellan beskrivningen och
  *    chatten, och när man scrollat fram till dess plats lossnar den och
  *    följer innehållet. Scrollar den ut över överkanten tar RsvpToppRad
- *    över, klistrad överst i scrollytan (webbens EventRsvpTopBar).
+ *    över, klistrad överst i scrollytan (webbens EventRsvpTopBar) - och
+ *    huvudets eventdel (titel/meta/värd) göms så länge, annars stod titeln
+ *    dubbelt (18/10).
  *  - KORTSÖKET som riktigt fält i knappraden (6/10 + 7/10): fält +
  *    kategorichipsen (samma KategoriRad som sökpanelen - ett val smalnar
  *    listan OCH kartan bakom via det delade filtret). Första tecknet visar
@@ -1192,6 +1194,14 @@ function EventInnehåll({
     // Nytt stopp, nytt event eller vyväxling flyttar fästet utan scroll.
     useEffect(räknaFäste, [arkHöjd, listLäge, event.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Toppraden uppe = huvudets eventdel göms (härkomst, titel, tid/plats,
+    // VÄRD/PRIS) - titeln stod annars dubbelt (Josef 18/10: "titeln visas 2
+    // gånger i toppen. Ta bort den översta som var där innan"). Webben har
+    // inget fast huvud, där scrollar allt det bort naturligt och toppraden
+    // bär titeln ensam. Kvar står knappraden med sök/hjärta/stäng - samma
+    // hopfällning som sökläget redan gör.
+    const huvudGömt = listLäge || toppRad;
+
     return (
         <>
             <View
@@ -1205,12 +1215,13 @@ function EventInnehåll({
                 <Handtag />
                 {/* Webbens headerordning: härkomst-badgen → knappraden → titel
                     → tid/plats → VÄRD/PRIS. Söker man göms eventet (ägarbeslut
-                    7/10 kväll) - kvar är bara knappraden med fältet och
+                    7/10 kväll), och detsamma när toppraden är uppe (18/10,
+                    huvudGömt ovan) - kvar är bara knappraden med fältet och
                     chipsen. Det gömda ligger i TVÅ stabila slottar runt
                     knappraden, så dess plats i trädet står still och
                     TextInputen aldrig remountas (tangentbordet får inte
                     stängas av vyskiftet). */}
-                {!listLäge && härkomst ? (
+                {!huvudGömt && härkomst ? (
                     <View style={styles.härkomstRad}>
                         <View style={[styles.härkomstBadge, event.isTip ? styles.tipsBadge : styles.egetBadge]}>
                             <Text style={[styles.härkomstText, event.isTip ? styles.tipsText : styles.egetText]} numberOfLines={1}>
@@ -1294,7 +1305,7 @@ function EventInnehåll({
                     sökpanelen, delat filter: ett val smalnar listan i kortet
                     OCH kartan bakom. */}
                 {sökÖppen ? <KategoriRad events={lista} /> : null}
-                {!listLäge ? (
+                {!huvudGömt ? (
                 <>
                 {/* Titelraden - stor emoji + svart fet titel på egen rad, med
                     FAST tvåradshöjd som webben (h-[2.8rem]): enradstitlar
