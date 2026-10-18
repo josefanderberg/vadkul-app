@@ -254,7 +254,16 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 3 },
         elevation: 6,
     },
-    pil: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+    /** Pilarna är ÄKTA CIRKLAR med synlig platta - webbens dagpilar
+     *  (bg-white/10, kart-ui 1/9: "lika hög som bred"), så rundningen syns. */
+    pil: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     pilDimmad: { opacity: 0.35 },
     /** Webbens kalenderknapp: bg-white/15, VIT när kalendern är öppen. */
     kalender: { backgroundColor: 'rgba(255,255,255,0.15)' },

@@ -39,6 +39,7 @@ import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kar
 import { hoppDag, hoppPanorering, hoppStad, prenumereraKartHopp, taKartHopp, type HoppRetur, type KartHopp } from '@/lib/kartHopp';
 import { kartPrompt, type PromptÅtgärd } from '@/lib/kartPrompt';
 import { kategoriFor } from '@/lib/kategorier';
+import { närmastUtanför, utzoomning, ZOOM_UT_GOLV } from '@/lib/listZoom';
 import { useRegionVal } from '@/lib/regionContext';
 import { kartansOrt, rutansMitt } from '@/lib/kartOrt';
 import { avståndPt, FÖRFILTER_PT, träffadBricka, type Kandidat } from '@/lib/kartTryck';
@@ -549,6 +550,23 @@ export default function KartScreen() {
         cameraRef.current?.flyTo({ center: [mitt.lng, mitt.lat], zoom: ZOOM_IN_MÅL, duration: 1200 });
     };
 
+    // LISTANS BOTTEN ZOOMAR UT (webbens ägarbeslut 8/10, lib/listZoom):
+    // kortets lista har nått botten - zooma ut kring SAMMA mitt (ingen
+    // panorering, kart-ui 2/9) minst ett steg och så långt att närmaste
+    // event utanför rutan syns (samma filter + tidsfönster som listan,
+    // Populärt smalnar). Kortet fryser det den redan visat och lägger de
+    // nya under en avdelare. Dagen byts inte.
+    const zoomaUtFrånListan = (populärt: boolean) => {
+        if (!ruta || zoom === null) return;
+        const mitt = rutansMitt(ruta);
+        const nu = new Date();
+        const mål = närmastUtanför(filtrerade, ruta, mitt, e =>
+            !isEventPast(e, nuMs) && dagOffset(e.time, nu) >= offset && (!populärt || e.pop === true));
+        const ny = utzoomning(ruta, zoom, mål ? { lat: mål.lat, lng: mål.lng } : null);
+        if (ny === null) return;
+        cameraRef.current?.easeTo({ center: [mitt.lng, mitt.lat], zoom: ny, duration: 900 });
+    };
+
     // Skapa event-arket (native sedan 11/10 - förr öppnades webben). Formuläret
     // öppnas på KARTANS MITT, precis som webbens placerings-varv landar där.
     const skapa = () => {
@@ -793,6 +811,7 @@ export default function KartScreen() {
                     inbjudan={inbjudan && kort.event?.id === inbjudan.eventId
                         ? { fran: inbjudan.fran, onStäng: () => setInbjudan(null) }
                         : null}
+                    zoomUt={{ kan: zoom !== null && zoom > ZOOM_UT_GOLV, utför: zoomaUtFrånListan }}
                     onClose={stängKort}
                 />
             ) : null}

@@ -19,7 +19,13 @@
  *    först, anonyma som grå siluett) - webbens EventRsvpFooter.
  *  - Pinnas mot SKÄRMENS botten av EventKorts footerHållare (arket ritas i
  *    takets höjd och skjuts ner, så arkets egen botten ligger under
- *    skärmkanten på de lägre stoppen - hållaren counter-translaterar).
+ *    skärmkanten på de lägre stoppen - hållaren counter-translaterar) TILLS
+ *    man scrollat fram till radens egen plats under beskrivningen - där
+ *    släpper den och följer innehållet (webbens sticky bottom-0, Josef 7/10
+ *    kväll: "den kan ju vara där nere i footern tills dess att vi kommer
+ *    fram till där de syns i eventkortet och lossna ifrån sin stickiness
+ *    då"). Scrollar raden sedan ut över överkanten tar RsvpToppRad över -
+ *    knapparna syns alltså hela vägen.
  *  - VÄNKNAPPEN i inbjudningsbannern (sociala lagret, 11/10): mottagaren kan
  *    lägga till inbjudaren som vän direkt ur bannern (webbens
  *    EventRsvpFooter) - utloggade skickas till inloggningen.
@@ -45,6 +51,131 @@ function räknat(bas: number, varPå: boolean, ärPå: boolean): number {
     return Math.max(0, bas - (varPå ? 1 : 0) + (ärPå ? 1 : 0));
 }
 
+export type RsvpCta = { url: string; label: string; guld: boolean; annons?: string | null };
+
+/** Svarsläget, räknarna och Bjud med - delas av footern och toppraden
+ *  (webbens useRsvpCounts). eventStats-läsningen är sessionscachad per
+ *  event, så båda raderna kan vara monterade utan extra läsningar. */
+function useSvar(event: AppFeedEvent & { userCreated?: boolean }) {
+    const { minRsvp, svara } = useRsvp();
+    const { säkerställIdentitet } = useKonto();
+    const mitt = minRsvp(event.id);
+
+    // Räknarna + baslinjen (ens eget svar NÄR siffrorna lästes).
+    const [bas, setBas] = useState<{ e: Engagemang; mitt: RsvpStatus | null } | null>(null);
+    useEffect(() => {
+        let aktiv = true;
+        setBas(null);
+        const vidLäsning = mitt;
+        void hämtaEngagemang(rsvpShareId(event.id, event.userCreated)).then(e => {
+            if (aktiv && e) setBas({ e, mitt: vidLäsning });
+        });
+        return () => { aktiv = false; };
+        // Läses en gång per event - eget tryck räknas om lokalt (räknat ovan).
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [event.id, event.userCreated]);
+
+    const antal = (status: RsvpStatus) =>
+        bas ? räknat(bas.e[status], bas.mitt === status, mitt === status) : 0;
+
+    const bjudMed = async () => {
+        if (mitt !== 'going') svara(event, 'going');
+        let uid: string | null = null;
+        try { uid = await säkerställIdentitet(); } catch { /* offline - länken funkar utan avsändare */ }
+        const url = inbjudningsUrl(event.id, event.userCreated, uid);
+        const text = `Följer du med på ${event.title}?`;
+        void Share.share({ title: event.title, message: `${text} ${url}`, url });
+    };
+
+    return { mitt, välj: (status: RsvpStatus) => svara(event, status), antal, bjudMed };
+}
+
+type Svarsläge = ReturnType<typeof useSvar>;
+
+function SvarKnapp({ svar, status, text }: { svar: Svarsläge; status: RsvpStatus; text: string }) {
+    const på = svar.mitt === status;
+    const n = svar.antal(status);
+    return (
+        <Pressable
+            onPress={() => svar.välj(status)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: på }}
+            style={({ pressed }) => [styles.knapp, styles.svarKnapp, på && styles.knappPå, pressed && styles.tryckt]}
+        >
+            <Text style={[styles.knappText, på && styles.knappTextPå]}>{text}</Text>
+            {n > 0 ? <Text style={[styles.antal, på && styles.antalPå]}>{n}</Text> : null}
+        </Pressable>
+    );
+}
+
+/** Intresserad · Kommer · Bjud med - samma knappar i footern och toppraden.
+ *  Intresserad FÖRE Kommer och REN TEXT (Josef 7/10: "ta även bort emojina
+ *  i intreserad, kommer, bjud in och anmäl") - även ✓:et är borta. */
+function SvarsKnappar({ svar }: { svar: Svarsläge }) {
+    return (
+        <>
+            <SvarKnapp svar={svar} status="interested" text="Intresserad" />
+            <SvarKnapp svar={svar} status="going" text="Kommer" />
+            <Pressable
+                onPress={() => void svar.bjudMed()}
+                accessibilityRole="button"
+                accessibilityLabel="Bjud med någon - dela eventet"
+                style={({ pressed }) => [styles.knapp, styles.ikonKnapp, pressed && styles.tryckt]}
+            >
+                <PersonPlus />
+            </Pressable>
+        </>
+    );
+}
+
+/** ANMÄL/BOKA-pillret - guld för Ticketmaster (1/9), klicket räknas. */
+function CtaKnapp({ event, cta }: { event: AppFeedEvent & { hostName?: string }; cta: RsvpCta }) {
+    return (
+        <Pressable
+            onPress={() => {
+                räknaKlick({ id: event.id, url: cta.url, title: event.title, hostName: event.hostName });
+                void WebBrowser.openBrowserAsync(cta.url);
+            }}
+            style={({ pressed }) => [styles.cta, cta.guld ? styles.ctaGuld : styles.ctaBlå, pressed && styles.tryckt]}
+        >
+            <Text style={[styles.ctaText, cta.guld ? styles.ctaTextGuld : styles.ctaTextBlå]}>{cta.label} →</Text>
+        </Pressable>
+    );
+}
+
+/**
+ * TOPPRADEN NÄR MAN SCROLLAT FÖRBI - webbens EventRsvpTopBar (ägarbeslut
+ * 7/10 kväll, Josef: "längst uppe om man scrollat förbi ett eventkort. då
+ * ska fortfarande intresserad, kommer, .... Alla de ska synas, samt emojin
+ * och titeln ska vara kvar"): emoji + titel och ANMÄL/BOKA på första raden,
+ * Intresserad · Kommer · Bjud med på andra. EventKort visar den när
+ * svarsraden i kortet scrollat ut över överkanten och låter den stå kvar
+ * genom chatt, arrangörsrad och listan. Ingen avatarrad och ingen
+ * inbjudningsbanner - de bor kvar i raden i kortet.
+ */
+export function RsvpToppRad({ event, emoji, cta }: {
+    event: AppFeedEvent & { userCreated?: boolean; hostName?: string };
+    emoji: string;
+    cta: RsvpCta | null;
+}) {
+    const svar = useSvar(event);
+    return (
+        <View style={styles.topp}>
+            <View style={styles.toppTitelRad}>
+                <Text style={styles.toppEmoji}>{emoji}</Text>
+                <Text style={styles.toppTitel} numberOfLines={1}>{event.title}</Text>
+                {/* Annons-märkningen följer provisionslänken även här - den
+                    långa texten bor i raden i kortet. */}
+                {cta?.annons ? <Text style={styles.toppAnnons}>ANNONS</Text> : null}
+                {cta ? <CtaKnapp event={event} cta={cta} /> : null}
+            </View>
+            <View style={styles.toppKnappRad}>
+                <SvarsKnappar svar={svar} />
+            </View>
+        </View>
+    );
+}
+
 export function RsvpFooter({
     event,
     /** ANMÄL/BOKA-pillret - null när eventet saknar utlänk. */
@@ -52,30 +183,21 @@ export function RsvpFooter({
     inbjudan = null,
 }: {
     event: AppFeedEvent & { userCreated?: boolean; hostName?: string };
-    cta: { url: string; label: string; guld: boolean; annons?: string | null } | null;
+    cta: RsvpCta | null;
     /** Bjud med-länken (?inb=1&fran=<uid>): bannern ovanför knapparna. */
     inbjudan?: { fran: string | null; onStäng: () => void } | null;
 }) {
-    const { minRsvp, svara } = useRsvp();
-    const { säkerställIdentitet, användare } = useKonto();
+    const { användare } = useKonto();
     const insets = useSafeAreaInsets();
-    const mitt = minRsvp(event.id);
+    const svar = useSvar(event);
 
-    // Räknarna + baslinjen (ens eget svar NÄR siffrorna lästes).
-    const [bas, setBas] = useState<{ e: Engagemang; mitt: RsvpStatus | null } | null>(null);
+    // Avatarraden - hämtas per event, sessionscachad (data/rsvp).
     const [ansikten, setAnsikten] = useState<RsvpAnsikte[]>([]);
     useEffect(() => {
         let aktiv = true;
-        setBas(null);
         setAnsikten([]);
-        const vidLäsning = mitt;
-        void hämtaEngagemang(rsvpShareId(event.id, event.userCreated)).then(e => {
-            if (aktiv && e) setBas({ e, mitt: vidLäsning });
-        });
         void hämtaAnsikten(event.id, event.userCreated).then(a => { if (aktiv) setAnsikten(a); });
         return () => { aktiv = false; };
-        // Läses en gång per event - eget tryck räknas om lokalt (räknat ovan).
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [event.id, event.userCreated]);
     // Inbjudarens namn (users/{uid} är publikt läsbart, som på webben) -
     // samma sessionscachade läsning som vänförfrågan (data/vanner).
@@ -131,34 +253,6 @@ export function RsvpFooter({
         }
     };
 
-    const antal = (status: RsvpStatus) =>
-        bas ? räknat(bas.e[status], bas.mitt === status, mitt === status) : 0;
-
-    const bjudMed = async () => {
-        if (mitt !== 'going') svara(event, 'going');
-        let uid: string | null = null;
-        try { uid = await säkerställIdentitet(); } catch { /* offline - länken funkar utan avsändare */ }
-        const url = inbjudningsUrl(event.id, event.userCreated, uid);
-        const text = `Följer du med på ${event.title}?`;
-        void Share.share({ title: event.title, message: `${text} ${url}`, url });
-    };
-
-    const Svar = ({ status, text }: { status: RsvpStatus; text: string }) => {
-        const på = mitt === status;
-        const n = antal(status);
-        return (
-            <Pressable
-                onPress={() => svara(event, status)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: på }}
-                style={({ pressed }) => [styles.knapp, styles.svarKnapp, på && styles.knappPå, pressed && styles.tryckt]}
-            >
-                <Text style={[styles.knappText, på && styles.knappTextPå]}>{text}</Text>
-                {n > 0 ? <Text style={[styles.antal, på && styles.antalPå]}>{n}</Text> : null}
-            </Pressable>
-        );
-    };
-
     return (
         <View style={[styles.hållare, { paddingBottom: Math.max(10, insets.bottom) }]}>
         {inbjudan ? (
@@ -211,31 +305,9 @@ export function RsvpFooter({
             </View>
         ) : null}
         <View style={styles.platta}>
-            {/* Intresserad FÖRE Kommer, och REN TEXT i alla fyra knapparna
-                (Josef 7/10: "ta även bort emojina i intreserad, kommer, bjud
-                in och anmäl") - även ✓:et är borta. */}
-            <Svar status="interested" text="Intresserad" />
-            <Svar status="going" text="Kommer" />
-            <Pressable
-                onPress={() => void bjudMed()}
-                accessibilityRole="button"
-                accessibilityLabel="Bjud med någon - dela eventet"
-                style={({ pressed }) => [styles.knapp, styles.ikonKnapp, pressed && styles.tryckt]}
-            >
-                <PersonPlus />
-            </Pressable>
+            <SvarsKnappar svar={svar} />
             <View style={styles.fyll} />
-            {cta ? (
-                <Pressable
-                    onPress={() => {
-                        räknaKlick({ id: event.id, url: cta.url, title: event.title, hostName: event.hostName });
-                        void WebBrowser.openBrowserAsync(cta.url);
-                    }}
-                    style={({ pressed }) => [styles.cta, cta.guld ? styles.ctaGuld : styles.ctaBlå, pressed && styles.tryckt]}
-                >
-                    <Text style={[styles.ctaText, cta.guld ? styles.ctaTextGuld : styles.ctaTextBlå]}>{cta.label} →</Text>
-                </Pressable>
-            ) : null}
+            {cta ? <CtaKnapp event={event} cta={cta} /> : null}
         </View>
         {/* Annons-märkningen för affiliatelänkar bor i footern (7/10 kväll). */}
         {cta?.annons ? <Text style={styles.annons}>{cta.annons}</Text> : null}
@@ -322,6 +394,27 @@ const styles = StyleSheet.create({
     },
     antal: { fontSize: 13, fontWeight: '800', color: '#94a3b8', fontVariant: ['tabular-nums'] },
     antalPå: { color: 'rgba(255,255,255,0.75)' },
+    /** Toppraden: vit platta med kantlinje + skugga nedåt (webbens bg-card
+     *  border-b shadow-md). Ligger ÖVERST i kortets scrollyta. */
+    topp: {
+        backgroundColor: '#ffffff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0',
+        paddingHorizontal: 12,
+        paddingTop: 8,
+        paddingBottom: 10,
+        gap: 8,
+        shadowColor: '#000',
+        shadowOpacity: 0.12,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 4,
+    },
+    toppTitelRad: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    toppEmoji: { fontSize: 20 },
+    toppTitel: { flex: 1, fontSize: 14, fontWeight: '900', color: '#0f172a' },
+    toppAnnons: { fontSize: 9, fontWeight: '900', letterSpacing: 1, color: '#94a3b8' },
+    toppKnappRad: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     inbjudan: {
         flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 12, marginTop: 10,
         paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: '#006AA7',

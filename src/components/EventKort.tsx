@@ -28,7 +28,11 @@
  *  - KOMMER/INTRESSERAD-FOOTERN (6/10, spår 3): fast platta i botten när ett
  *    event är valt (components/RsvpFooter) - göms i väljarlistan. Footern
  *    ligger i arket men counter-translaterar mot skärmens botten (arket ritas
- *    i takets höjd och skjuts ner).
+ *    i takets höjd och skjuts ner). SEDAN 18/10 släpper den som på webben
+ *    (sticky bottom-0): raden bor egentligen mellan beskrivningen och
+ *    chatten, och när man scrollat fram till dess plats lossnar den och
+ *    följer innehållet. Scrollar den ut över överkanten tar RsvpToppRad
+ *    över, klistrad överst i scrollytan (webbens EventRsvpTopBar).
  *  - KORTSÖKET som riktigt fält i knappraden (6/10 + 7/10): fält +
  *    kategorichipsen (samma KategoriRad som sökpanelen - ett val smalnar
  *    listan OCH kartan bakom via det delade filtret). Första tecknet visar
@@ -43,11 +47,16 @@
  *    utloggade, Bjud in/Kopiera länk i privata blocket.
  *  - Under chatten: FLER FRÅN SAMMA ARRANGÖR + stadssidelänken
  *    (components/FlerFran, 6/10) och Månaden · 🔥 Populärt, dag för dag i
- *    kartans ruta från visad dag och framåt (Josef 23-24/9).
+ *    kartans ruta från visad dag och framåt (Josef 23-24/9). Flikraden
+ *    klistras överst när man scrollat förbi den (webbens sticky flikrad)
+ *    och dagrubrikerna fäster under den. LISTANS BOTTEN ZOOMAR UT kartan
+ *    (webbens ägarbeslut 8/10, lib/listZoom): det man sett står kvar överst
+ *    och eventen som kom in runtomkring läggs under en "Zoomade ut"-
+ *    avdelare - kartskärmen skickar zoomUt, utan den slutar listan som förr.
  *
  * HÅRD REGEL (CLAUDE.md): appen säljer ingenting - ingen boost, inga priser.
  */
-import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     Alert,
     Animated,
@@ -78,7 +87,7 @@ import { Rapportera } from '@/components/Rapportera';
 import { HelskarmsBild } from '@/components/HelskarmsBild';
 import { KategoriRad } from '@/components/KategoriRad';
 import { ListRad } from '@/components/ListRad';
-import { RsvpFooter } from '@/components/RsvpFooter';
+import { RsvpFooter, RsvpToppRad, type RsvpCta } from '@/components/RsvpFooter';
 import { arrangörsRad, källDomän } from '@/lib/arrangorsRad';
 import { periodLabel } from '@/lib/dagar';
 import { matcharFilter } from '@/lib/kartFilter';
@@ -92,6 +101,7 @@ import { kategoriFor } from '@/lib/kategorier';
 import { matcharKortSök } from '@/lib/kortSok';
 import { NYCKEL, useLagrad } from '@/lib/lagring';
 import { bildflöde, delaVäljarlista, väljarRäknare } from '@/lib/listRad';
+import { delaIRingar } from '@/lib/listZoom';
 import { useRegionVal } from '@/lib/regionContext';
 import { distanceKm, nearestCity } from '@/lib/regionVal';
 import { klistradDag, type DagPlats } from '@/lib/klistradDag';
@@ -115,6 +125,13 @@ const NAV_STEG_MS = 1000;
 const TAK_MARGINAL = 8;
 
 type ListFlik = 'månaden' | 'populärt';
+
+/** Listans botten zoomar ut (lib/listZoom): kartskärmen äger kameran, så
+ *  kortet får steget härifrån. `kan` = kartan står över zoomgolvet. */
+export interface KortZoomUt {
+    kan: boolean;
+    utför: (populärFlik: boolean) => void;
+}
 
 export interface KortNav {
     /** "NÄSTA", en dag ("IMORGON") när eventen i bild är genomgångna, null = släckt. */
@@ -150,6 +167,7 @@ export function EventKort({
     nav,
     stängNonce = 0,
     inbjudan = null,
+    zoomUt = null,
     onClose,
 }: {
     /** Valt event; null = väljarlistan över `grupp`. */
@@ -178,6 +196,9 @@ export function EventKort({
     stängNonce?: number;
     /** Kom man via en Bjud med-länk (?inb=1&fran=) - bannern i svarsraden. */
     inbjudan?: { fran: string | null; onStäng: () => void } | null;
+    /** Listans botten zoomar ut kartan (lib/listZoom) - utelämnad på skärmar
+     *  utan karta, där slutar listan som förut. */
+    zoomUt?: KortZoomUt | null;
     onClose: () => void;
 }) {
     const { height: fönsterHöjd } = useWindowDimensions();
@@ -224,9 +245,14 @@ export function EventKort({
         });
     };
 
+    /** Arkets höjd vid senaste stoppet - svarsradens fäst-räkning (nedan)
+     *  behöver den som state. Under ett pågående drag står den kvar på
+     *  förra stoppet, vilket räcker: innehållet scrollar ändå bara på taket. */
+    const [arkHöjd, setArkHöjd] = useState(stopp[0]);
     const gåTill = (h: number) => {
         höjdRef.current = h;
         setPåTaket(h >= tak - TAK_MARGINAL);
+        setArkHöjd(h);
         Animated.spring(translate, { toValue: tak - h, bounciness: 3, useNativeDriver: true }).start();
     };
 
@@ -511,8 +537,10 @@ export function EventKort({
                         onVäxlaFilter={växlaFilter}
                         sökFältRef={sökFältRef}
                         footerSkjut={translate}
+                        arkHöjd={arkHöjd}
                         onVälj={onVälj}
                         inbjudan={inbjudan}
+                        zoomUt={zoomUt}
                         onClose={onClose}
                         panHandlers={pan.panHandlers}
                         grepp={grepp}
@@ -527,6 +555,7 @@ export function EventKort({
                         flöde={flöde}
                         stad={stad}
                         onVäljUrLista={onVälj ?? null}
+                        zoomUt={zoomUt}
                         onClose={onClose}
                         panHandlers={pan.panHandlers}
                         grepp={grepp}
@@ -554,8 +583,17 @@ type ArkGrepp = {
 };
 
 /** Dagsektionerna anmäler sig hit så scrollytan kan lägga den aktuella
- *  dagens rubrik klistrad överst (lib/klistradDag). */
-type DagRegister = { anmäl: (nyckel: string, vy: View | null, offset: number) => void; mät: () => void };
+ *  dagens rubrik klistrad överst (lib/klistradDag). Flikraden (Månaden ·
+ *  Populärt) anmäler sig på samma väg: sin plats för klistringen, en levande
+ *  KOPIA av raden (knapparna ska funka klistrade) och sin botten-lyssnare
+ *  (listans utzoomning). */
+type DagRegister = {
+    anmäl: (nyckel: string, vy: View | null, offset: number) => void;
+    mät: () => void;
+    anmälFlikrad: (vy: View | null) => void;
+    flikradKopia: (nod: ReactNode | null) => void;
+    anmälBotten: (fn: ((scrollY: number) => void) | null) => void;
+};
 const DagRegisterCtx = createContext<DagRegister | null>(null);
 
 /** En dag i kortets listor: rubriken + raderna. `rubrik` false = ingen
@@ -585,16 +623,30 @@ function DagSektion({ offset, rubrik = true, children }: { offset: number; rubri
  *    innehållet samtidigt som arket drogs).
  *  - Dagrubriken klistras överst när man scrollat förbi den (Josef 13/10).
  *    Sektionerna mäts om när de själva eller innehållets höjd ändras.
+ *  - KLISTERSTAPELN (18/10, webbens sticky-ordning): `topp` (svarsradens
+ *    topprad, z högst) ligger alltid överst när den finns; flikraden
+ *    (Månaden · Populärt) klistras under den när dess plats scrollat förbi;
+ *    dagrubriken fäster under båda. Webbens EventCard gör samma sak med
+ *    --card-sticky-top + flikradens höjd i dagrubrikernas sticky top.
+ *  - `onScrollY` låter EventInnehåll räkna om svarsradens fäste, och
+ *    botten-lyssnaren (registret) får scrolläget nära innehållets slut -
+ *    listans utzoomning (lib/listZoom).
  */
 function ArkScroll({
     grepp,
     contentContainerStyle,
     tangentbordsInsets = false,
+    topp = null,
+    onScrollY,
     children,
 }: {
     grepp: ArkGrepp;
     contentContainerStyle: object;
     tangentbordsInsets?: boolean;
+    /** Klistrad rad ovanför allt annat (RsvpToppRad). */
+    topp?: ReactNode;
+    /** Kallas vid varje scrolläge - svarsradens fäst-räkning. */
+    onScrollY?: (y: number) => void;
     children: React.ReactNode;
 }) {
     const { innehållsPan, påTaket, scrollYRef, scrollRef, dubbeltapp } = grepp;
@@ -605,8 +657,30 @@ function ArkScroll({
     const mätRaf = useRef<number | null>(null);
     const [klistrad, setKlistrad] = useState<{ offset: number; skjut: number } | null>(null);
 
+    // Flikradens klistring: platsen mäts som dagsektionerna, kopian kommer
+    // från FlerEvent (den ska vara tryckbar, så den bär flikens state).
+    const flikradVy = useRef<View | null>(null);
+    const flikradPlats = useRef<{ y: number; höjd: number } | null>(null);
+    const [flikradNod, setFlikradNod] = useState<ReactNode | null>(null);
+    const [flikradFast, setFlikradFast] = useState<{ höjd: number } | null>(null);
+    const bottenFn = useRef<((scrollY: number) => void) | null>(null);
+    const innehållH = useRef(0);
+    const vyH = useRef(0);
+    // Toppradens höjd skjuter flikrad + dagrubrik nedåt; som ref i
+    // uppdatera-closuren och som state för utritningen.
+    const [toppH, setToppH] = useState(0);
+    const toppHRef = useRef(0);
+    const toppPåRef = useRef(false);
+    toppPåRef.current = !!topp;
+
     const uppdatera = () => {
-        const nästa = klistradDag(platser.current, scrollYRef.current, rubrikHöjd.current);
+        const y = scrollYRef.current;
+        const toppSkjut = toppPåRef.current ? toppHRef.current : 0;
+        const fp = flikradPlats.current;
+        const fast = !!fp && y + toppSkjut > fp.y;
+        setFlikradFast(f => (!!f === fast && f?.höjd === fp?.höjd ? f : fast && fp ? { höjd: fp.höjd } : null));
+        const skjut = toppSkjut + (fast && fp ? fp.höjd : 0);
+        const nästa = klistradDag(platser.current, y + skjut, rubrikHöjd.current);
         setKlistrad(f => (f?.offset === nästa?.offset && f?.skjut === nästa?.skjut ? f : nästa));
     };
     const register = useMemo<DagRegister>(() => {
@@ -615,8 +689,18 @@ function ArkScroll({
             mätRaf.current = requestAnimationFrame(() => {
                 mätRaf.current = null;
                 const inre = inreRef.current;
+                if (!inre) return;
+                const fv = flikradVy.current;
+                if (fv) {
+                    fv.measureLayout(inre, (_x, y, _b, h) => {
+                        flikradPlats.current = { y, höjd: h };
+                        uppdatera();
+                    }, () => {});
+                } else {
+                    flikradPlats.current = null;
+                }
                 const poster = [...sektioner.current.values()];
-                if (!inre || poster.length === 0) {
+                if (poster.length === 0) {
                     platser.current = [];
                     uppdatera();
                     return;
@@ -643,6 +727,12 @@ function ArkScroll({
                 mät();
             },
             mät,
+            anmälFlikrad: vy => {
+                flikradVy.current = vy;
+                mät();
+            },
+            flikradKopia: setFlikradNod,
+            anmälBotten: fn => { bottenFn.current = fn; },
         };
         // Refs och setState - registret byggs en gång per scrollyta.
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -650,7 +740,11 @@ function ArkScroll({
     useEffect(() => () => {
         if (mätRaf.current !== null) cancelAnimationFrame(mätRaf.current);
     }, []);
+    // Toppraden tänds/släcks eller byter höjd → klistringarna flyttar sig.
+    useEffect(uppdatera, [topp, toppH]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    const toppSkjut = topp ? toppH : 0;
+    const dagTopp = toppSkjut + (flikradFast?.höjd ?? 0);
     return (
         <View style={styles.scrollYta} {...innehållsPan}>
             <DagRegisterCtx.Provider value={register}>
@@ -664,11 +758,21 @@ function ArkScroll({
                     scrollEnabled={påTaket}
                     bounces={false}
                     scrollEventThrottle={16}
+                    onLayout={ev => { vyH.current = ev.nativeEvent.layout.height; }}
                     onScroll={ev => {
                         scrollYRef.current = ev.nativeEvent.contentOffset.y;
                         uppdatera();
+                        onScrollY?.(scrollYRef.current);
+                        // Nära botten (webbens rootMargin 120px): listans
+                        // utzoomningssteg, gaten bor hos lyssnaren.
+                        if (innehållH.current - (scrollYRef.current + vyH.current) < 140) {
+                            bottenFn.current?.(scrollYRef.current);
+                        }
                     }}
-                    onContentSizeChange={register.mät}
+                    onContentSizeChange={(_w, h) => {
+                        innehållH.current = h;
+                        register.mät();
+                    }}
                     automaticallyAdjustKeyboardInsets={tangentbordsInsets}
                 >
                     {children}
@@ -676,11 +780,28 @@ function ArkScroll({
             </DagRegisterCtx.Provider>
             {klistrad ? (
                 <View
-                    style={[styles.klistradDag, { transform: [{ translateY: klistrad.skjut }] }]}
+                    style={[styles.klistradDag, { top: dagTopp, transform: [{ translateY: klistrad.skjut }] }]}
                     pointerEvents="none"
                     onLayout={ev => { rubrikHöjd.current = ev.nativeEvent.layout.height; }}
                 >
                     <DagRubrik offset={klistrad.offset} />
+                </View>
+            ) : null}
+            {flikradFast && flikradNod ? (
+                <View style={[styles.klistradFlikrad, { top: toppSkjut }]}>{flikradNod}</View>
+            ) : null}
+            {topp ? (
+                <View
+                    style={styles.klistradTopp}
+                    onLayout={ev => {
+                        const h = ev.nativeEvent.layout.height;
+                        if (h !== toppHRef.current) {
+                            toppHRef.current = h;
+                            setToppH(h);
+                        }
+                    }}
+                >
+                    {topp}
                 </View>
             ) : null}
         </View>
@@ -739,6 +860,7 @@ function Väljarlista({
     flöde,
     stad,
     onVäljUrLista,
+    zoomUt = null,
     onClose,
     panHandlers,
     grepp,
@@ -752,6 +874,7 @@ function Väljarlista({
     stad: { slug: string; name: string } | null;
     /** null på skärmar utan den gemensamma listan (stadsskärmen). */
     onVäljUrLista: ((e: AppFeedEvent) => void) | null;
+    zoomUt?: KortZoomUt | null;
     onClose: () => void;
     panHandlers: PanHandlers;
     grepp: ArkGrepp;
@@ -838,7 +961,7 @@ function Väljarlista({
                             onVälj={onVäljUrLista}
                         />
                         {lista.length > 0 ? (
-                            <FlerEvent lista={lista} valtId="" frånOffset={listaFrånOffset} bildflödesLäge onVälj={onVäljUrLista} />
+                            <FlerEvent lista={lista} valtId="" frånOffset={listaFrånOffset} bildflödesLäge onVälj={onVäljUrLista} zoomUt={zoomUt} />
                         ) : null}
                     </>
                 ) : null}
@@ -862,8 +985,10 @@ function EventInnehåll({
     onVäxlaFilter,
     sökFältRef,
     footerSkjut,
+    arkHöjd,
     onVälj,
     inbjudan,
+    zoomUt,
     onClose,
     panHandlers,
     grepp,
@@ -886,8 +1011,11 @@ function EventInnehåll({
     sökFältRef: React.RefObject<TextInput | null>;
     /** Arkets translateY - footern counter-translaterar mot skärmens botten. */
     footerSkjut: Animated.Value;
+    /** Arkets höjd vid senaste stoppet - fäst-räkningen för svarsraden. */
+    arkHöjd: number;
     onVälj?: (e: AppFeedEvent) => void;
     inbjudan: { fran: string | null; onStäng: () => void } | null;
+    zoomUt?: KortZoomUt | null;
     onClose: () => void;
     panHandlers: PanHandlers;
     grepp: ArkGrepp;
@@ -1024,9 +1152,56 @@ function EventInnehåll({
         [event, detalj.data?.hostName, flöde],
     );
 
+    // Footern/toppraden delar samma CTA (enda utlänken sedan 7/10).
+    const cta: RsvpCta | null = utlänk
+        ? { url: utlänk, label: tm ? 'BOKA' : 'ANMÄL', guld: tm, annons: annons ? AFFILIATE_DISCLOSURE : null }
+        : null;
+
+    // SVARSRADENS FÄSTE (webbens sticky bottom-0, Josef 7/10 kväll: "den kan
+    // ju vara där nere i footern tills dess att vi kommer fram till där de
+    // syns i eventkortet och lossna ifrån sin stickiness då"): raden bor
+    // mellan beskrivningen och chatten, och visas där av scrollflödet. Så
+    // länge dess plats ligger under skärmkanten pinnas en KOPIA i botten
+    // (footerHållaren) - båda är monterade (läsningarna är sessionscachade)
+    // så släppet är sömlöst: i släppögonblicket står de pixellika. Scrollar
+    // raden sedan ut över överkanten tänds toppraden (RsvpToppRad).
+    //  - synligt innehåll = arkets höjd minus huvudet; arkets botten är
+    //    skärmens botten, så platsen "syns" när slotbotten kommit ovanför.
+    //  - setState bara vid flippar (samma värde = ingen omritning).
+    const [fäst, setFäst] = useState(true);
+    const [toppRad, setToppRad] = useState(false);
+    const slotRef = useRef<{ y: number; h: number } | null>(null);
+    const huvudHRef = useRef(230);
+    const arkHöjdRef = useRef(arkHöjd);
+    arkHöjdRef.current = arkHöjd;
+    const listLägeRef = useRef(listLäge);
+    listLägeRef.current = listLäge;
+    const räknaFäste = () => {
+        const slot = slotRef.current;
+        if (listLägeRef.current || !slot) {
+            // Sökläget gömmer eventet - raden står pinnad som förut.
+            setFäst(true);
+            setToppRad(false);
+            return;
+        }
+        const synligt = Math.max(0, arkHöjdRef.current - huvudHRef.current);
+        const y = grepp.scrollYRef.current;
+        setFäst(slot.y + slot.h > y + synligt + 1);
+        setToppRad(y > slot.y);
+    };
+    // Nytt stopp, nytt event eller vyväxling flyttar fästet utan scroll.
+    useEffect(räknaFäste, [arkHöjd, listLäge, event.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
     return (
         <>
-            <View {...panHandlers} onLayout={ev => onHuvudHöjd(ev.nativeEvent.layout.height)}>
+            <View
+                {...panHandlers}
+                onLayout={ev => {
+                    huvudHRef.current = ev.nativeEvent.layout.height;
+                    onHuvudHöjd(ev.nativeEvent.layout.height);
+                    räknaFäste();
+                }}
+            >
                 <Handtag />
                 {/* Webbens headerordning: härkomst-badgen → knappraden → titel
                     → tid/plats → VÄRD/PRIS. Söker man göms eventet (ägarbeslut
@@ -1197,7 +1372,13 @@ function EventInnehåll({
             </View>
             {/* automaticallyAdjustKeyboardInsets (iOS): chattens skrivfält bor
                 mitt i arket - utan insetsen täcker tangentbordet fältet. */}
-            <ArkScroll grepp={grepp} contentContainerStyle={styles.innehållMedFooter} tangentbordsInsets>
+            <ArkScroll
+                grepp={grepp}
+                contentContainerStyle={styles.innehållMedFooter}
+                tangentbordsInsets
+                topp={toppRad && !listLäge ? <RsvpToppRad event={event} emoji={emoji} cta={cta} /> : null}
+                onScrollY={räknaFäste}
+            >
                 {/* Under sökning - och när filtret valt bort eventet - visas
                     listan direkt (webbens listvy-växling). */}
                 {!listLäge ? (
@@ -1212,10 +1393,18 @@ function EventInnehåll({
                             </Pressable>
                         ) : null}
                         <Text style={styles.beskrivning}>{beskrivning}</Text>
-                        {/* Chatten DIREKT efter beskrivningen (webbens ordning:
-                            eventinfo → svarsrad → chatt → arrangörsrad → listan;
-                            svarsraden här är den fasta RsvpFooter-plattan).
-                            Avmonteras i listläget → lyssnarna rivs (egress). */}
+                        {/* SVARSRADENS EGEN PLATS (webbens ordning: eventinfo →
+                            svarsrad → chatt → arrangörsrad → listan): hit
+                            scrollar man fram till raden och här släpper den
+                            pinnade kopian i botten (räknaFäste ovan). */}
+                        <View
+                            onLayout={ev => {
+                                slotRef.current = { y: ev.nativeEvent.layout.y, h: ev.nativeEvent.layout.height };
+                                räknaFäste();
+                            }}
+                        >
+                            <RsvpFooter event={event} inbjudan={inbjudan} cta={cta} />
+                        </View>
                         <EventChat event={event} fran={inbjudan?.fran ?? null} />
                         <FlerFran
                             rad={flerFrån}
@@ -1235,23 +1424,22 @@ function EventInnehåll({
                         pill={!filtreradBort}
                         bildflödesLäge={!listLäge}
                         onVälj={onVälj}
+                        zoomUt={zoomUt}
                     />
                 ) : null}
             </ArkScroll>
-            {/* Footern pinnas mot skärmens botten: arket är tak-högt och
-                nedskjutet, så arkets botten ligger under skärmkanten - footern
-                skjuts lika långt åt andra hållet. Den drar arket som huvudet
-                (13/10, hela kortet är greppbart). */}
+            {/* Footerns PINNADE kopia mot skärmens botten: arket är tak-högt
+                och nedskjutet, så arkets botten ligger under skärmkanten -
+                footern skjuts lika långt åt andra hållet. Den drar arket som
+                huvudet (13/10, hela kortet är greppbart). Göms när raden i
+                innehållet nått sin plats (fäst=false) - opacity i stället
+                för avmontering så flippen aldrig blinkar om läsningarna. */}
             <Animated.View
                 {...panHandlers}
-                style={[styles.footerHållare, { transform: [{ translateY: Animated.multiply(footerSkjut, -1) }] }]}
-                pointerEvents="box-none"
+                style={[styles.footerHållare, { transform: [{ translateY: Animated.multiply(footerSkjut, -1) }] }, !fäst && styles.footerSläppt]}
+                pointerEvents={fäst ? 'box-none' : 'none'}
             >
-                <RsvpFooter
-                    event={event}
-                    inbjudan={inbjudan}
-                    cta={utlänk ? { url: utlänk, label: tm ? 'BOKA' : 'ANMÄL', guld: tm, annons: annons ? AFFILIATE_DISCLOSURE : null } : null}
-                />
+                <RsvpFooter event={event} inbjudan={inbjudan} cta={cta} />
             </Animated.View>
             <HelskarmsBild uri={helskärm} onClose={() => setHelskärm(null)} />
         </>
@@ -1266,7 +1454,16 @@ function EventInnehåll({
  *  bildknapp. I listvyn (kortsöket, eller filtret har valt bort eventet)
  *  visas ALLA rader och "Visa bilder"/"Dölj bilder" längst till höger i
  *  flikraden styr layouten - AV som default, valet sparas på enheten
- *  (webbens vadkul_narhetslista_bilder). Flikarnas tal räknar det som visas. */
+ *  (webbens vadkul_narhetslista_bilder). Flikarnas tal räknar det som visas.
+ *
+ *  LISTANS BOTTEN ZOOMAR UT (webbens ägarbeslut 8/10, Josef: "när man
+ *  scrollat ner i listan för man redan sett allt denna månaden på
+ *  eventkorten. Då ska ju kartan zooma ut"): när botten glider in i bild
+ *  (och man scrollat vidare sedan förra steget) zoomar kartan ut via
+ *  `zoomUt` och listan FORTSÄTTER - det man sett fryses som en RING
+ *  (lib/listZoom) och det nya läggs under en "Zoomade ut"-avdelare, dag för
+ *  dag från den visade dagen igen. Knappen är reserv, och vägen vidare när
+ *  ett steg inte gav något nytt. Ringarna nollas med eventet. */
 function FlerEvent({
     lista,
     valtId,
@@ -1275,6 +1472,7 @@ function FlerEvent({
     pill = true,
     bildflödesLäge = false,
     onVälj,
+    zoomUt = null,
 }: {
     lista: AppFeedEvent[];
     valtId: string;
@@ -1284,12 +1482,36 @@ function FlerEvent({
     pill?: boolean;
     bildflödesLäge?: boolean;
     onVälj: (e: AppFeedEvent) => void;
+    zoomUt?: KortZoomUt | null;
 }) {
     const { minPos } = useRegionVal();
+    const register = useContext(DagRegisterCtx);
     const [flik, setFlik] = useState<ListFlik>('månaden');
     const [antal, setAntal] = useState(SIDA);
     const [visaBilder, setVisaBilder] = useLagrad(NYCKEL.listBilder, false);
     useEffect(() => setAntal(SIDA), [flik, frånOffset, sök, bildflödesLäge]);
+
+    // Zoomringarna: frysta id-mängder, en per utzoomning från botten.
+    // Delas av flikarna (ringen fryser HELA rutans id:n) och nollas med
+    // eventet/dagen - nästa kort börjar om på kartans nya zoomsteg.
+    const [ringar, setRingar] = useState<readonly ReadonlySet<string>[]>([]);
+    const [zoomar, setZoomar] = useState(false);
+    /** Scrolläget vid senaste steget: auto-steget kräver att man scrollat
+     *  VIDARE sedan dess (webbens listZoomScrollRef + 40). */
+    const sistaStegY = useRef(0);
+    const senasteY = useRef(0);
+    useEffect(() => {
+        setRingar([]);
+        setZoomar(false);
+        sistaStegY.current = 0;
+    }, [valtId, frånOffset]);
+    // Kartan zoomar ~0,9 s + rutan lugnar sig - sedan står den nya ringen
+    // (eller inget nytt än) i listan.
+    useEffect(() => {
+        if (!zoomar) return;
+        const t = setTimeout(() => setZoomar(false), 2200);
+        return () => clearTimeout(t);
+    }, [zoomar]);
 
     const söker = sök.trim().length > 0;
     const underlag = useMemo(() => {
@@ -1307,20 +1529,105 @@ function FlerEvent({
     const populära = useMemo(() => eventDagar(underlag, frånOffset, nu, harVarit, e => e.pop === true),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [underlag, frånOffset, valtId]);
-    const dagar = flik === 'månaden' ? alla : populära;
+    const flikDagar = flik === 'månaden' ? alla : populära;
     const totalt = (d: typeof alla) => d.reduce((n, x) => n + x.events.length, 0);
+    // Ring 0 först, sedan varje utzoomning från första dagen igen.
+    const dagar = useMemo(() => delaIRingar(flikDagar, ringar), [flikDagar, ringar]);
+    const ringAntal = useMemo(() => {
+        const m = new Map<number, number>();
+        for (const d of dagar) m.set(d.ring, (m.get(d.ring) ?? 0) + d.events.length);
+        return m;
+    }, [dagar]);
 
-    // Kapa till `antal` rader, dag för dag.
+    // Kapa till `antal` rader, dag för dag (ringordningen behålls).
     let kvar = antal;
-    const visade: { offset: number; events: AppFeedEvent[] }[] = [];
+    const visade: { offset: number; ring: number; events: AppFeedEvent[] }[] = [];
     for (const d of dagar) {
         if (kvar <= 0) break;
         const rader = d.events.slice(0, kvar);
-        visade.push({ offset: d.offset, events: rader });
+        visade.push({ offset: d.offset, ring: d.ring, events: rader });
         kvar -= rader.length;
     }
-    const finnsFler = totalt(dagar) > antal;
+    const finnsFler = totalt(flikDagar) > antal;
 
+    // Utzoomningssteget: frys det listan känner och be kartskärmen zooma ut.
+    const steg = () => {
+        if (!zoomUt?.kan || zoomar) return;
+        setRingar(r => [...r, new Set(lista.map(e => e.id))]);
+        setZoomar(true);
+        sistaStegY.current = senasteY.current;
+        zoomUt.utför(flik === 'populärt');
+    };
+    /** Gav senaste steget inget nytt? Då bara knappen - inget auto-steg. */
+    const ingetNytt = ringar.length > 0 && (ringAntal.get(ringar.length) ?? 0) === 0;
+    const stegRef = useRef<() => void>(() => {});
+    stegRef.current = () => {
+        if (finnsFler || zoomar || söker || ingetNytt || !zoomUt?.kan) return;
+        if (senasteY.current <= sistaStegY.current + 40) return;
+        steg();
+    };
+    useEffect(() => {
+        register?.anmälBotten(y => {
+            senasteY.current = y;
+            stegRef.current();
+        });
+        return () => register?.anmälBotten(null);
+    }, [register]);
+
+    // Flikraden: flikarna i webbens grå kapsel (aktiv flik = vit pill,
+    // Populärt i eldfärg) rullar i sidled när det blir trångt; bildknappen
+    // står kvar längst till höger. BYGGS SOM VÄRDE: samma rad ritas på sin
+    // plats i listan OCH som klistrad kopia överst i scrollytan när man
+    // scrollat förbi den (webbens sticky flikrad) - kopian går via
+    // registret så knapparna lever även klistrade.
+    const flikrad = (
+        <View style={styles.flerChipYta}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flerChipScroll}>
+                <View style={styles.flerChipRad}>
+                    <Pressable onPress={() => setFlik('månaden')} style={[styles.flerChip, flik === 'månaden' && styles.flerChipVald]}>
+                        <Text style={[styles.flerChipText, flik === 'månaden' && styles.flerChipTextVald]}>
+                            MÅNADEN · {totalt(alla)}
+                        </Text>
+                    </Pressable>
+                    <Pressable onPress={() => setFlik('populärt')} style={[styles.flerChip, flik === 'populärt' && styles.flerChipVald]}>
+                        <Text style={[styles.flerChipText, flik === 'populärt' && styles.flerChipTextEld]}>
+                            🔥 POPULÄRT · {totalt(populära)}
+                        </Text>
+                    </Pressable>
+                </View>
+            </ScrollView>
+            {!bildflödesLäge ? (
+                <Pressable
+                    onPress={() => setVisaBilder(v => !v)}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: visaBilder }}
+                    accessibilityLabel={visaBilder ? 'Dölj bilderna - kompakt lista' : 'Visa bilderna'}
+                    style={({ pressed }) => [styles.bildKnapp, visaBilder && styles.bildKnappPå, pressed && styles.knappTryckt]}
+                >
+                    <Text style={[styles.bildKnappText, visaBilder && styles.bildKnappTextPå]}>
+                        {visaBilder ? '🖼 DÖLJ BILDER' : '🖼 VISA BILDER'}
+                    </Text>
+                </Pressable>
+            ) : null}
+        </View>
+    );
+    // Kopian uppdateras varje render (flik/tal/bildval ska synas klistrat);
+    // platsen anmäls en gång och mäts med dagsektionerna.
+    const flikradVy = useRef<View>(null);
+    useEffect(() => {
+        register?.anmälFlikrad(flikradVy.current);
+        return () => register?.anmälFlikrad(null);
+    }, [register]);
+    useEffect(() => { register?.flikradKopia(flikrad); });
+    useEffect(() => () => register?.flikradKopia(null), [register]);
+
+    const slutText = dagar.length === 0
+        ? söker
+            ? `Inget här matchar "${sök.trim()}".`
+            : flik === 'populärt' ? 'Inga populära event här just nu.' : 'Inga fler event här just nu.'
+        : 'Det var de närmaste två veckorna.';
+    const slutEtikett = slutText.replace(/\.$/, '').toUpperCase();
     return (
         <>
             {!söker && pill ? (
@@ -1329,69 +1636,76 @@ function FlerEvent({
                 </View>
             ) : null}
             <View style={styles.listYta}>
-            {/* Flikraden: flikarna i webbens grå kapsel (aktiv flik = vit
-                pill, Populärt i eldfärg) rullar i sidled när det blir trångt;
-                bildknappen står kvar längst till höger. */}
-            <View style={styles.flerChipYta}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flerChipScroll}>
-                    <View style={styles.flerChipRad}>
-                        <Pressable onPress={() => setFlik('månaden')} style={[styles.flerChip, flik === 'månaden' && styles.flerChipVald]}>
-                            <Text style={[styles.flerChipText, flik === 'månaden' && styles.flerChipTextVald]}>
-                                MÅNADEN · {totalt(alla)}
-                            </Text>
-                        </Pressable>
-                        <Pressable onPress={() => setFlik('populärt')} style={[styles.flerChip, flik === 'populärt' && styles.flerChipVald]}>
-                            <Text style={[styles.flerChipText, flik === 'populärt' && styles.flerChipTextEld]}>
-                                🔥 POPULÄRT · {totalt(populära)}
-                            </Text>
-                        </Pressable>
-                    </View>
-                </ScrollView>
-                {!bildflödesLäge ? (
-                    <Pressable
-                        onPress={() => setVisaBilder(v => !v)}
-                        hitSlop={6}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: visaBilder }}
-                        accessibilityLabel={visaBilder ? 'Dölj bilderna - kompakt lista' : 'Visa bilderna'}
-                        style={({ pressed }) => [styles.bildKnapp, visaBilder && styles.bildKnappPå, pressed && styles.knappTryckt]}
-                    >
-                        <Text style={[styles.bildKnappText, visaBilder && styles.bildKnappTextPå]}>
-                            {visaBilder ? '🖼 DÖLJ BILDER' : '🖼 VISA BILDER'}
-                        </Text>
-                    </Pressable>
-                ) : null}
-            </View>
-            {visade.map(d => (
-                <DagSektion key={d.offset} offset={d.offset}>
-                    {d.events.map(e => (
-                        <ListRad
-                            key={e.id}
-                            event={e}
-                            km={minPos ? distanceKm(minPos.lat, minPos.lng, e.lat, e.lng) : null}
-                            nuMs={nuMs}
-                            visaBild={bildflödesLäge || visaBilder}
-                            baraMedBild={bildflödesLäge}
-                            onPress={() => onVälj(e)}
-                        />
-                    ))}
-                </DagSektion>
+            <View ref={flikradVy} onLayout={() => register?.mät()}>{flikrad}</View>
+            {visade.map((d, i) => (
+                <Fragment key={`${d.ring}:${d.offset}`}>
+                    {/* Avdelaren där nästa zoomrings dagar börjar (webbens
+                        ZoomRingDivider): listan börjar om från den visade
+                        dagen med eventen som kom in runtomkring. */}
+                    {d.ring > 0 && (i === 0 || visade[i - 1].ring !== d.ring) ? (
+                        <ZoomRingRubrik offset={d.offset} antal={ringAntal.get(d.ring) ?? 0} />
+                    ) : null}
+                    <DagSektion offset={d.offset}>
+                        {d.events.map(e => (
+                            <ListRad
+                                key={e.id}
+                                event={e}
+                                km={minPos ? distanceKm(minPos.lat, minPos.lng, e.lat, e.lng) : null}
+                                nuMs={nuMs}
+                                visaBild={bildflödesLäge || visaBilder}
+                                baraMedBild={bildflödesLäge}
+                                onPress={() => onVälj(e)}
+                            />
+                        ))}
+                    </DagSektion>
+                </Fragment>
             ))}
             {finnsFler ? (
                 <Pressable style={styles.visaFler} onPress={() => setAntal(a => a + SIDA)}>
                     <Text style={styles.visaFlerText}>Visa fler</Text>
                 </Pressable>
+            ) : zoomar ? (
+                <View style={styles.slutYta}>
+                    <Text style={styles.slutText}>ZOOMAR UT …</Text>
+                </View>
+            ) : zoomUt?.kan && !söker ? (
+                // Listans botten zoomar ut i stället för att ta slut (8/10):
+                // auto-steget bor i botten-lyssnaren, knappen är reserv.
+                <View style={styles.slutYta}>
+                    <Text style={styles.slutText}>
+                        {ingetNytt ? 'INGET NYTT RUNTOMKRING ÄN' : slutEtikett}
+                    </Text>
+                    <Pressable style={({ pressed }) => [styles.zoomaUtKnapp, pressed && styles.knappTryckt]} onPress={steg}>
+                        <Text style={styles.zoomaUtText}>
+                            {ingetNytt ? 'ZOOMA UT MER' : 'ZOOMA UT · FLER RUNTOMKRING'}
+                        </Text>
+                    </Pressable>
+                </View>
             ) : (
-                <Text style={styles.flerTomt}>
-                    {dagar.length === 0
-                        ? söker
-                            ? `Inget här matchar "${sök.trim()}".`
-                            : flik === 'populärt' ? 'Inga populära event här just nu.' : 'Inga fler event här just nu.'
-                        : 'Det var de närmaste två veckorna.'}
-                </Text>
+                <Text style={styles.flerTomt}>{slutText}</Text>
             )}
             </View>
         </>
+    );
+}
+
+/** Avdelaren där listans nästa zoomring börjar (webbens ZoomRingDivider):
+ *  vågräta streck och "Zoomade ut · {DAG} IGEN · N FLER" - listan börjar om
+ *  från den visade dagen med eventen som kom in runtomkring. */
+function ZoomRingRubrik({ offset, antal }: { offset: number; antal: number }) {
+    const dag = periodLabel(offset, 1).toUpperCase();
+    return (
+        <View
+            style={styles.ringRad}
+            accessibilityLabel={`Kartan zoomade ut - ${antal} fler event runtomkring, från ${periodLabel(offset, 1).toLowerCase()} igen`}
+        >
+            <View style={styles.ringLinje} />
+            <View style={styles.ringPill}>
+                <Text style={styles.ringPillText}>ZOOMADE UT</Text>
+                <Text style={styles.ringPillDag}>{dag} IGEN · {antal} FLER</Text>
+            </View>
+            <View style={styles.ringLinje} />
+        </View>
     );
 }
 
@@ -1626,10 +1940,28 @@ const styles = StyleSheet.create({
         textAlignVertical: 'center',
     },
     footerHållare: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+    /** Raden har nått sin plats i innehållet - kopian i botten göms men står
+     *  monterad (ingen blink vid flippen). */
+    footerSläppt: { opacity: 0 },
     /** Arkets scrollyta: ramen för den klistrade dagrubriken, som klipps
      *  när nästa dag trycker upp den. */
     scrollYta: { flex: 1, overflow: 'hidden' },
     klistradDag: { position: 'absolute', top: 0, left: 0, right: 0 },
+    /** Flikradens klistrade kopia: egen botten (raden ritas annars på
+     *  listYtans) och lätt skugga så den läses som lagd ovanpå listan. */
+    klistradFlikrad: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        backgroundColor: '#f8fafc',
+        shadowColor: '#000',
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 3,
+    },
+    /** Svarsradens topprad - alltid överst i klisterstapeln. */
+    klistradTopp: { position: 'absolute', top: 0, left: 0, right: 0 },
     väljarPill: {
         alignSelf: 'flex-start',
         marginHorizontal: 16,
@@ -1741,4 +2073,36 @@ const styles = StyleSheet.create({
     },
     visaFlerText: { color: '#334155', fontSize: 13, fontWeight: '700' },
     flerTomt: { textAlign: 'center', color: '#64748b', marginTop: 16, fontSize: 13 },
+    /** Listans botten (webbens ListEndZoom): etikett + blå zooma ut-knapp. */
+    slutYta: { alignItems: 'center', gap: 8, paddingVertical: 16, borderTopWidth: 1, borderTopColor: KANT, marginTop: 16 },
+    slutText: { fontSize: 10, fontWeight: '900', letterSpacing: 1.4, color: '#94a3b8' },
+    zoomaUtKnapp: { borderRadius: 999, backgroundColor: BLÅ, paddingHorizontal: 16, paddingVertical: 9 },
+    zoomaUtText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.2, color: '#ffffff' },
+    /** Zoomringens avdelare (webbens ZoomRingDivider): streck + mörk pill. */
+    ringRad: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 16,
+        paddingTop: 20,
+        paddingBottom: 12,
+        borderTopWidth: 1,
+        borderTopColor: KANT,
+    },
+    ringLinje: { flex: 1, height: 3, borderRadius: 2, backgroundColor: BLÅ },
+    ringPill: {
+        alignItems: 'center',
+        gap: 4,
+        borderRadius: 16,
+        backgroundColor: '#0f172a',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 4,
+    },
+    ringPillText: { fontSize: 11, fontWeight: '900', letterSpacing: 1.4, color: '#ffffff' },
+    ringPillDag: { fontSize: 12, fontWeight: '900', letterSpacing: 0.8, color: '#FECC02' },
 });
