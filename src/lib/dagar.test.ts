@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventIPeriod, offsetFörDatum, periodLabel } from './dagar';
+import { dagSektioner, eventIPeriod, offsetFörDatum, periodLabel } from './dagar';
 
 const NU = new Date(2026, 8, 27, 14, 0); // sön 27 sep 2026, lokal tid
 const iso = (d: Date) => d.toISOString();
@@ -59,5 +59,28 @@ describe('offsetFörDatum (kalendern i dagväljaren)', () => {
     });
     it('trasigt datum ger null', () => {
         expect(offsetFörDatum(new Date('x'), 13, NU)).toBeNull();
+    });
+});
+
+describe('dagSektioner (söklistans sticky dagrubriker)', () => {
+    const ev = (d: Date, id: string) => ({ id, time: iso(d) });
+    it('grupperar i tidsordning med Idag/Imorgon/veckodag', () => {
+        const sekt = dagSektioner([
+            ev(new Date(2026, 8, 29, 19, 0), 'c'),
+            ev(new Date(2026, 8, 27, 20, 0), 'b'),
+            ev(new Date(2026, 8, 27, 15, 0), 'a'),
+            ev(new Date(2026, 8, 28, 11, 0), 'x'),
+        ], NU);
+        expect(sekt.map(s => s.titel)).toEqual(['Idag', 'Imorgon', 'tis 29 sep']);
+        expect(sekt[0].data.map(e => e.id)).toEqual(['a', 'b']);
+        expect(sekt[1].data.map(e => e.id)).toEqual(['x']);
+    });
+    it('pågående event som startade igår klumpas under Idag', () => {
+        const sekt = dagSektioner([ev(new Date(2026, 8, 26, 22, 0), 'sen')], NU);
+        expect(sekt.map(s => s.titel)).toEqual(['Idag']);
+    });
+    it('otolkbar tid filtreras bort; tom lista ger inga sektioner', () => {
+        expect(dagSektioner([{ id: 'a', time: 'x' }], NU)).toEqual([]);
+        expect(dagSektioner([], NU)).toEqual([]);
     });
 });

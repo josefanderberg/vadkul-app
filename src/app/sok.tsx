@@ -4,7 +4,9 @@
  *    ägarbeslut 16/9): 🔥 Populära först, FLER sist. Valet gäller kartan.
  *  - Filter på utan söktext = träffarna visas DIREKT i tidsordning (webbens
  *    ägarbeslut 7/10 "kategorival visar listan", hit 18/10) - inte först när
- *    man skrivit något.
+ *    man skrivit något. Listan får STICKY dagrubriker ("Idag", "Imorgon",
+ *    "ons 30 sep" - lib/dagar.dagSektioner) som paneler; textsökets träffar
+ *    behåller rankningens ordning utan rubriker.
  *  - Stadsraden: orter som matchar texten - tryck lägger staden på kartan.
  *  - Träffarna: webbens rankning (lib/sok), träffen i fetstil, samma filter
  *    som kartan (kategori/🔥/källor) och bara event som inte varit.
@@ -14,12 +16,13 @@
  *    ← ☰ tar en tillbaka hit med samma sökord (webbens searchReturn).
  */
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useEvent } from '@/api/useEvent';
 import { EventRad } from '@/components/EventRad';
 import { KategoriRad } from '@/components/KategoriRad';
+import { dagSektioner } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast } from '@/lib/harVarit';
 import { matcharFilter } from '@/lib/kartFilter';
@@ -45,13 +48,12 @@ export default function SokScreen() {
     }, [feed.data, filter]);
     const träffar = useMemo(() => sokEvent(underlag, fråga), [underlag, fråga]);
     // Utan söktext men med filtret på: hela det filtrerade underlaget i
-    // tidsordning (sokEvent ger tom lista på tom fråga).
-    const filterTräffar = useMemo(
-        () => (filter.aktivt
-            ? [...underlag].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-            : []),
-        [underlag, filter.aktivt],
-    );
+    // tidsordning under sticky dagrubriker. Textsöket får EN rubriklös
+    // sektion - rankningens ordning ska inte brytas av daggrupper.
+    const sektioner = useMemo(() => {
+        if (q) return träffar.length > 0 ? [{ titel: '', data: träffar }] : [];
+        return filter.aktivt ? dagSektioner(underlag) : [];
+    }, [q, träffar, underlag, filter.aktivt]);
     const städer = searchCities(fråga);
     const markera = sökText || q;
 
@@ -94,11 +96,17 @@ export default function SokScreen() {
             <View>
                 <KategoriRad events={feed.data ?? []} />
             </View>
-            <FlatList
-                data={q ? träffar : filterTräffar}
+            <SectionList
+                sections={sektioner}
                 keyExtractor={e => e.id}
+                stickySectionHeadersEnabled
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
+                renderSectionHeader={({ section }) => section.titel ? (
+                    <View style={styles.dagRubrik}>
+                        <Text style={styles.dagRubrikText}>{section.titel}</Text>
+                    </View>
+                ) : null}
                 ListHeaderComponent={
                     städer.length > 0 && !sökOrt ? (
                         <View style={styles.städer}>
@@ -181,5 +189,19 @@ const styles = StyleSheet.create({
     stadNamn: { fontSize: 15, fontWeight: '700', color: '#0c4a6e' },
     stadLänk: { fontSize: 13, fontWeight: '700', color: '#0369a1' },
     tryckt: { opacity: 0.7 },
+    // Sticky dagpanelen: heltäckande band i sidbakgrunden så raderna inte
+    // skymtar bakom, med mörk pill som själva rubriken.
+    dagRubrik: { backgroundColor: '#f8fafc', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 },
+    dagRubrikText: {
+        alignSelf: 'flex-start',
+        backgroundColor: '#0f172a',
+        color: '#ffffff',
+        fontSize: 12,
+        fontWeight: '800',
+        borderRadius: 999,
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        overflow: 'hidden',
+    },
     tomt: { textAlign: 'center', color: '#64748b', marginTop: 32, paddingHorizontal: 24, fontSize: 14 },
 });

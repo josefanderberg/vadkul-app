@@ -39,6 +39,42 @@ export function eventIPeriod(timeIso: string, offset: number, längd: number, nu
     return t >= dagStart(nu, offset).getTime() && t < dagStart(nu, offset + längd).getTime();
 }
 
+export interface DagSektion<T> {
+    titel: string;
+    data: T[];
+}
+
+/**
+ * Söklistans dagrubriker (18/10, "tydliga tidsrubriker" när filtret visar
+ * listan): det filtrerade underlaget i tidsordning, grupperat på STARTDAGEN
+ * med periodLabels etiketter ("Idag", "Imorgon", "ons 30 sep"). Ett pågående
+ * event som startade före idag klumpas under "Idag" - en gårdagsrubrik över
+ * dagens lista förvirrar bara. Otolkbar tid filtreras bort (samma hållning
+ * som eventIPeriod).
+ */
+export function dagSektioner<T extends { time: string }>(events: T[], nu: Date = new Date()): DagSektion<T>[] {
+    const idag = dagStart(nu, 0).getTime();
+    const tidsatta = events
+        .map(e => ({ e, t: new Date(e.time).getTime() }))
+        .filter(x => !Number.isNaN(x.t))
+        .sort((a, b) => a.t - b.t);
+    const ut: DagSektion<T>[] = [];
+    let senast: string | null = null;
+    for (const { e, t } of tidsatta) {
+        const d = new Date(t);
+        d.setHours(0, 0, 0, 0);
+        // Math.round av samma skäl som offsetFörDatum: sommartidsbyten.
+        const offset = Math.max(0, Math.round((d.getTime() - idag) / 86_400_000));
+        const titel = periodLabel(offset, 1, nu);
+        if (titel !== senast) {
+            ut.push({ titel, data: [] });
+            senast = titel;
+        }
+        ut[ut.length - 1].data.push(e);
+    }
+    return ut;
+}
+
 /**
  * Kalenderns val (webbens handleCalendarPick i dagväljaren): datumet blir
  * dagens offset från idag. Passerade dygn ger null ("passerade dygn visas
