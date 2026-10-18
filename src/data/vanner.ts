@@ -15,9 +15,11 @@ import {
     getDoc,
     getDocs,
     getFirestore,
+    increment,
     limit as qLimit,
     query,
     serverTimestamp,
+    setDoc,
     writeBatch,
 } from '@react-native-firebase/firestore';
 import {
@@ -131,6 +133,21 @@ export interface FriendProfileData {
     /** false = vännen har stängt av synligheten (integritetsgrinden). */
     visible: boolean;
     picks: FriendRsvpPick[];
+}
+
+/** Inbjudningstratten (18/10): friendInviteStats/{uid}.shared - port av
+ *  webbens recordInviteShared (services/friendService.ts). Best-effort som
+ *  eventStats: fire-and-forget, fel sväljs - statistik får aldrig störa
+ *  delningsflödet. Anropas bara med det inloggade kontots uid (reglerna
+ *  kräver isOwner för shared). Ingen landed-räknare i appen: ?van=-länken
+ *  landar alltid i webben, som räknar den. */
+export function räknaInbjudanDelad(uid: string): void {
+    try {
+        setDoc(doc(getFirestore(), 'friendInviteStats', uid), { shared: increment(1) }, { merge: true })
+            .catch(() => { /* nätverk/regler nere - släpp räknaren */ });
+    } catch {
+        /* defensivt - en trasig räknare får aldrig fälla delningen */
+    }
 }
 
 export async function hämtaVänprofil(uid: string): Promise<FriendProfileData> {

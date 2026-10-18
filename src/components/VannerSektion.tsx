@@ -35,6 +35,7 @@ import {
     accepteraVänförfrågan,
     hämtaMinaVänner,
     hämtaVänprofil,
+    räknaInbjudanDelad,
     taBortVän,
 } from '@/data/vanner';
 import { avblockera, blockera, useModerering } from '@/data/moderering';
@@ -211,10 +212,17 @@ export function VannerSektion({ uid, onVälj }: {
     // BJUD IN EN VÄN (Josef 13/10): länken vadkul.se/?van=<uid> - den som
     // går med via den blir din vän direkt, och nya konton ger en stjärna var
     // (du högst 5 gånger; acceptFriendInvite i functions). Webbens knapp i
-    // FriendsSection gör samma sak.
-    const bjudIn = () => {
+    // FriendsSection gör samma sak. Fullföljda delningar räknas i
+    // friendInviteStats (18/10) - iOS ger dismissedAction när arket stängs
+    // utan val, så bara sharedAction räknas (Android svarar alltid så).
+    const bjudIn = async () => {
         const url = vänInbjudningsUrl(uid);
-        void Share.share({ title: 'VADKUL', message: `${VÄN_INBJUDAN_TEXT} ${url}`, url });
+        try {
+            const res = await Share.share({ title: 'VADKUL', message: `${VÄN_INBJUDAN_TEXT} ${url}`, url });
+            if (res.action === Share.sharedAction) räknaInbjudanDelad(uid);
+        } catch {
+            /* avbruten/misslyckad delning - inget att räkna */
+        }
     };
 
     return (
@@ -235,7 +243,7 @@ export function VannerSektion({ uid, onVälj }: {
                 ) : (
                     <View style={styles.innehåll}>
                         <Pressable
-                            onPress={bjudIn}
+                            onPress={() => void bjudIn()}
                             style={({ pressed }) => [styles.bjudInKnapp, pressed && styles.tryckt]}
                             accessibilityRole="button"
                         >
