@@ -9,8 +9,8 @@
  * bakgrunden, högst en gång i timmen - 304 behåller det sparade, 200 byter ut
  * det. Utan sparat paket väntar första visningen på nätet som förut.
  */
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AppFeedPayload } from '@vadkul/kontrakt';
+import { useQueries, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { CITIES, type AppFeedPayload } from '@vadkul/kontrakt';
 import {
     KONTROLL_INTERVALL_MS,
     behöverKontroll,
@@ -109,13 +109,11 @@ async function hämtaFlöde(
     return utanPasserade(sparat.payload, nu);
 }
 
-/**
- * Flödet för en region. staleTime = kontrollintervallet: förgrunden efter
- * en timme kör hämtaFlöde igen, som frågar CDN:et (304 när inget ändrats).
- */
-export function useAppFeed(region: string) {
-    const qc = useQueryClient();
-    return useQuery({
+/** Alla län i stadslistan - flödets regioner (samma härledning som routen). */
+export const REGIONER: readonly string[] = [...new Set(CITIES.map(c => c.region))];
+
+function flödesQuery(qc: QueryClient, region: string) {
+    return {
         queryKey: ['app-feed', region],
         queryFn: () => hämtaFlöde(
             region,
@@ -124,5 +122,35 @@ export function useAppFeed(region: string) {
         ),
         staleTime: KONTROLL_INTERVALL_MS,
         retry: 2,
+    };
+}
+
+/**
+ * Flödet för en region. staleTime = kontrollintervallet: förgrunden efter
+ * en timme kör hämtaFlöde igen, som frågar CDN:et (304 när inget ändrats).
+ */
+export function useAppFeed(region: string) {
+    const qc = useQueryClient();
+    return useQuery(flödesQuery(qc, region));
+}
+
+// Modulnivå = stabil referens: react-query kör då combine bara när någon
+// query faktiskt ändrats, och med FAST position per län (undefined tills det
+// landat) blir replaceEqualDeep en referensjämförelse per plats - inte en
+// djupjämförelse av två olika läns tusentals event.
+const bara = (resultat: { data?: AppFeedPayload }[]) => resultat.map(r => r.data);
+
+/**
+ * Flera regioners flöden på en gång (hela Sverige på kartan, 19/10) - samma
+ * query-nycklar, diskcache och ETag-kontroll som useAppFeed, så ett län som
+ * redan hämtats delas. `enabled` false = vänta (det egna länet först).
+ * En plats per region i samma ordning; undefined = inte landat än. Arrayen
+ * behåller sin referens så länge inget län ändrats.
+ */
+export function useAppFeeds(regioner: readonly string[], enabled: boolean): (AppFeedPayload | undefined)[] {
+    const qc = useQueryClient();
+    return useQueries({
+        queries: regioner.map(region => ({ ...flödesQuery(qc, region), enabled })),
+        combine: bara,
     });
 }

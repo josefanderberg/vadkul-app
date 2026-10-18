@@ -45,6 +45,13 @@ export interface BrickProps {
     sort: number;
     /** Etikettplaceringens turordning, lägst först: populärt före stora grupper. */
     etikettPrio: number;
+    /** Alltid bricka, oavsett avstånd till mitten (lib/kartUrval): guld,
+     *  sparad eller användarskapad - webbens sticky-brickor. */
+    fast: boolean;
+    /** Populär eller guld - går först i urvalet kring mitten. */
+    pop: boolean;
+    /** Kategorins färg - pricken när platsen inte är bricka. */
+    färg: string;
 }
 
 /** Webbens truncateLabel: Array.from så emoji/surrogatpar aldrig klyvs. */
@@ -90,6 +97,9 @@ export function byggBrickor(
         const sparad = !!opts.ärSparad && grupp.some(e => opts.ärSparad!(e.id));
         const grön = ärEgetVadkulEvent(rep);
         const nivå = rep.pop || guld ? 0 : grön ? 1 : 2;
+        // Webbens sticky (kart-ui): TM/stjärnor (guld), gillade (sparad) och
+        // användarskapade - de senare så fort NÅGOT kommande i gruppen är det.
+        const fast = guld || sparad || grön || levande.some(e => e.userCreated === true);
         features.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [rep.lng, rep.lat] },
@@ -104,6 +114,9 @@ export function byggBrickor(
                 vald: !!vald,
                 sort: vald ? 4 : past ? 0 : guld || grön || rep.pop ? 2 : 1,
                 etikettPrio: nivå * 1000 - Math.min(grupp.length, 999),
+                fast,
+                pop: rep.pop === true || guld,
+                färg: kategoriFor(String(rep.category)).hex,
             },
         });
     }

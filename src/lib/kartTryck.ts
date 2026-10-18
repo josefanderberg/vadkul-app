@@ -55,6 +55,22 @@ export function träffadBricka(kandidater: readonly Kandidat[], tx: number, ty: 
     return bäst?.id ?? null;
 }
 
+/** Prickens träffradie i pt: pricken är 5-9 pt bred, resten är fingermån. */
+export const PRICK_RADIE = 16;
+
+/** Pricken (lib/kartUrval) trycket träffade - den närmaste inom
+ *  PRICK_RADIE från prickens mitt, annars null. Prövas efter brickorna:
+ *  en bricka som står ovanpå en prick vinner alltid. */
+export function träffadPrick(kandidater: readonly Pick<Kandidat, 'id' | 'x' | 'y'>[], tx: number, ty: number): string | null {
+    let bäst: { id: string; avstånd: number } | null = null;
+    for (const k of kandidater) {
+        const avstånd = Math.hypot(tx - k.x, ty - k.y);
+        if (avstånd > PRICK_RADIE) continue;
+        if (!bäst || avstånd < bäst.avstånd) bäst = { id: k.id, avstånd };
+    }
+    return bäst?.id ?? null;
+}
+
 /** Ungefärligt avstånd i pt mellan två punkter vid en zoom (Web Mercator,
  *  512 pt-rutor som MapLibre). Rotation ändrar inte avstånd - bara
  *  förfiltret använder det, den exakta träffen går via project(). */

@@ -1,8 +1,16 @@
 /**
- * ALLA event en skärm ska visa: regionens CDN-flöde (api/appFeed) + de
+ * ALLA event en skärm ska visa: CDN-flödena (api/appFeed) + de
  * användarskapade eventen ur Firestore (data/anvandarEvent, ägarbeslut 8/10
  * 2026). Webben gör samma sammanslagning i linkEventService. Kartan, sök och
  * stadssidan läser härifrån så de aldrig visar olika underlag.
+ *
+ * HELA SVERIGE (Josef 19/10: "varför ser man inte alla event markörer på
+ * kartan? ... man kan aldrig se hela sverige typ"): förr bara det egna
+ * länets flöde, så kartan var tom utanför länet. Nu det egna länet FÖRST
+ * (det är det första bildrutan visar), och när det landat de övriga 20 i
+ * bakgrunden - ~1,3 MB brotli första gången, sedan diskcache + ETag-
+ * kontroll högst en gång i timmen per län (lib/flodesCache). Kartan visar
+ * bara ~50 som brickor och resten som prickar (lib/kartUrval).
  *
  * De användarskapade pollas som på webben (lib/anvandarEventPoll): en count()
  * var 30:e sekund medan appen är aktiv (react-querys focusManager kopplas mot
@@ -11,7 +19,7 @@
  */
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useAppFeed } from './appFeed';
+import { REGIONER, useAppFeed, useAppFeeds } from './appFeed';
 import type { AppEvent } from '@/lib/appEvent';
 import { avgörAnvändarEventPoll, POLL_INTERVALL_MS } from '@/lib/anvandarEventPoll';
 import { hämtaAnvändarEvent, räknaAnvändarEvent } from '@/data/anvandarEvent';
@@ -47,14 +55,23 @@ export function useAnvändarEvent() {
     });
 }
 
-/** Regionens flöde + de användarskapade, i ett. */
+/** Hela landets flöden (det egna länet först) + de användarskapade, i ett.
+ *  `data` är undefined tills det EGNA länet landat - övriga län fylls på
+ *  efter hand. Laddningsläget (isPending/isError …) är det egna länets. */
 export function useEvent(region: string) {
     const feed = useAppFeed(region);
+    const övriga = useMemo(() => REGIONER.filter(r => r !== region), [region]);
+    const andra = useAppFeeds(övriga, !!feed.data);
     const anv = useAnvändarEvent();
     const data = useMemo<AppEvent[] | undefined>(() => {
         if (!feed.data) return undefined;
-        return anv.data?.length ? [...feed.data.events, ...anv.data] : feed.data.events;
-    }, [feed.data, anv.data]);
+        // Ett event hör till exakt ett län (närmaste stadens), så flödena
+        // överlappar inte - en ren konkatenering räcker.
+        const delar: (readonly AppEvent[])[] = [feed.data.events];
+        for (const p of andra) if (p) delar.push(p.events);
+        if (anv.data?.length) delar.push(anv.data);
+        return delar.length === 1 ? feed.data.events : delar.flat();
+    }, [feed.data, andra, anv.data]);
     return { ...feed, data, användarEvent: anv.data ?? [] };
 }
 

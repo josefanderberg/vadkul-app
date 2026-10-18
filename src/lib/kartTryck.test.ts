@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { avståndPt, träffadBricka, type Kandidat } from './kartTryck';
+import { avståndPt, PRICK_RADIE, träffadBricka, träffadPrick, type Kandidat } from './kartTryck';
 import { BADGE_X, BADGE_Y } from './brickor';
 
 const bricka = (id: string, x: number, y: number, sort = 1, grupp = false): Kandidat => ({ id, sort, grupp, x, y });
@@ -48,5 +48,21 @@ describe('avståndPt', () => {
         const a = { lng: 15.01, lat: 57.0 };
         const b = { lng: 15.0, lat: 57.0 };
         expect(avståndPt(a, b, 13) / avståndPt(a, b, 12)).toBeCloseTo(2, 6);
+    });
+});
+
+describe('träffadPrick', () => {
+    const prick = (id: string, x: number, y: number) => ({ id, x, y });
+
+    it('tryck på pricken träffar', () => {
+        expect(träffadPrick([prick('a', 100, 100)], 104, 97)).toBe('a');
+    });
+
+    it('utanför fingermånen är tom karta', () => {
+        expect(träffadPrick([prick('a', 100, 100)], 100 + PRICK_RADIE + 1, 100)).toBeNull();
+    });
+
+    it('flera inom räckhåll: den närmaste', () => {
+        expect(träffadPrick([prick('långt', 110, 100), prick('nära', 102, 100)], 100, 100)).toBe('nära');
     });
 });

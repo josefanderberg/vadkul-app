@@ -11,7 +11,10 @@
  *    auto-hoppet till Imorgon och ↺-hemmadagen (lib/vy, lib/harVarit).
  *  - kyrkan/PRO/Korpen göms tills de väljs (lib/kartFilter).
  *  - en bricka per plats med antal; tryck på en grupp öppnar väljarlistan i
- *    kortet. Passerade brickor dimmas.
+ *    kortet.
+ *  - hela Sverige laddas (api/useEvent); bara ~50 platser kring kartans mitt
+ *    är brickor, resten prickar - urvalet följer med när man panorerar
+ *    (lib/kartUrval, webbens reveal). Passerade platser är dämpade prickar.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -33,6 +36,7 @@ import { eventIPeriod, periodLabel } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
 import { byggBrickor, byggÖnskningar } from '@/lib/kartlager';
+import { byggPrickar, prickFilter, prickNyckel, väljBrickor } from '@/lib/kartUrval';
 import { useKonto } from '@/lib/kontoContext';
 import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
 import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kartBanner';
@@ -42,7 +46,7 @@ import { kategoriFor } from '@/lib/kategorier';
 import { närmastUtanför, utzoomning, ZOOM_UT_GOLV } from '@/lib/listZoom';
 import { useRegionVal } from '@/lib/regionContext';
 import { kartansOrt, rutansMitt } from '@/lib/kartOrt';
-import { avståndPt, FÖRFILTER_PT, träffadBricka, type Kandidat } from '@/lib/kartTryck';
+import { avståndPt, FÖRFILTER_PT, PRICK_RADIE, träffadBricka, träffadPrick, type Kandidat } from '@/lib/kartTryck';
 import { nearestCityPoint } from '@/lib/orter';
 import { distanceKm, nearestCity } from '@/lib/regionVal';
 import { useSparade } from '@/lib/sparadeContext';
@@ -71,6 +75,8 @@ const GRUPP_FILTER: FilterSpecification = ['>', ['get', 'antal'], 1];
 /** Passerade grupper får ingen text (en etikett över en släckt bricka svävar). */
 const ETIKETT_FILTER: FilterSpecification = ['all', ['!', ['get', 'past']], ['!', ['get', 'vald']]];
 const VALD_FILTER: FilterSpecification = ['==', ['get', 'vald'], true];
+/** Prickens radie (webbens DOT_RADIUS_EXPR): lite större ju närmare man är. */
+const PRICK_RADIE_UTTRYCK = ['interpolate', ['linear'], ['zoom'], 4, 2.5, 10, 3.5, 14, 4.5] as unknown as Expression;
 const ETIKETT_STIL = {
     textFont: ['Montserrat Medium', 'Open Sans Bold'],
     textSize: ['interpolate', ['linear'], ['zoom'], 9, 11, 13, 12.5, 16, 13.5] as unknown as Expression,
@@ -389,10 +395,28 @@ export default function KartScreen() {
     const [stjärnmärkta, setStjärnmärkta] = useState<ReadonlySet<string>>(new Set());
     useEffect(() => prenumereraStjärnmärkta(setStjärnmärkta), []);
     const valtId = kort ? kort.event?.id ?? kort.grupp[0]?.id ?? null : null;
-    const brickor = useMemo(
+    const platser = useMemo(
         () => byggBrickor(iPeriod, { nowMs: nuMs, valtId, ärSparad, stjärnor: stjärnmärkta }),
         [iPeriod, nuMs, valtId, ärSparad, stjärnmärkta],
     );
+    // BRICKOR KRING MITTEN, PRICKAR ANNARS (Josef 19/10, lib/kartUrval -
+    // webbens reveal-urval): de ~50 platserna närmast kartans mitt är
+    // brickor, resten av landet billiga prickar. Brickorna räknas om när
+    // kartan stannat (onRegionDidChange sätter ruta/zoom), så urvalet följer
+    // med när man panorerar. Prick-källan beror bara på platserna och skickas
+    // inte om vid panorering - de som är brickor döljs med filtret.
+    const urvalsMitt = useMemo(() => (ruta ? rutansMitt(ruta) : null), [ruta]);
+    const brickor = useMemo(
+        () => väljBrickor(platser, urvalsMitt, zoom ?? 11),
+        [platser, urvalsMitt, zoom],
+    );
+    // Platserna byggs om varje minut (nuMs) - prickarna bara när något
+    // synligt ändrats (lib/kartUrval.prickNyckel).
+    const prickNyckeln = useMemo(() => prickNyckel(platser), [platser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const prickar = useMemo(() => byggPrickar(platser), [prickNyckeln]);
+    const brickIds = useMemo(() => new Set(brickor.features.map(f => f.properties.id)), [brickor]);
+    const dolda = useMemo(() => prickFilter([...brickIds]) as unknown as FilterSpecification, [brickIds]);
 
     // ── Önskningarna (webbens drömska wish-brickor) ───────────────────────
     // Egen liten collection, hämtas per kartbesök och efter egna ändringar
@@ -426,11 +450,12 @@ export default function KartScreen() {
         const z = zoom ?? 11;
         const kandidater = async (
             fs: readonly GeoJSON.Feature<GeoJSON.Point, { id: string; sort?: number; antal?: number }>[],
+            förfilter = FÖRFILTER_PT,
         ): Promise<Kandidat[]> => {
             if (!karta) return [];
             const nära = fs.filter(f => {
                 const [flng, flat] = f.geometry.coordinates;
-                return avståndPt({ lng: flng, lat: flat }, tryck, z) <= FÖRFILTER_PT;
+                return avståndPt({ lng: flng, lat: flat }, tryck, z) <= förfilter;
             });
             const projicerade = await Promise.all(nära.map(async f => {
                 try {
@@ -447,7 +472,11 @@ export default function KartScreen() {
             trycktÖnskan(önskan);
             return;
         }
-        const id = träffadBricka(await kandidater(brickor.features), tx, ty);
+        // Prickarna efter brickorna (en bricka ovanpå en prick vinner). Ett
+        // tryck på en prick öppnar platsen - den blir vald och därmed bricka.
+        // Förfiltret med marginal för lutad karta, som brickornas.
+        const id = träffadBricka(await kandidater(brickor.features), tx, ty)
+            ?? träffadPrick(await kandidater(prickar.features.filter(f => !brickIds.has(f.properties.id)), PRICK_RADIE * 2), tx, ty);
         if (id) trycktBricka(id);
         else setStängNonce(n => n + 1);
     };
@@ -596,6 +625,26 @@ export default function KartScreen() {
                 >
                     <Camera ref={cameraRef} initialViewState={{ center: [city.lng, city.lat], zoom: 11 }} />
                     <Images images={BRICKA_IMAGES} />
+                    {/* PRICKARNA (Josef 19/10, lib/kartUrval): allt utanför
+                        urvalet kring mitten - webbens nål-prickar i
+                        kategorins färg med vit ring, passerade dämpade till
+                        hälften. Monteras FÖRE brickornas källa så lagret
+                        ligger under brickor och etiketter. */}
+                    <GeoJSONSource id="prickar" data={prickar}>
+                        <Layer
+                            type="circle"
+                            id="event-prickar"
+                            filter={dolda}
+                            style={{
+                                circleRadius: PRICK_RADIE_UTTRYCK,
+                                circleColor: ['get', 'farg'] as unknown as Expression,
+                                circleStrokeColor: '#ffffff',
+                                circleStrokeWidth: 1.5,
+                                circleOpacity: ['case', ['get', 'past'], 0.5, 1] as unknown as Expression,
+                                circleStrokeOpacity: ['case', ['get', 'past'], 0.45, 0.9] as unknown as Expression,
+                            }}
+                        />
+                    </GeoJSONSource>
                     <GeoJSONSource id="events" data={brickor}>
                         {/* Etiketterna (webbens LABEL_LAYER_IDS): TITEL FÖRE
                             KATEGORI NÄR DEN FÅR PLATS, annars kategorin, annars
@@ -608,7 +657,8 @@ export default function KartScreen() {
                             INGEN zoomgräns, till skillnad från webbens
                             LABEL_CAT_MIN_ZOOM 9 (Josef 9/10: "så man alltid
                             ser något på avstånd iallafall") - kollisionen
-                            gallrar, appflödet är ändå bara ett län. */}
+                            gallrar, och bara urvalet kring mitten är brickor
+                            (resten är prickar utan etikett). */}
                         <Layer
                             type="symbol"
                             id="etikett-kategori"
