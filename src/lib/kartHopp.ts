@@ -20,7 +20,7 @@
  *    stadssidan bär ← ☰ tillbaka dit så länge man står kvar på eventet.
  */
 import type { Href } from 'expo-router';
-import { CITIES, type AppFeedEvent, type City } from '@vadkul/kontrakt';
+import { CITIES, type AppFeedEvent, type City, type EventCategoryType } from '@vadkul/kontrakt';
 import { nearestCity } from './regionVal';
 import { dagOffset, iBild, type Ruta } from './vy';
 
@@ -36,6 +36,10 @@ export interface KartHopp {
     /** Staden eventet hör till om skärmen vet det (stadssidan, sökets ort). */
     stadSlug?: string | null;
     retur?: HoppRetur | null;
+    /** Sökets kategoriord ("konst växjö"): kartan byter till EXAKT de här
+     *  kategorierna (utan 🔥) i samma steg som eventet väljs - annars står
+     *  kortet bortfiltrerat av ett filter som söket gick förbi. */
+    kategorier?: ReadonlySet<EventCategoryType> | null;
 }
 
 let väntande: KartHopp | null = null;

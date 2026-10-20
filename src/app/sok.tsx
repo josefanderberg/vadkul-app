@@ -2,14 +2,22 @@
  * Sökpanelen - webbens FloatingNavbar-sök + SearchResults:
  *  - Kategoriraden överst, även utan söktext (kategorifiltret BOR i sökpanelen,
  *    ägarbeslut 16/9): 🔥 Populära först, FLER sist. Valet gäller kartan.
- *  - Filter på utan söktext = träffarna visas DIREKT i tidsordning (webbens
- *    ägarbeslut 7/10 "kategorival visar listan", hit 18/10) - inte först när
- *    man skrivit något. Listan får STICKY dagrubriker ("Idag", "Imorgon",
- *    "ons 30 sep" - lib/dagar.dagSektioner) som paneler; textsökets träffar
- *    behåller rankningens ordning utan rubriker.
+ *  - Filter på utan söktext = träffarna visas DIREKT (webbens ägarbeslut 7/10
+ *    "kategorival visar listan", hit 18/10) - inte först när man skrivit
+ *    något. Listan får STICKY dagrubriker ("Idag", "Imorgon", "ons 30 sep")
+ *    som paneler, börjar på KARTANS dag (?dag=) och har det NÄRMASTE först
+ *    inom varje dag (Josef 20/10: "då ska det vara de som är närmst en den
+ *    dagen som ska visas") - från ens position, annars från staden. Fritt
+ *    textsök behåller rankningens ordning utan rubriker.
+ *  - Kategoriord i texten ("konst växjö", "musik och teater") ERSÄTTER
+ *    chipsen och 🔥 för sökningen (Josef 20/10: "då ska jag ju få upp allt
+ *    med konst i växjö" - med 🔥 på blev det bara populär konst, oftast
+ *    inget). Det blir en filterlista som ovan, med orten som mittpunkt; öppnas
+ *    en träff får kartan samma kategorier så kortet inte står bortfiltrerat.
  *  - Stadsraden: orter som matchar texten - tryck lägger staden på kartan.
  *  - Träffarna: webbens rankning (lib/sok), träffen i fetstil, samma filter
- *    som kartan (kategori/🔥/källor) och bara event som inte varit.
+ *    som kartan (kategori/🔥/källor - utom när kategoriord ersätter det) och
+ *    bara event som inte varit.
  *  - "jazz i göteborg" söker i ortens län även om kartan står någon annanstans.
  *  - En träff öppnas PÅ KARTAN (lib/kartHopp, webbens listval "som ett
  *    kartklick"): panelen stängs, kortet får Nästa + listan under kortet och
@@ -22,38 +30,61 @@ import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useEvent } from '@/api/useEvent';
 import { EventRad } from '@/components/EventRad';
 import { KategoriRad } from '@/components/KategoriRad';
-import { dagSektioner } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast } from '@/lib/harVarit';
 import { matcharFilter } from '@/lib/kartFilter';
 import { begärKartHopp } from '@/lib/kartHopp';
+import { KATEGORIER } from '@/lib/kategorier';
 import { useRegionVal } from '@/lib/regionContext';
 import { distanceKm } from '@/lib/regionVal';
-import { normalizeSearchQuery, searchCities, sokEvent, splitCityFromQuery } from '@/lib/sok';
+import {
+    CITY_SEARCH_RADIUS_KM,
+    närmastPerDag,
+    normalizeSearchQuery,
+    searchCities,
+    sokEvent,
+    splitCityFromQuery,
+    tolkaKategorier,
+} from '@/lib/sok';
 
 export default function SokScreen() {
     const { city, region, väljStad, minPos } = useRegionVal();
     const filter = useFilter();
-    // ?q= = tillbaka från kortet (← ☰ "Tillbaka till sökningen").
-    const { q: frånKortet } = useLocalSearchParams<{ q?: string }>();
+    // ?q= = tillbaka från kortet (← ☰ "Tillbaka till sökningen"); ?dag= =
+    // kartans dag (0 = idag) - filterlistan börjar där.
+    const { q: frånKortet, dag } = useLocalSearchParams<{ q?: string; dag?: string }>();
     const [fråga, setFråga] = useState(frånKortet ?? '');
+    const frånDag = Math.max(0, Number(dag) || 0);
 
     const q = normalizeSearchQuery(fråga);
     const { city: sökOrt, text: sökText } = splitCityFromQuery(q);
+    const sökKategorier = useMemo(() => tolkaKategorier(sökText), [sökText]);
+    const kategoriSök = sökKategorier.size > 0;
+    // Filterlista (dagsektioner, närmast först) = inget fritt sökord: bara
+    // chips, bara kategoriord och/eller bara en ort ("i växjö").
+    const filterLista = q ? kategoriSök || (!!sökOrt && !sökText) : filter.aktivt;
     const feed = useEvent(sökOrt?.region ?? region);
 
     const underlag = useMemo(() => {
         const nu = Date.now();
-        return (feed.data ?? []).filter(e => matcharFilter(e, filter) && !isEventPast(e, nu));
-    }, [feed.data, filter]);
-    const träffar = useMemo(() => sokEvent(underlag, fråga), [underlag, fråga]);
-    // Utan söktext men med filtret på: hela det filtrerade underlaget i
-    // tidsordning under sticky dagrubriker. Textsöket får EN rubriklös
-    // sektion - rankningens ordning ska inte brytas av daggrupper.
+        // Kategoriorden ersätter chipsen och 🔥 - opt-in-källorna gäller som förut.
+        const f = kategoriSök
+            ? { kategorier: sökKategorier, populärt: false, källa: null, optIn: filter.optIn }
+            : filter;
+        return (feed.data ?? []).filter(e => matcharFilter(e, f) && !isEventPast(e, nu));
+    }, [feed.data, filter, kategoriSök, sökKategorier]);
+    const träffar = useMemo(() => (filterLista ? [] : sokEvent(underlag, fråga)), [filterLista, underlag, fråga]);
     const sektioner = useMemo(() => {
-        if (q) return träffar.length > 0 ? [{ titel: '', data: träffar }] : [];
-        return filter.aktivt ? dagSektioner(underlag) : [];
-    }, [q, träffar, underlag, filter.aktivt]);
+        if (filterLista) {
+            const iOrten = sökOrt
+                ? underlag.filter(e => distanceKm(sökOrt.lat, sökOrt.lng, e.lat, e.lng) <= CITY_SEARCH_RADIUS_KM)
+                : underlag;
+            return närmastPerDag(iOrten, sökOrt ?? minPos ?? city, frånDag);
+        }
+        // Textsöket får EN rubriklös sektion - rankningens ordning ska inte
+        // brytas av daggrupper.
+        return träffar.length > 0 ? [{ titel: '', data: träffar }] : [];
+    }, [filterLista, sökOrt, underlag, minPos, city, frånDag, träffar]);
     const städer = searchCities(fråga);
     const markera = sökText || q;
 
@@ -61,7 +92,11 @@ export default function SokScreen() {
         begärKartHopp({
             event: e,
             stadSlug: sökOrt?.slug ?? null,
-            retur: { etikett: 'Tillbaka till sökningen', href: { pathname: '/sok', params: { q: fråga } } },
+            kategorier: kategoriSök ? sökKategorier : null,
+            retur: {
+                etikett: 'Tillbaka till sökningen',
+                href: { pathname: '/sok', params: { q: fråga, dag: String(frånDag) } },
+            },
         });
         router.dismissTo('/');
     };
@@ -96,6 +131,12 @@ export default function SokScreen() {
             <View>
                 <KategoriRad events={feed.data ?? []} />
             </View>
+            {kategoriSök && filter.aktivt ? (
+                // Chipsen kan lysa (🔥) fast listan inte följer dem - säg varför.
+                <Text style={styles.ordFöre}>
+                    Visar allt inom {[...sökKategorier].map(k => KATEGORIER[k].kort).join(' och ')} - sökordet går före filtret.
+                </Text>
+            ) : null}
             <SectionList
                 sections={sektioner}
                 keyExtractor={e => e.id}
@@ -132,7 +173,7 @@ export default function SokScreen() {
                         <Text style={styles.tomt}>Inga kommande event matchar filtret just nu.</Text>
                     ) : (
                         <Text style={styles.tomt}>
-                            Inga träffar på "{fråga.trim()}"{filter.aktivt ? ' med filtret som är på' : ''}.
+                            Inga träffar på "{fråga.trim()}"{filter.aktivt && !kategoriSök ? ' med filtret som är på' : ''}.
                         </Text>
                     )
                 }
@@ -203,5 +244,6 @@ const styles = StyleSheet.create({
         paddingVertical: 5,
         overflow: 'hidden',
     },
+    ordFöre: { marginHorizontal: 16, marginTop: 4, marginBottom: 2, fontSize: 13, color: '#64748b' },
     tomt: { textAlign: 'center', color: '#64748b', marginTop: 32, paddingHorizontal: 24, fontSize: 14 },
 });

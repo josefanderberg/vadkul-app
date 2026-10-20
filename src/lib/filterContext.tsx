@@ -31,6 +31,9 @@ export interface FilterState extends KartFilter {
     växlaOptIn: (k: KällNyckel) => void;
     /** Släpp kategorierna, 🔥 och källan ("Visa alla"). */
     rensa: () => void;
+    /** Exakt de här kategorierna, utan 🔥 och källa - sökets kategoriord
+     *  ("konst växjö") när en träff öppnas på kartan. */
+    sättUrval: (k: ReadonlySet<EventCategoryType>) => void;
     /** Något av kategorier/🔥/källa är på. */
     aktivt: boolean;
 }
@@ -99,6 +102,11 @@ export function FilterProvider({ children }: { children: ReactNode }) {
         setPopulärt(false);
         setKälla(null);
     }, [sättKategorier]);
+    const sättUrval = useCallback((k: ReadonlySet<EventCategoryType>) => {
+        sättKategorier(new Set(k));
+        setPopulärt(false);
+        setKälla(null);
+    }, [sättKategorier]);
 
     const optIn = useMemo(() => new Set(optInLista), [optInLista]);
 
@@ -112,8 +120,9 @@ export function FilterProvider({ children }: { children: ReactNode }) {
         växlaKälla,
         växlaOptIn,
         rensa,
+        sättUrval,
         aktivt: kategorier.size > 0 || populärt || källa !== null,
-    }), [kategorier, populärt, källa, optIn, växlaKategori, växlaPopulärt, växlaKälla, växlaOptIn, rensa]);
+    }), [kategorier, populärt, källa, optIn, växlaKategori, växlaPopulärt, växlaKälla, växlaOptIn, rensa, sättUrval]);
 
     return <FilterContext.Provider value={value}>{children}</FilterContext.Provider>;
 }

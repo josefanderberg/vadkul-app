@@ -272,7 +272,15 @@ export default function KartScreen() {
         hoppPeriodRef.current = (d !== offset || längd !== 1) && !eventIPeriod(e.time, d, 1);
         setLängd(1);
         setOffset(d);
-        const period = filtrerade.filter(x => eventIPeriod(x.time, d, 1));
+        // Sökets kategoriord byter kartans filter i samma steg - gruppen
+        // räknas med det NYA filtret (staten hinner inte slå igenom här).
+        let urval = filtrerade;
+        if (h.kategorier) {
+            filter.sättUrval(h.kategorier);
+            const nytt = { kategorier: h.kategorier, populärt: false, källa: null, optIn: filter.optIn };
+            urval = (feed.data ?? []).filter(x => matcharFilter(x, nytt));
+        }
+        const period = urval.filter(x => eventIPeriod(x.time, d, 1));
         ankareRef.current = e;
         setBesökta(new Set());
         setHistorik([]);
@@ -787,10 +795,11 @@ export default function KartScreen() {
                 <View style={styles.topKolumn}>
                     {/* Filtersymbolen öppnar sökskärmen - appens motsvarighet
                         till webbens sökark (sökfält + kategorichips; filter på
-                        visar träffarna direkt). Blå när kartfiltret är på. */}
+                        visar träffarna direkt). Blå när kartfiltret är på.
+                        ?dag= = kartans dag, där filterlistan börjar. */}
                     <Pressable
                         style={[styles.rundKnapp, filter.aktivt && styles.rundKnappPå]}
-                        onPress={() => router.push('/sok')}
+                        onPress={() => router.push({ pathname: '/sok', params: { dag: String(offset) } })}
                         accessibilityLabel="Sök och filtrera"
                     >
                         <Text style={[styles.rundIkon, filter.aktivt && styles.rundIkonPå]}>☰</Text>

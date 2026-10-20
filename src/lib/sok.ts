@@ -12,10 +12,26 @@
  *
  * Orterna är kontraktets CITIES (43 st). Webbens sökorter (utils/cityPoints,
  * 291 st) finns inte i kontraktet än - flyttas de dit får appen dem gratis.
+ *
+ * APPENS EGNA TILLÄGG (Josef 20/10, före webben: "om jag bara klickar i
+ * populära ... då ska det vara de som är närmst en den dagen som ska visas" +
+ * "söker jag konst växjö ... då ska jag ju få upp allt med konst i växjö"):
+ *  - `tolkaKategorier`: ett HELT kategoriord ("konst", "konserter", "barnen")
+ *    i söktexten är kategorin - sökpanelen låter det ersätta chipsen.
+ *  - `närmastPerDag`: filterlistan börjar på kartans dag och har det
+ *    närmaste först inom varje dag (förr tidsordning över hela Sverige).
  */
-import { CITIES, type AppFeedEvent, type City } from '@vadkul/kontrakt';
+import {
+    CITIES,
+    EVENT_CATEGORY_KEYS,
+    type AppFeedEvent,
+    type City,
+    type EventCategoryType,
+} from '@vadkul/kontrakt';
+import { dagSektioner, type DagSektion } from './dagar';
 import { KATEGORIER } from './kategorier';
 import { distanceKm } from './regionVal';
+import { dagOffset } from './vy';
 
 export const SEARCH_TIER = {
     TITLE_START: 0,
@@ -168,6 +184,86 @@ export function sokEvent(events: readonly AppFeedEvent[], fråga: string, max = 
     }
     träffar.sort((a, b) => a.tier - b.tier || a.t - b.t);
     return träffar.slice(0, max).map(x => x.e);
+}
+
+/** Vanliga sökord som betyder en kategori fast de inte står i dess namn. */
+const KATEGORI_SYNONYMER: Record<string, EventCategoryType> = {
+    teater: 'stage',
+    konsert: 'music',
+    utställning: 'art',
+    vernissage: 'art',
+    loppis: 'market',
+    quiz: 'social',
+};
+
+/** Svenska böjningsändelser som får hänga på ett kategoriord ("konsten",
+ *  "konserter", "barnen"). En lista, inte "några tecken till": "match" är
+ *  inte mat och "mats" inte heller. */
+const BÖJNINGAR = ['', 'n', 't', 'en', 'et', 'na', 'er', 'ar', 'or', 'erna', 'arna', 'orna'];
+
+/** Grundorden per riktig kategori - kategorinamnens ord (utom Övrigt och
+ *  källorna kyrkan/PRO, som inte är kategorier) plus synonymerna. */
+const KATEGORI_GRUNDORD: { key: EventCategoryType; ord: string }[] = [
+    ...EVENT_CATEGORY_KEYS.filter(k => k !== 'other').flatMap(key =>
+        KATEGORIER[key].label.toLowerCase().split(/[^a-zåäöéü]+/)
+            .filter(ord => ord.length >= 3)
+            .map(ord => ({ key, ord }))),
+    ...Object.entries(KATEGORI_SYNONYMER).map(([ord, key]) => ({ key, ord })),
+];
+
+/** Kategorin ett HELT sökord står för, annars null. Strängare än
+ *  rankningens kategoriträff: ett halvskrivet ord ("kon") räknas inte. */
+export function kategoriFörOrd(ord: string): EventCategoryType | null {
+    for (const { key, ord: grund } of KATEGORI_GRUNDORD) {
+        if (ord.startsWith(grund) && BÖJNINGAR.includes(ord.slice(grund.length))) return key;
+    }
+    return null;
+}
+
+const KATEGORI_KLISTER = new Set([...CITY_GLUE, 'och', '&', 'med']);
+
+/**
+ * Kategoriorden i en (normaliserad, ortfri) söktext. Bara när VARJE ord är
+ * ett kategoriord eller ett bindeord blir det en kategorisökning - "konst",
+ * "musik och teater". Står något annat kvar ("jazz", "konst jazz") är det
+ * vanlig textsökning och rankningen sköter kategoriträffarna som förut.
+ */
+export function tolkaKategorier(text: string): ReadonlySet<EventCategoryType> {
+    const ord = text.split(' ').filter(Boolean);
+    const kategorier = new Set<EventCategoryType>();
+    for (const o of ord) {
+        if (KATEGORI_KLISTER.has(o)) continue;
+        const k = kategoriFörOrd(o);
+        if (!k) return new Set();
+        kategorier.add(k);
+    }
+    return kategorier;
+}
+
+/**
+ * Filterlistan (inget fritt sökord - bara chips, kategoriord och/eller ort):
+ * sticky dagsektioner från `frånDag` (kartans dag, 0 = idag) och framåt, och
+ * inom varje dag det NÄRMASTE `från` först. Inom LIKA_NÄRA_KM räknas det
+ * som lika långt och då gäller klockslaget - inne i en stad betyder 300 m
+ * inget, 17:00 före 18:00 gör det. Dagarna före kartans dag är borta, som
+ * på kartan.
+ */
+export const LIKA_NÄRA_KM = 2;
+
+export function närmastPerDag<T extends { time: string; lat: number; lng: number }>(
+    events: readonly T[],
+    från: { lat: number; lng: number },
+    frånDag: number,
+    nu: Date = new Date(),
+): DagSektion<T>[] {
+    const band = new Map<T, number>();
+    for (const e of events) band.set(e, Math.floor(distanceKm(från.lat, från.lng, e.lat, e.lng) / LIKA_NÄRA_KM));
+    // Pågående event som startade före idag hör till Idag (som dagSektioner).
+    const kvar = events.filter(e => Math.max(0, dagOffset(e.time, nu)) >= frånDag);
+    return dagSektioner(kvar, nu).map(s => ({
+        ...s,
+        data: [...s.data].sort((a, b) => band.get(a)! - band.get(b)! || Date.parse(a.time) - Date.parse(b.time)),
+    }));
 }
 
 export interface HighlightSegment {
