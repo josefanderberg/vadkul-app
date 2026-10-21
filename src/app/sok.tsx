@@ -15,7 +15,10 @@
  *    inget). Det blir en filterlista som ovan, med orten som mittpunkt; öppnas
  *    en träff får kartan samma kategorier så kortet inte står bortfiltrerat.
  *  - Stadsraden: orter som matchar texten - tryck lägger staden på kartan.
- *  - Träffarna: webbens rankning (lib/sok), träffen i fetstil, samma filter
+ *  - Träffarna: kontraktets rankning, samma kod som webben (lib/sok, 21/10):
+ *    titel → plats/arrangör → kategori, NÄROMRÅDET först inom varje nivå
+ *    (Josef 21/10: "närområdet prioriterat") - från sökets ort, ens
+ *    position eller kartans stad. Träffen i fetstil, samma filter
  *    som kartan (kategori/🔥/källor - utom när kategoriord ersätter det) och
  *    bara event som inte varit.
  *  - "jazz i göteborg" söker i ortens län även om kartan står någon annanstans.
@@ -36,15 +39,17 @@ import { matcharFilter } from '@/lib/kartFilter';
 import { begärKartHopp } from '@/lib/kartHopp';
 import { KATEGORIER } from '@/lib/kategorier';
 import { useRegionVal } from '@/lib/regionContext';
-import { distanceKm } from '@/lib/regionVal';
+import { distanceKm, nearestCity } from '@/lib/regionVal';
 import {
-    CITY_SEARCH_RADIUS_KM,
+    findCity,
+    isFilterQuery,
     närmastPerDag,
     normalizeSearchQuery,
+    parseCategoryQuery,
     searchCities,
     sokEvent,
     splitCityFromQuery,
-    tolkaKategorier,
+    withinCitySearch,
 } from '@/lib/sok';
 
 export default function SokScreen() {
@@ -57,13 +62,16 @@ export default function SokScreen() {
     const frånDag = Math.max(0, Number(dag) || 0);
 
     const q = normalizeSearchQuery(fråga);
-    const { city: sökOrt, text: sökText } = splitCityFromQuery(q);
-    const sökKategorier = useMemo(() => tolkaKategorier(sökText), [sökText]);
+    // Orten tolkas med kontraktets 291 orter ("konst alvesta") - flödet är
+    // per län, så närmaste stads län hämtas först.
+    // Memot gör orten oföränderlig för React-kompilatorn (den skickas vidare).
+    const { city: sökOrt, text: sökText } = useMemo(() => splitCityFromQuery(q), [q]);
+    const sökKategorier = useMemo(() => parseCategoryQuery(sökText), [sökText]);
     const kategoriSök = sökKategorier.size > 0;
     // Filterlista (dagsektioner, närmast först) = inget fritt sökord: bara
     // chips, bara kategoriord och/eller bara en ort ("i växjö").
-    const filterLista = q ? kategoriSök || (!!sökOrt && !sökText) : filter.aktivt;
-    const feed = useEvent(sökOrt?.region ?? region);
+    const filterLista = q ? isFilterQuery(sökOrt, sökText, sökKategorier) : filter.aktivt;
+    const feed = useEvent(sökOrt ? nearestCity(sökOrt.lat, sökOrt.lng).region : region);
 
     const underlag = useMemo(() => {
         const nu = Date.now();
@@ -73,12 +81,14 @@ export default function SokScreen() {
             : filter;
         return (feed.data ?? []).filter(e => matcharFilter(e, f) && !isEventPast(e, nu));
     }, [feed.data, filter, kategoriSök, sökKategorier]);
-    const träffar = useMemo(() => (filterLista ? [] : sokEvent(underlag, fråga)), [filterLista, underlag, fråga]);
+    const nära = minPos ?? city;
+    const träffar = useMemo(
+        () => (filterLista ? [] : sokEvent(underlag, fråga, 50, nära)),
+        [filterLista, underlag, fråga, nära],
+    );
     const sektioner = useMemo(() => {
         if (filterLista) {
-            const iOrten = sökOrt
-                ? underlag.filter(e => distanceKm(sökOrt.lat, sökOrt.lng, e.lat, e.lng) <= CITY_SEARCH_RADIUS_KM)
-                : underlag;
+            const iOrten = sökOrt ? underlag.filter(e => withinCitySearch(e, sökOrt)) : underlag;
             return närmastPerDag(iOrten, sökOrt ?? minPos ?? city, frånDag);
         }
         // Textsöket får EN rubriklös sektion - rankningens ordning ska inte
@@ -91,7 +101,8 @@ export default function SokScreen() {
     const öppna = (e: AppFeedEvent) => {
         begärKartHopp({
             event: e,
-            stadSlug: sökOrt?.slug ?? null,
+            // Bara när sökets ort ÄR en stad - annars väljer kartHopp själv.
+            stadSlug: sökOrt ? findCity(sökOrt.name)?.slug ?? null : null,
             kategorier: kategoriSök ? sökKategorier : null,
             retur: {
                 etikett: 'Tillbaka till sökningen',

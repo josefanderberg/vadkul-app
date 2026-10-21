@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
+import { EVENT_CATEGORY_KEYS } from '@vadkul/kontrakt';
+import { KATEGORIER } from './kategorier';
 import {
+    CATEGORY_SEARCH_WORDS,
     findCity,
     highlightSegments,
-    kategoriFörOrd,
     närmastPerDag,
+    parseCategoryQuery,
     searchCities,
     sokEvent,
     splitCityFromQuery,
-    tolkaKategorier,
 } from './sok';
 
 const ev = (id: string, title: string, locationName?: string, time = '2026-09-28T19:00:00.000Z'): AppFeedEvent => ({
@@ -66,9 +68,20 @@ describe('webbens nivåer', () => {
         expect(sokEvent(lista, 'sport').map(x => x.id)).toEqual(['s']);
         expect(sokEvent(lista, 'festival')).toEqual([]);
     });
-    it('länken är sista nivån', () => {
-        const lista = [e('https://www.tickster.com/x', 'Konsert')];
+    it('länken (flödets id) räknas när inget annat träffar', () => {
+        const lista = [e('https://www.tickster.com/x', 'Konsert'), e('b', 'Loppis')];
         expect(sokEvent(lista, 'tickster').map(x => x.id)).toEqual(['https://www.tickster.com/x']);
+    });
+    it('men rena länkträffar följer inte med när annat träffar (UUID-bruset)', () => {
+        const lista = [e('https://kalender.se/?event=jazz12', 'Morgonbön'), e('t', 'Jazzkväll')];
+        expect(sokEvent(lista, 'jazz').map(x => x.id)).toEqual(['t']);
+    });
+    it('NÄROMRÅDET först inom nivån (ägarbeslut 21/10)', () => {
+        const växjö = { lat: 56.88, lng: 14.81 };
+        const långt = e('sthlm', 'Jazz i Stockholm', { lat: 59.33, lng: 18.06, time: '2026-09-27T10:00:00.000Z' });
+        const hemma = e('vxo', 'Kväll med jazz', { lat: 56.87, lng: 14.80 });
+        expect(sokEvent([långt, hemma], 'jazz', 50, växjö).map(x => x.id)).toEqual(['vxo', 'sthlm']);
+        expect(sokEvent([långt, hemma], 'jazz').map(x => x.id)).toEqual(['sthlm', 'vxo']);
     });
 });
 
@@ -76,12 +89,16 @@ describe('ort i söktexten', () => {
     const gbg = { ...ev('gbg', 'Jazz på Nefertiti'), lat: 57.70, lng: 11.97 };
     const sthlm = { ...ev('sthlm', 'Jazz på Fasching'), lat: 59.33, lng: 18.06 };
     it('"jazz i göteborg" begränsar till orten', () => {
-        expect(splitCityFromQuery('jazz i göteborg')).toMatchObject({ city: { slug: 'goteborg' }, text: 'jazz' });
+        expect(splitCityFromQuery('jazz i göteborg')).toMatchObject({ city: { name: 'Göteborg' }, text: 'jazz' });
         expect(sokEvent([gbg, sthlm], 'jazz i göteborg').map(x => x.id)).toEqual(['gbg']);
     });
     it('ortnamn utan prickar hittas, men aldrig på gissning', () => {
         expect(findCity('malmo')?.slug).toBe('malmo');
         expect(findCity('kar')).toBeNull();
+    });
+    it('orten tolkas med kontraktets 291 orter, inte bara städerna (21/10)', () => {
+        expect(splitCityFromQuery('konst alvesta')).toMatchObject({ city: { name: 'Alvesta' }, text: 'konst' });
+        expect(findCity('alvesta')).toBeNull();
     });
     it('ren ortsökning tolkas inte', () => {
         expect(splitCityFromQuery('göteborg').city).toBeNull();
@@ -102,43 +119,20 @@ describe('highlightSegments', () => {
     });
 });
 
-describe('kategoriord i söket', () => {
-    it('hela ord och svenska böjningar räknas', () => {
-        expect(kategoriFörOrd('konst')).toBe('art');
-        expect(kategoriFörOrd('konsten')).toBe('art');
-        expect(kategoriFörOrd('musik')).toBe('music');
-        expect(kategoriFörOrd('barnen')).toBe('family');
-        expect(kategoriFörOrd('marknader')).toBe('market');
-    });
-    it('synonymerna räknas', () => {
-        expect(kategoriFörOrd('teater')).toBe('stage');
-        expect(kategoriFörOrd('konserter')).toBe('music');
-        expect(kategoriFörOrd('loppis')).toBe('market');
-        expect(kategoriFörOrd('utställningar')).toBe('art');
-    });
-    it('halvskrivna ord och ord som bara börjar likadant räknas inte', () => {
-        expect(kategoriFörOrd('kon')).toBeNull();
-        expect(kategoriFörOrd('match')).toBeNull();
-        expect(kategoriFörOrd('mats')).toBeNull();
-        expect(kategoriFörOrd('festival')).toBeNull();
-        expect(kategoriFörOrd('konstnär')).toBeNull();
-    });
-    it('källorna kyrkan/PRO och Övrigt är inga kategoriord', () => {
-        expect(kategoriFörOrd('kyrkan')).toBeNull();
-        expect(kategoriFörOrd('pro')).toBeNull();
-        expect(kategoriFörOrd('övrigt')).toBeNull();
-    });
-    it('bara kategoriord och bindeord ger en kategorisökning', () => {
-        expect([...tolkaKategorier('konst')]).toEqual(['art']);
-        expect([...tolkaKategorier('musik och teater')].sort()).toEqual(['music', 'stage']);
-        expect(tolkaKategorier('konst jazz').size).toBe(0);
-        expect(tolkaKategorier('jazz').size).toBe(0);
-        expect(tolkaKategorier('').size).toBe(0);
+describe('kategoriord i söket (kontraktet, testerna där)', () => {
+    it('kontraktets sökord är orden i appens kategorietiketter (utom Övrigt)', () => {
+        const frånEtiketter = Object.fromEntries(EVENT_CATEGORY_KEYS.filter(k => k !== 'other').map(k => [
+            k, KATEGORIER[k].label.toLowerCase().split(/[^a-zåäöéü]+/).filter(ord => ord.length >= 3),
+        ]));
+        expect(CATEGORY_SEARCH_WORDS).toEqual(frånEtiketter);
     });
     it('"konst växjö": orten lossnar först, sedan blir resten kategorin', () => {
         const { city, text } = splitCityFromQuery('konst växjö');
-        expect(city?.slug).toBe('vaxjo');
-        expect([...tolkaKategorier(text)]).toEqual(['art']);
+        expect(city?.name).toBe('Växjö');
+        expect([...parseCategoryQuery(text)]).toEqual(['art']);
+    });
+    it('quiz är ingen kategori längre (21/10) - söks på titeln', () => {
+        expect(parseCategoryQuery('quiz').size).toBe(0);
     });
 });
 
