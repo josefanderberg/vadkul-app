@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
     accepteraText: { fontSize: 11, fontWeight: '900', color: '#ffffff' },
     kryss: { fontSize: 14, fontWeight: '800', color: '#94a3b8', paddingHorizontal: 4 },
     detalj: { paddingLeft: 42, paddingBottom: 6 },
-    troféRad: { flexDirection: 'row', marginBottom: 4 },
+    troféRad: { marginBottom: 4 },
     detaljHjälp: { fontSize: 12, fontWeight: '600', color: '#94a3b8', paddingVertical: 2 },
     eventRad: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
     eventEmoji: { fontSize: 15 },

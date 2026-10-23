@@ -1,36 +1,24 @@
 /**
- * Troféerna bredvid ett namn - port av webbens TrophyBadges (ägarbeslut
- * 23/10, Josef: "det räcker med en symbol, men att det kanske syns om man
- * klickar på den"). Bara symbolen; ett tryck visar förklaringen i en Alert.
+ * Troféerna som en diskret rad under namnet - port av webbens TrophyLines
+ * (ägarbeslut 23/10, Josef: "det behöver kanske inte vara synligt på det
+ * sättet" - ingen pokal vid namnet): "✦ Förtur till appen · nr 1 av 4".
  * Data = users/{uid}.trophies via kontraktets readTrophies - inga egna
  * läsningar här.
  */
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { describeTrophy, type TrophyMirror } from '@vadkul/kontrakt';
 
 export function Troféer({ troféer }: { troféer: readonly TrophyMirror[] }) {
     if (troféer.length === 0) return null;
     return (
-        <View style={styles.rad}>
-            {troféer.map(t => {
-                const d = describeTrophy(t);
-                return (
-                    <Pressable
-                        key={t.id}
-                        onPress={() => Alert.alert(`${d.symbol} ${d.title}`, d.text)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityLabel={d.title}
-                    >
-                        <Text style={styles.symbol}>{d.symbol}</Text>
-                    </Pressable>
-                );
-            })}
-        </View>
+        <>
+            {troféer.map(t => (
+                <Text key={t.id} style={styles.rad} numberOfLines={1}>{describeTrophy(t).line}</Text>
+            ))}
+        </>
     );
 }
 
 const styles = StyleSheet.create({
-    rad: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-    symbol: { fontSize: 16 },
+    rad: { fontSize: 12, fontWeight: '700', color: '#d97706', marginTop: 2 },
 });
