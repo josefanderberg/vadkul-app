@@ -316,7 +316,13 @@ export default function KartScreen() {
         () => (ruta ? iPeriod.filter(e => iBild(e.lat, e.lng, ruta, KORT_TÄCKER) && !isEventPast(e, nuMs)) : []),
         [iPeriod, ruta, nuMs],
     );
-    const aktuellt = kort?.event ?? null;
+    // VÄLJARLISTAN RÄKNAS SOM ETT VALT EVENT (Josef 23/10: "om jag klickar
+    // på ett multievent så ska den ju öppnas så ska jag ju se den nästa
+    // knappen uppe åt höger"): står kortet på högen (event null) utgår Nästa
+    // från gruppens första event - hela högen ligger på samma plats, så
+    // nästaIBild märker alla dem som besökta och går till närmaste andra
+    // bricka. Bakåt tar en tillbaka till listan (historiken sparar kortet).
+    const aktuellt = kort ? kort.event ?? kort.grupp[0] ?? null : null;
     const nästaHär = aktuellt && ruta
         ? nästaIBild(ankareRef.current ?? aktuellt, aktuellt, poolIBild, besökta).nästa
         : null;
@@ -342,7 +348,11 @@ export default function KartScreen() {
             bakåtAntal: bakåtKort?.grupp.length ?? 0,
             onNästa: () => {
                 if (!aktuellt || !ruta) return;
-                const steg = nästaIBild(ankareRef.current ?? aktuellt, aktuellt, poolIBild, besökta);
+                // Från väljarlistan finns inget ankare än (det sätts när man
+                // väljer ur högen) - högens plats blir ankaret, som ett
+                // kartklick på en enkel bricka.
+                if (!ankareRef.current) ankareRef.current = aktuellt;
+                const steg = nästaIBild(ankareRef.current, aktuellt, poolIBild, besökta);
                 push();
                 if (steg.nästa) {
                     setBesökta(steg.besökta);

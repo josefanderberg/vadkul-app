@@ -20,7 +20,8 @@
  *    1/2-pagern och den flaggblå NÄSTA-kapseln med nästa events emoji +
  *    antal - gul ram + 📅 vid dagbyte (webbens ring-[#FECC02]). Raden
  *    följer arkets drag (samma translate) och kameran rör sig aldrig
- *    (kart-ui 2/9).
+ *    (kart-ui 2/9). Bakåt/Nästa står där även när kortet visar
+ *    VÄLJARLISTAN (23/10) - Nästa går då vidare från högens plats.
  *  - Hjärtat sparar på enheten (lib/sparadeContext), ANMÄL öppnar källan -
  *    BOKA i guld för Ticketmaster (ägarbeslut 1/9) med webbens
  *    "Annons"-märkning under. DELA-KNAPPEN ÄR RIVEN (webben 7/10) - Bjud med
@@ -423,8 +424,12 @@ export function EventKort({
             {/* NAVRADEN OVANPÅ ARKET (webbens navrad med mb-4 ovanför kortet):
                 bottom = arkets oförskjutna topp, samma translate som arket -
                 raden rider på kortets överkant genom alla stopp och drag.
-                box-none: tomrummet mellan knapparna släpper igenom kartan. */}
-            {event && (nav || pager || onTillbakaTillLista) ? (
+                box-none: tomrummet mellan knapparna släpper igenom kartan.
+                ÄVEN ÖVER VÄLJARLISTAN (Josef 23/10, "klickar jag på ett
+                multievent ... ska jag se den nästa knappen uppe åt höger"):
+                Bakåt och Nästa står kvar när kortet visar högen, som på
+                webben - bara pagern och ← ☰ hör till ett valt event. */}
+            {nav || (event && (pager || onTillbakaTillLista)) ? (
                 <Animated.View
                     style={[styles.navHållare, { bottom: tak, transform: [{ translateY: translate }] }]}
                     pointerEvents="box-none"

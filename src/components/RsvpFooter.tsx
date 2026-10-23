@@ -26,6 +26,12 @@
  *    fram till där de syns i eventkortet och lossna ifrån sin stickiness
  *    då"). Scrollar raden sedan ut över överkanten tar RsvpToppRad över -
  *    knapparna syns alltså hela vägen.
+ *  - EN RAD, ALLTID (Josef 23/10: "kommer, intresserad, anmäl - den ska
+ *    aldrig vara på 2 rader"): alla fyra knapparna står på samma rad i
+ *    footern, på radens plats i kortet OCH i toppraden (SvarsRad). Webbens
+ *    footer radbryter ANMÄL när siffrorna växer (flex-wrap, 8/10) - här
+ *    krymper textknapparna med avklippt text i stället, och textskalningen
+ *    är tak-satt (TEXTSKALA), så raden aldrig blir två.
  *  - VÄNKNAPPEN i inbjudningsbannern (sociala lagret, 11/10): mottagaren kan
  *    lägga till inbjudaren som vän direkt ur bannern (webbens
  *    EventRsvpFooter) - utloggade skickas till inloggningen.
@@ -52,6 +58,10 @@ function räknat(bas: number, varPå: boolean, ärPå: boolean): number {
 }
 
 export type RsvpCta = { url: string; label: string; guld: boolean; annons?: string | null };
+
+/** Tak för systemets textskalning i raden - större text än så skulle
+ *  tränga ut ANMÄL, och raden får aldrig bli två (23/10). */
+const TEXTSKALA = 1.2;
 
 /** Svarsläget, räknarna och Bjud med - delas av footern och toppraden
  *  (webbens useRsvpCounts). eventStats-läsningen är sessionscachad per
@@ -102,8 +112,8 @@ function SvarKnapp({ svar, status, text }: { svar: Svarsläge; status: RsvpStatu
             accessibilityState={{ selected: på }}
             style={({ pressed }) => [styles.knapp, styles.svarKnapp, på && styles.knappPå, pressed && styles.tryckt]}
         >
-            <Text style={[styles.knappText, på && styles.knappTextPå]}>{text}</Text>
-            {n > 0 ? <Text style={[styles.antal, på && styles.antalPå]}>{n}</Text> : null}
+            <Text style={[styles.knappText, på && styles.knappTextPå]} numberOfLines={1} maxFontSizeMultiplier={TEXTSKALA}>{text}</Text>
+            {n > 0 ? <Text style={[styles.antal, på && styles.antalPå]} maxFontSizeMultiplier={TEXTSKALA}>{n}</Text> : null}
         </Pressable>
     );
 }
@@ -138,8 +148,30 @@ function CtaKnapp({ event, cta }: { event: AppFeedEvent & { hostName?: string };
             }}
             style={({ pressed }) => [styles.cta, cta.guld ? styles.ctaGuld : styles.ctaBlå, pressed && styles.tryckt]}
         >
-            <Text style={[styles.ctaText, cta.guld ? styles.ctaTextGuld : styles.ctaTextBlå]}>{cta.label} →</Text>
+            <Text style={[styles.ctaText, cta.guld ? styles.ctaTextGuld : styles.ctaTextBlå]} numberOfLines={1} maxFontSizeMultiplier={TEXTSKALA}>{cta.label} →</Text>
         </Pressable>
+    );
+}
+
+/**
+ * HELA RADEN PÅ EN RAD: Intresserad · Kommer · Bjud med · ANMÄL/BOKA (Josef
+ * 23/10: "kommer, intresserad, anmäl - den ska aldrig vara på 2 rader").
+ * Samma rad i footern, på radens plats i kortet och i toppraden - ANMÄL
+ * stod förut på toppradens titelrad med de andra under, det var "2 rader".
+ * Textknapparna får krympa (flexShrink, avklippt text) innan något bryts;
+ * ikonknappen och ANMÄL håller sin bredd.
+ */
+function SvarsRad({ svar, event, cta }: {
+    svar: Svarsläge;
+    event: AppFeedEvent & { hostName?: string };
+    cta: RsvpCta | null;
+}) {
+    return (
+        <View style={styles.platta}>
+            <SvarsKnappar svar={svar} />
+            <View style={styles.fyll} />
+            {cta ? <CtaKnapp event={event} cta={cta} /> : null}
+        </View>
     );
 }
 
@@ -147,10 +179,13 @@ function CtaKnapp({ event, cta }: { event: AppFeedEvent & { hostName?: string };
  * TOPPRADEN NÄR MAN SCROLLAT FÖRBI - webbens EventRsvpTopBar (ägarbeslut
  * 7/10 kväll, Josef: "längst uppe om man scrollat förbi ett eventkort. då
  * ska fortfarande intresserad, kommer, .... Alla de ska synas, samt emojin
- * och titeln ska vara kvar"): emoji + titel och ANMÄL/BOKA på första raden,
- * Intresserad · Kommer · Bjud med på andra. EventKort visar den när
- * svarsraden i kortet scrollat ut över överkanten och låter den stå kvar
- * genom chatt, arrangörsrad och listan. Ingen avatarrad och ingen
+ * och titeln ska vara kvar"): emoji + titel på titelraden och under den
+ * SAMMA rad som i footern - Intresserad · Kommer · Bjud med · ANMÄL/BOKA
+ * på EN rad (23/10; webben har ANMÄL på titelraden, men Josef: "den ska
+ * aldrig vara på 2 rader"). EventKort visar den klistrad överst i
+ * scrollytan när svarsraden i kortet scrollat ut över överkanten och låter
+ * den stå kvar genom chatt, arrangörsrad och listan - det är raden som
+ * följt med i botten som stannar i toppen. Ingen avatarrad och ingen
  * inbjudningsbanner - de bor kvar i raden i kortet.
  */
 export function RsvpToppRad({ event, emoji, cta }: {
@@ -167,11 +202,8 @@ export function RsvpToppRad({ event, emoji, cta }: {
                 {/* Annons-märkningen följer provisionslänken även här - den
                     långa texten bor i raden i kortet. */}
                 {cta?.annons ? <Text style={styles.toppAnnons}>ANNONS</Text> : null}
-                {cta ? <CtaKnapp event={event} cta={cta} /> : null}
             </View>
-            <View style={styles.toppKnappRad}>
-                <SvarsKnappar svar={svar} />
-            </View>
+            <SvarsRad svar={svar} event={event} cta={cta} />
         </View>
     );
 }
@@ -304,11 +336,7 @@ export function RsvpFooter({
                 </Text>
             </View>
         ) : null}
-        <View style={styles.platta}>
-            <SvarsKnappar svar={svar} />
-            <View style={styles.fyll} />
-            {cta ? <CtaKnapp event={event} cta={cta} /> : null}
-        </View>
+        <SvarsRad svar={svar} event={event} cta={cta} />
         {/* Annons-märkningen för affiliatelänkar bor i footern (7/10 kväll). */}
         {cta?.annons ? <Text style={styles.annons}>{cta.annons}</Text> : null}
         </View>
@@ -364,10 +392,14 @@ const styles = StyleSheet.create({
         borderTopColor: '#e2e8f0',
     },
     annons: { paddingHorizontal: 12, paddingBottom: 2, fontSize: 11, color: '#94a3b8' },
+    /** EN rad (23/10): luft och sidopaddning så alla fyra knapparna får
+     *  plats med siffror på 375 pt (Intresserad 12 · Kommer 3 · ikon ·
+     *  ANMÄL →). RN radbryter aldrig en rad - det som inte får plats
+     *  krymper (svarKnapp) i stället för att skjutas utanför kanten. */
     platta: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         paddingHorizontal: 12,
         paddingTop: 10,
     },
@@ -376,13 +408,15 @@ const styles = StyleSheet.create({
         backgroundColor: '#ffffff',
         borderWidth: 1,
         borderColor: '#e2e8f0',
-        paddingHorizontal: 14,
+        paddingHorizontal: 12,
         paddingVertical: 9,
     },
-    /** Ikonknappen: smalare sidoluft, höjden följer textknapparna. */
-    ikonKnapp: { paddingHorizontal: 11, minHeight: 36, justifyContent: 'center' },
-    /** Textknapparna: texten + räknaren på samma rad. */
-    svarKnapp: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    /** Ikonknappen: smalare sidoluft, höjden följer textknapparna. Krymper
+     *  aldrig - ikonen ritas i fasta mått. */
+    ikonKnapp: { paddingHorizontal: 11, minHeight: 36, justifyContent: 'center', flexShrink: 0 },
+    /** Textknapparna: texten + räknaren på samma rad. Får krympa när raden
+     *  är trång (texten klipps, numberOfLines 1) så ANMÄL alltid står kvar. */
+    svarKnapp: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1, minWidth: 0 },
     knappPå: {
         backgroundColor: '#006AA7',
         borderColor: '#005590',
@@ -395,26 +429,24 @@ const styles = StyleSheet.create({
     antal: { fontSize: 13, fontWeight: '800', color: '#94a3b8', fontVariant: ['tabular-nums'] },
     antalPå: { color: 'rgba(255,255,255,0.75)' },
     /** Toppraden: vit platta med kantlinje + skugga nedåt (webbens bg-card
-     *  border-b shadow-md). Ligger ÖVERST i kortets scrollyta. */
+     *  border-b shadow-md). Ligger ÖVERST i kortets scrollyta. Sidoluften
+     *  bor i titelraden och i plattan (SvarsRad), inte här. */
     topp: {
         backgroundColor: '#ffffff',
         borderBottomWidth: 1,
         borderBottomColor: '#e2e8f0',
-        paddingHorizontal: 12,
         paddingTop: 8,
         paddingBottom: 10,
-        gap: 8,
         shadowColor: '#000',
         shadowOpacity: 0.12,
         shadowRadius: 6,
         shadowOffset: { width: 0, height: 3 },
         elevation: 4,
     },
-    toppTitelRad: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    toppTitelRad: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
     toppEmoji: { fontSize: 20 },
     toppTitel: { flex: 1, fontSize: 14, fontWeight: '900', color: '#0f172a' },
     toppAnnons: { fontSize: 9, fontWeight: '900', letterSpacing: 1, color: '#94a3b8' },
-    toppKnappRad: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     inbjudan: {
         flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 12, marginTop: 10,
         paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: '#006AA7',
@@ -447,7 +479,8 @@ const styles = StyleSheet.create({
     knappText: { fontSize: 13, fontWeight: '800', color: '#334155' },
     knappTextPå: { color: '#ffffff' },
     fyll: { flex: 1 },
-    cta: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+    /** ANMÄL/BOKA krymper aldrig - det är textknapparna som ger vika. */
+    cta: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, flexShrink: 0 },
     ctaBlå: { backgroundColor: '#0077BC' },
     ctaGuld: { backgroundColor: '#f0b429' },
     ctaText: { fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
