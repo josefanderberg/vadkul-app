@@ -44,8 +44,8 @@ import { GoogleSignin, isSuccessResponse } from '@react-native-google-signin/goo
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { MeProfil, MeProfilIn } from '@vadkul/kontrakt';
-import { hämtaProfil, raderaAnvändarDoc, skapaGrundprofil, sparaProfil } from '@/data/anvandare';
+import type { MeProfilIn } from '@vadkul/kontrakt';
+import { hämtaProfil, raderaAnvändarDoc, skapaGrundprofil, sparaProfil, type AppProfil } from '@/data/anvandare';
 
 /** OAuth-webbklienten i Firebase-projektet - Android behöver den för att få
  *  ett idToken som Firebase godtar (publikt värde, står i google-services.json). */
@@ -66,7 +66,7 @@ export interface KontoState {
     uid: string | null;
     /** Ge mig ett uid utan att be om konto (anonym session vid behov). */
     säkerställIdentitet: () => Promise<string>;
-    profil: MeProfil | null;
+    profil: AppProfil | null;
     profilLaddar: boolean;
     /** Inloggad men profilen saknar namn - "Om dig"-steget ska erbjudas. */
     behöverProfil: boolean;

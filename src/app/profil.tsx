@@ -37,6 +37,7 @@ import { useSparade } from '@/lib/sparadeContext';
 import { läsFält, sättFält } from '@/data/anvandare';
 import { raderaEgetEvent } from '@/data/egnaEvent';
 import { pushTillstånd, slåAvPush, slåPåPush, type PushTillstånd } from '@/data/push';
+import { Troféer } from '@/components/Trofeer';
 
 /** Notisreglagen - bara för inloggade (påminnelsejobbet frågar kontots
  *  sparade event, helgtipset kontots stad). */
@@ -191,7 +192,13 @@ export default function ProfilScreen() {
                     <Text style={styles.sektion}>Konto</Text>
                     {konto.användare ? (
                         <View style={styles.kort}>
-                            <Text style={styles.kortText}>{konto.profil?.displayName ?? konto.användare.displayName ?? 'Inloggad'}</Text>
+                            {/* Troféerna bredvid namnet - tryck visar vad de är. */}
+                            <View style={styles.namnRad}>
+                                <Text style={[styles.kortText, styles.namnText]} numberOfLines={1}>
+                                    {konto.profil?.displayName ?? konto.användare.displayName ?? 'Inloggad'}
+                                </Text>
+                                <Troféer troféer={konto.profil?.trophies ?? []} />
+                            </View>
                             {konto.användare.email ? <Text style={styles.kortHjalp}>{konto.användare.email}</Text> : null}
                             {konto.profil?.city ? <Text style={styles.kortHjalp}>📍 {konto.profil.city}</Text> : null}
                             <Pressable
@@ -372,6 +379,8 @@ const styles = StyleSheet.create({
     },
     kort: { backgroundColor: '#ffffff', borderRadius: 16, padding: 16, marginHorizontal: 16, marginTop: 4 },
     kortText: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
+    namnRad: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    namnText: { flexShrink: 1 },
     kortHjalp: { marginTop: 6, fontSize: 13, color: '#475569' },
     växelRad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
     växelText: { fontSize: 15, fontWeight: '600', color: '#0f172a' },

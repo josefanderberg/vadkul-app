@@ -22,7 +22,7 @@
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import type { AppFeedEvent } from '@vadkul/kontrakt';
+import type { AppFeedEvent, TrophyMirror } from '@vadkul/kontrakt';
 import { fetchEventSomFlöde } from '@/api/eventDetalj';
 import { hittaAnvändarEvent } from '@/api/useEvent';
 import { formatEventTid } from '@/lib/eventTid';
@@ -40,10 +40,13 @@ import {
 } from '@/data/vanner';
 import { avblockera, blockera, useModerering } from '@/data/moderering';
 import { VÄN_INBJUDAN_TEXT, vänInbjudningsUrl } from '@/lib/vanInbjudan';
+import { Troféer } from './Trofeer';
 
 interface VänDetalj {
     state: 'laddar' | 'klar' | 'dold';
     events: FriendUpcomingEvent[];
+    /** Vännens troféer (users.trophies) - syns även när eventen är dolda. */
+    troféer?: TrophyMirror[];
 }
 
 function VänAvatar({ row }: { row: { name: string | null; photoURL?: string | null } }) {
@@ -178,7 +181,7 @@ export function VannerSektion({ uid, onVälj }: {
         setDetaljer(prev => ({ ...prev, [row.uid]: { state: 'laddar', events: [] } }));
         const profil = await hämtaVänprofil(row.uid);
         if (!profil.visible) {
-            setDetaljer(prev => ({ ...prev, [row.uid]: { state: 'dold', events: [] } }));
+            setDetaljer(prev => ({ ...prev, [row.uid]: { state: 'dold', events: [], troféer: profil.trophies } }));
             return;
         }
         // Slå upp eventen: den delade användarevent-listan först (egna
@@ -190,7 +193,11 @@ export function VannerSektion({ uid, onVälj }: {
         }));
         setDetaljer(prev => ({
             ...prev,
-            [row.uid]: { state: 'klar', events: upcomingFriendEvents(profil.picks, resolved, Date.now()) },
+            [row.uid]: {
+                state: 'klar',
+                events: upcomingFriendEvents(profil.picks, resolved, Date.now()),
+                troféer: profil.trophies,
+            },
         }));
     };
 
@@ -303,6 +310,9 @@ export function VannerSektion({ uid, onVälj }: {
                                     </Pressable>
                                     {öppen ? (
                                         <View style={styles.detalj}>
+                                            {detalj?.troféer?.length ? (
+                                                <View style={styles.troféRad}><Troféer troféer={detalj.troféer} /></View>
+                                            ) : null}
                                             {detalj?.state === 'laddar' || !detalj ? (
                                                 <Text style={styles.detaljHjälp}>Hämtar …</Text>
                                             ) : detalj.state === 'dold' ? (
@@ -449,6 +459,7 @@ const styles = StyleSheet.create({
     accepteraText: { fontSize: 11, fontWeight: '900', color: '#ffffff' },
     kryss: { fontSize: 14, fontWeight: '800', color: '#94a3b8', paddingHorizontal: 4 },
     detalj: { paddingLeft: 42, paddingBottom: 6 },
+    troféRad: { flexDirection: 'row', marginBottom: 4 },
     detaljHjälp: { fontSize: 12, fontWeight: '600', color: '#94a3b8', paddingVertical: 2 },
     eventRad: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
     eventEmoji: { fontSize: 15 },

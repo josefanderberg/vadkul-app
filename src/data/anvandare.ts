@@ -17,13 +17,25 @@ import {
     serverTimestamp,
     setDoc,
 } from '@react-native-firebase/firestore';
-import { CITIES, valideraMeProfilIn, type Kön, type MeProfil, type MeProfilIn } from '@vadkul/kontrakt';
+import {
+    CITIES,
+    readTrophies,
+    valideraMeProfilIn,
+    type Kön,
+    type MeProfil,
+    type MeProfilIn,
+    type TrophyMirror,
+} from '@vadkul/kontrakt';
 import { ApiFel } from '@/lib/kontoFel';
 
 const användarDoc = (uid: string) => doc(getFirestore(), 'users', uid);
 
+/** Appens profil = kontraktets MeProfil + troféerna (users.trophies, en
+ *  servergiven spegel - samma läsning, ingen extra). */
+export type AppProfil = MeProfil & { trophies: TrophyMirror[] };
+
 /** Webbens getUserProfile, i kontraktets MeProfil-form. null = inget dokument. */
-export async function hämtaProfil(uid: string, email: string | null): Promise<MeProfil | null> {
+export async function hämtaProfil(uid: string, email: string | null): Promise<AppProfil | null> {
     const snap = await getDoc(användarDoc(uid));
     if (!snap.exists()) return null;
     const d = snap.data() as Record<string, unknown>;
@@ -37,6 +49,7 @@ export async function hämtaProfil(uid: string, email: string | null): Promise<M
         city: text(d.city),
         citySlug: text(d.citySlug),
         hasChildren: typeof d.hasChildren === 'boolean' ? d.hasChildren : null,
+        trophies: readTrophies(d.trophies),
     };
 }
 

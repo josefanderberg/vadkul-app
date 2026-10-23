@@ -26,6 +26,7 @@ import {
     friendAcceptWrites, friendRemoveWrites, friendRequestWrites, parseFriendRow,
     type FriendDocStatus, type FriendPerson, type FriendRow, type FriendWrite,
 } from '@/lib/vanStatus';
+import { readTrophies, type TrophyMirror } from '@vadkul/kontrakt';
 import { friendRsvpVisible, pickFriendEventIds, type FriendRsvpPick } from '@/lib/vanEvent';
 
 function rowRef(owner: string, friend: string) {
@@ -133,6 +134,8 @@ export interface FriendProfileData {
     /** false = vännen har stängt av synligheten (integritetsgrinden). */
     visible: boolean;
     picks: FriendRsvpPick[];
+    /** users.trophies (servergiven spegel) - visas även när eventen är dolda. */
+    trophies: TrophyMirror[];
 }
 
 /** Inbjudningstratten (18/10): friendInviteStats/{uid}.shared - port av
@@ -160,8 +163,9 @@ export async function hämtaVänprofil(uid: string): Promise<FriendProfileData> 
             photoURL: typeof d?.photoURL === 'string' && d.photoURL ? d.photoURL as string : null,
             visible,
             picks: visible ? pickFriendEventIds(d?.goingEventIds, d?.interestedEventIds) : [],
+            trophies: readTrophies(d?.trophies),
         };
     } catch {
-        return { name: null, photoURL: null, visible: false, picks: [] };
+        return { name: null, photoURL: null, visible: false, picks: [], trophies: [] };
     }
 }
