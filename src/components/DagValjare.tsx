@@ -8,7 +8,8 @@
  * KALENDERN (webbens 2b, kart-ui 31/8): på IDAG står kalenderknappen där
  * bakåtpilen annars står och öppnar månadskalendern - trycket växlar också
  * till dagläge, och ett valt datum blir den dagen (passerade dygn går inte
- * att välja; appflödet räcker 14 dagar, så kalendern slutar där). Har man
+ * att välja; kalendern slutar där appflödet slutar - flödets `days`, se
+ * maxOffset). Har man
  * bytt dag är knappen i stället ↺ rakt ovanför bakåtpilen, som tar en till
  * HEMMADAGEN (Imorgon om idag är slut i rutan, annars Idag) och göms när
  * man redan står där (24/9). Vill man till ett annat datum nollställer man
@@ -20,9 +21,6 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import { dagStart, offsetFörDatum, periodLabel } from '@/lib/dagar';
 import { NYCKEL, useLagrad } from '@/lib/lagring';
 
-/** Flödets horisont är 14 dagar - längre än så kan väljaren inte stega. */
-export const MAX_OFFSET = 13;
-
 export function DagValjare({
     offset,
     längd,
@@ -32,6 +30,7 @@ export function DagValjare({
     onOffset,
     onLängd,
     onSkapa,
+    maxOffset,
 }: {
     offset: number;
     längd: 1 | 7;
@@ -43,6 +42,8 @@ export function DagValjare({
     onLängd: (l: 1 | 7) => void;
     /** Skapa-knappen (+) bor vid väljaren sedan 7/10 kväll - spegelbilden av ↺. */
     onSkapa: () => void;
+    /** Sista dagen väljaren når - flödets horisont (lib/dagar horisontOffset). */
+    maxOffset: number;
 }) {
     const [hintKlar, setHintKlar, hintLaddad] = useLagrad(NYCKEL.växlaHintKlar, false);
     const kvittera = () => { if (!hintKlar) setHintKlar(true); };
@@ -51,7 +52,7 @@ export function DagValjare({
     // sin egen datumdialog. Pickern står på den visade dagen.
     const [kalenderÖppen, setKalenderÖppen] = useState(false);
     const väljDatum = (d: Date) => {
-        const o = offsetFörDatum(d, MAX_OFFSET);
+        const o = offsetFörDatum(d, maxOffset);
         if (o === null) return; // passerat eller bortom horisonten - välj om
         setKalenderÖppen(false);
         onLängd(1);
@@ -68,7 +69,7 @@ export function DagValjare({
                 value: dagStart(nu, offset),
                 mode: 'date',
                 minimumDate: dagStart(nu, 0),
-                maximumDate: dagStart(nu, MAX_OFFSET),
+                maximumDate: dagStart(nu, maxOffset),
                 onChange: (ev, d) => { if (ev.type === 'set' && d) väljDatum(d); },
             });
             return;
@@ -134,10 +135,10 @@ export function DagValjare({
                         })}
                     </Pressable>
                     <Pressable
-                        onPress={() => { kvittera(); onOffset(Math.min(MAX_OFFSET, offset + 1)); }}
-                        disabled={offset >= MAX_OFFSET}
+                        onPress={() => { kvittera(); onOffset(Math.min(maxOffset, offset + 1)); }}
+                        disabled={offset >= maxOffset}
                         hitSlop={8}
-                        style={[styles.pil, offset >= MAX_OFFSET && styles.pilDimmad]}
+                        style={[styles.pil, offset >= maxOffset && styles.pilDimmad]}
                         accessibilityLabel="Nästa dag"
                     >
                         <Text style={styles.pilText}>›</Text>
@@ -156,7 +157,7 @@ export function DagValjare({
                                 display="inline"
                                 locale="sv-SE"
                                 minimumDate={dagStart(new Date(), 0)}
-                                maximumDate={dagStart(new Date(), MAX_OFFSET)}
+                                maximumDate={dagStart(new Date(), maxOffset)}
                                 themeVariant="light"
                                 accentColor="#006AA7"
                                 onChange={(ev, d) => { if (ev.type === 'set' && d) väljDatum(d); }}

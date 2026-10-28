@@ -29,6 +29,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useEvent } from '@/api/useEvent';
 import { EventRad } from '@/components/EventRad';
+import { Ikon } from '@/components/Ikon';
 import { KategoriRad } from '@/components/KategoriRad';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast } from '@/lib/harVarit';
@@ -157,7 +158,10 @@ export default function SokScreen() {
                                     style={({ pressed }) => [styles.stadRad, pressed && styles.tryckt]}
                                     onPress={() => visaStad(c.slug)}
                                 >
-                                    <Text style={styles.stadNamn}>📍 {c.name}</Text>
+                                    <View style={styles.stadNamnRad}>
+                                        <Ikon namn="plats" storlek={14} färg="#0c4a6e" />
+                                        <Text style={styles.stadNamn}>{c.name}</Text>
+                                    </View>
                                     <Text style={styles.stadLänk}>Visa på kartan ›</Text>
                                 </Pressable>
                             ))}
@@ -227,6 +231,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 11,
     },
+    stadNamnRad: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
     stadNamn: { fontSize: 15, fontWeight: '700', color: '#0c4a6e' },
     stadLänk: { fontSize: 13, fontWeight: '700', color: '#0369a1' },
     tryckt: { opacity: 0.7 },

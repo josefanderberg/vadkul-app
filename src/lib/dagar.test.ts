@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dagSektioner, eventIPeriod, offsetFörDatum, periodLabel } from './dagar';
+import { dagSektioner, eventIPeriod, horisontOffset, offsetFörDatum, periodLabel } from './dagar';
 
 const NU = new Date(2026, 8, 27, 14, 0); // sön 27 sep 2026, lokal tid
 const iso = (d: Date) => d.toISOString();
@@ -82,5 +82,31 @@ describe('dagSektioner (söklistans sticky dagrubriker)', () => {
     it('otolkbar tid filtreras bort; tom lista ger inga sektioner', () => {
         expect(dagSektioner([{ id: 'a', time: 'x' }], NU)).toEqual([]);
         expect(dagSektioner([], NU)).toEqual([]);
+    });
+});
+
+describe('horisontOffset', () => {
+    it('sista dagen = flödets days minus ett (idag är dag 0)', () => {
+        expect(horisontOffset(14)).toBe(13);
+        expect(horisontOffset(60)).toBe(59);
+        expect(horisontOffset(1)).toBe(0);
+    });
+
+    it('saknat eller trasigt värde ger den gamla 14-dagarshorisonten', () => {
+        expect(horisontOffset(undefined)).toBe(13);
+        expect(horisontOffset(null)).toBe(13);
+        expect(horisontOffset(0)).toBe(13);
+        expect(horisontOffset(-5)).toBe(13);
+        expect(horisontOffset(Number.NaN)).toBe(13);
+    });
+
+    it('brutna dagar avrundas nedåt', () => {
+        expect(horisontOffset(30.7)).toBe(29);
+    });
+
+    it('kalendern når horisontens sista dag men inte dagen efter', () => {
+        const max = horisontOffset(60);
+        expect(offsetFörDatum(new Date(2026, 10, 25), max, NU)).toBe(59);
+        expect(offsetFörDatum(new Date(2026, 10, 26), max, NU)).toBeNull();
     });
 });

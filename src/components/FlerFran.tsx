@@ -68,7 +68,7 @@ export function FlerFran({
                         stadsknappen behåller tyngden. */}
                     {rad.slug ? (
                         <Pressable
-                            onPress={() => router.push({ pathname: '/arrangor/[slug]', params: { slug: rad.slug! } })}
+                            onPress={() => router.push({ pathname: '/arrangor/[slug]', params: { slug: rad.slug!, namn: rad.namn, doman: rad.domän } })}
                             style={({ pressed }) => [styles.arrangörKnapp, pressed && styles.tryckt]}
                         >
                             <Text style={styles.arrangörText} numberOfLines={1}>Alla event från {rad.namn} →</Text>

@@ -4,12 +4,17 @@
  * Nås från introt och profilen; ?lage= väljer startläge.
  *
  * Apple-knappen visas bara på iOS (Apples regel 4.8 kräver den där när Google
- * finns); Google och e-post finns överallt. Knapparna är plattformarnas egna
- * (AppleAuthenticationButton, GoogleSigninButton) - deras riktlinjer kräver det.
+ * finns); Google och e-post finns överallt. Apple-knappen är Apples egen
+ * (AppleAuthenticationButton - riktlinjerna kräver den). Google-knappen är
+ * egen sedan 28/10 (Josef: "logga in med google har inte border-radius som
+ * logga in med apple") - Googles färdiga knapp har fasta hörn. Googles
+ * riktlinjer tillåter en egen knapp med G-loggan, vit yta, grå kant och
+ * pillerform, så den är byggd i Apple-knappens mått.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
+    Image,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -23,7 +28,6 @@ import {
 import * as WebBrowser from 'expo-web-browser';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { CITIES, KÖN, valideraMeProfilIn, type Kön } from '@vadkul/kontrakt';
 import { KONTON_PÅ } from '@/lib/funktioner';
 import { useKonto } from '@/lib/kontoContext';
@@ -103,13 +107,17 @@ function KontoInnehåll() {
                                 onPress={() => kör(konto.loggaInApple)}
                             />
                         ) : null}
-                        <GoogleSigninButton
-                            style={styles.googleKnapp}
-                            size={GoogleSigninButton.Size.Wide}
-                            color={GoogleSigninButton.Color.Light}
+                        <Pressable
+                            style={({ pressed }) => [styles.googleKnapp, (pressed || upptagen) && styles.tryckt]}
                             onPress={() => kör(konto.loggaInGoogle)}
                             disabled={upptagen}
-                        />
+                            accessibilityRole="button"
+                        >
+                            <Image source={require('../../assets/images/google-g.png')} style={styles.googleLogga} />
+                            <Text style={styles.googleText}>
+                                {läge === 'skapa' ? 'Registrera dig med Google' : 'Logga in med Google'}
+                            </Text>
+                        </Pressable>
                         <View style={styles.eller}>
                             <View style={styles.ellerLinje} />
                             <Text style={styles.ellerText}>eller med e-post</Text>
@@ -309,7 +317,22 @@ const styles = StyleSheet.create({
     innehåll: { padding: 20, paddingBottom: 60 },
     ingress: { fontSize: 15, color: '#475569', marginBottom: 18, lineHeight: 21 },
     appleKnapp: { height: 50, width: '100%', marginBottom: 10 },
-    googleKnapp: { width: '100%', height: 52 },
+    // Apple-knappens mått (50 pt, helt rundad) med Googles ljusa tema:
+    // vit yta och grå kant (#747775 i Googles riktlinjer).
+    googleKnapp: {
+        height: 50,
+        width: '100%',
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: '#747775',
+        backgroundColor: '#ffffff',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+    },
+    googleLogga: { width: 20, height: 20 },
+    googleText: { fontSize: 19, fontWeight: '600', color: '#1f1f1f' },
     eller: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 18 },
     ellerLinje: { flex: 1, height: 1, backgroundColor: '#e2e8f0' },
     ellerText: { fontSize: 13, color: '#94a3b8', fontWeight: '700' },

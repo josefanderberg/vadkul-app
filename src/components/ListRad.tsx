@@ -18,6 +18,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
+import { Ikon } from '@/components/Ikon';
 import { ärEgetVadkulEvent, type AppEvent } from '@/lib/appEvent';
 import { formatKm } from '@/lib/flerEvent';
 import { kategoriFor } from '@/lib/kategorier';
@@ -55,12 +56,19 @@ export function ListRad({
 
     const info = (
         <View style={styles.infoRad}>
-            <Text style={styles.info} numberOfLines={1}>
-                <Text style={styles.infoIkon}>📍 </Text>
-                {km != null ? `${formatKm(km)}  ` : ''}
-                <Text style={styles.infoPlats}>{e.locationName ?? ''}</Text>
-            </Text>
-            {hint ? <Text style={styles.infoTid} numberOfLines={1}>🕐 {hint}</Text> : null}
+            <View style={styles.infoPost}>
+                <Ikon namn="plats" storlek={10} färg="#64748b" />
+                <Text style={styles.info} numberOfLines={1}>
+                    {km != null ? `${formatKm(km)}  ` : ''}
+                    <Text style={styles.infoPlats}>{e.locationName ?? ''}</Text>
+                </Text>
+            </View>
+            {hint ? (
+                <View style={[styles.infoPost, styles.infoTidPost]}>
+                    <Ikon namn="tid" storlek={10} färg="#64748b" />
+                    <Text style={styles.infoTid} numberOfLines={1}>{hint}</Text>
+                </View>
+            ) : null}
         </View>
     );
     const brickor = (påBild: boolean) => (
@@ -189,9 +197,11 @@ const styles = StyleSheet.create({
     glasBricka: { backgroundColor: 'rgba(255,255,255,0.25)' },
     glasText: { color: '#ffffff' },
     infoRad: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    /** Symbol + text (components/Ikon - inga emojier för tid/plats, 28/10). */
+    infoPost: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1 },
+    infoTidPost: { flexShrink: 0 },
     info: { flexShrink: 1, fontSize: 11, fontWeight: '700', color: '#64748b' },
-    infoIkon: { fontSize: 10 },
     infoPlats: { fontWeight: '700' },
-    infoTid: { flexShrink: 0, fontSize: 11, fontWeight: '700', color: '#64748b' },
+    infoTid: { fontSize: 11, fontWeight: '700', color: '#64748b' },
     chevron: { fontSize: 20, color: '#94a3b8', marginTop: -2 },
 });

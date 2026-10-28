@@ -1,19 +1,21 @@
 /**
  * Arrangörssidan - appens motsvarighet till webbens /arrangor/<slug>
  * (ägarbeslut 29/9): arrangörens kommande event i HELA landet, dag för dag,
- * med hemorterna och webbplatsen överst. Datat kommer från webbens
- * /api/arrangor (samma urval som sidan - appflödet är per län och saknar
- * värdnamn). Nås via universella länkar, "Alla event från {namn}" i
- * eventkortet och notislänkar.
+ * med hemorterna och webbplatsen överst. Sedan 28/10 väljs eventen ur
+ * appflödet (lib/arrangorFlode) - webbens /api/arrangor som sidan frågade
+ * förr finns inte, och varje arrangör blev "Okänd arrangör". Nås via
+ * universella länkar, "Alla event från {namn}" och värdnamnet i eventkortet
+ * (de skickar med namn + domän) och stadssidans arrangörschips.
  */
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { CITIES, type AppFeedEvent } from '@vadkul/kontrakt';
-import { useArrangör } from '@/api/djuplank';
+import { REGIONER, useAppFeeds } from '@/api/appFeed';
 import { EventKort } from '@/components/EventKort';
 import { EventRad } from '@/components/EventRad';
+import { arrangörUrFlöde } from '@/lib/arrangorFlode';
 import { isEventPast } from '@/lib/harVarit';
 import { useRegionVal } from '@/lib/regionContext';
 import { grupperaPerDag } from '@/lib/stadsUtbud';
@@ -22,18 +24,24 @@ import { grupperaPerDag } from '@/lib/stadsUtbud';
 const DAGAR = 60;
 
 export default function ArrangörScreen() {
-    const { slug } = useLocalSearchParams<{ slug: string }>();
-    const q = useArrangör(slug);
+    const { slug, namn, doman } = useLocalSearchParams<{ slug: string; namn?: string; doman?: string }>();
+    // Hela Sveriges flöde - samma query-nycklar som kartan, så det som redan
+    // landat där delas (inget nytt nätanrop när man kommer från kortet).
+    const flöden = useAppFeeds(REGIONER, true);
+    const laddar = flöden.some(f => !f);
     const { väljStad } = useRegionVal();
     const [valt, setValt] = useState<AppFeedEvent | null>(null);
 
+    const a = useMemo(
+        () => arrangörUrFlöde(slug, flöden.flatMap(f => f?.events ?? []), { namn, domän: doman }),
+        [slug, flöden, namn, doman],
+    );
     const kommande = useMemo(() => {
         const nu = Date.now();
-        return (q.data?.events ?? []).filter(e => !isEventPast(e, nu));
-    }, [q.data]);
+        return (a?.events ?? []).filter(e => !isEventPast(e, nu));
+    }, [a]);
     const sektioner = useMemo(() => grupperaPerDag(kommande, new Date(), DAGAR), [kommande]);
 
-    const a = q.data;
     const hemstad = a?.cities[0] ? CITIES.find(c => c.slug === a.cities[0].slug) ?? null : null;
     const visaPåKartan = () => {
         if (hemstad) väljStad(hemstad);
@@ -45,7 +53,7 @@ export default function ArrangörScreen() {
             <View style={styles.huvud}>
                 <View style={styles.huvudText}>
                     <Text style={styles.etikett}>ARRANGÖR</Text>
-                    <Text style={styles.rubrik}>{a?.name ?? (q.isLoading ? ' ' : 'Okänd arrangör')}</Text>
+                    <Text style={styles.rubrik}>{a?.name ?? (laddar ? ' ' : 'Okänd arrangör')}</Text>
                     {a ? (
                         <Text style={styles.underRubrik}>
                             {kommande.length === 1 ? '1 kommande event' : `${kommande.length} kommande event`}
@@ -74,7 +82,7 @@ export default function ArrangörScreen() {
                     ) : null}
                 </View>
             ) : null}
-            {q.isLoading ? (
+            {laddar && kommande.length === 0 ? (
                 <ActivityIndicator style={styles.laddar} color="#006AA7" />
             ) : (
                 <SectionList
@@ -83,9 +91,7 @@ export default function ArrangörScreen() {
                     stickySectionHeadersEnabled
                     ListEmptyComponent={
                         <Text style={styles.tomt}>
-                            {q.isError
-                                ? 'Kunde inte hämta arrangören - kolla nätet och försök igen.'
-                                : a ? `${a.name} har inga kommande event just nu.` : 'Arrangören har inga kommande event på VADKUL.'}
+                            {a ? `${a.name} har inga kommande event just nu.` : 'Arrangören har inga kommande event på VADKUL.'}
                         </Text>
                     }
                     renderSectionHeader={({ section }) => <Text style={styles.dagRubrik}>{section.label}</Text>}

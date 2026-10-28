@@ -33,9 +33,9 @@
  *    (sticky bottom-0): raden bor egentligen mellan beskrivningen och
  *    chatten, och när man scrollat fram till dess plats lossnar den och
  *    följer innehållet. Scrollar den ut över överkanten tar RsvpToppRad
- *    över, klistrad överst i scrollytan (webbens EventRsvpTopBar) - och
- *    huvudets eventdel (titel/meta/värd) göms så länge, annars stod titeln
- *    dubbelt (18/10).
+ *    över, klistrad överst i scrollytan (webbens EventRsvpTopBar) - bara
+ *    knapparna, titeln står kvar i huvudet. Huvudet krymper INTE när
+ *    toppraden tänds (28/10: då ryckte hela innehållet upp).
  *  - KORTSÖKET som riktigt fält i knappraden (6/10 + 7/10): fält +
  *    kategorichipsen (samma KategoriRad som sökpanelen - ett val smalnar
  *    listan OCH kartan bakom via det delade filtret). Första tecknet visar
@@ -88,6 +88,7 @@ import { EventRad } from '@/components/EventRad';
 import { FlerFran } from '@/components/FlerFran';
 import { Rapportera } from '@/components/Rapportera';
 import { HelskarmsBild } from '@/components/HelskarmsBild';
+import { Ikon } from '@/components/Ikon';
 import { KategoriRad } from '@/components/KategoriRad';
 import { ListRad } from '@/components/ListRad';
 import { RsvpFooter, RsvpToppRad, type RsvpCta } from '@/components/RsvpFooter';
@@ -911,7 +912,14 @@ function Väljarlista({
                 <Handtag />
                 <View style={styles.rad}>
                     <View style={styles.textkol}>
-                        <Text style={styles.titel} numberOfLines={2}>{plats ? `📍 ${plats}` : `${grupp.length} event här`}</Text>
+                        {plats ? (
+                            <View style={styles.väljarPlats}>
+                                <Ikon namn="plats" storlek={17} färg="#0f172a" />
+                                <Text style={styles.titel} numberOfLines={2}>{plats}</Text>
+                            </View>
+                        ) : (
+                            <Text style={styles.titel} numberOfLines={2}>{`${grupp.length} event här`}</Text>
+                        )}
                         <Text style={styles.väljarRäknare} numberOfLines={1}>
                             {väljarRäknare(grupp.length, dagar.length, passerade.length).toUpperCase()}
                         </Text>
@@ -948,8 +956,9 @@ function Väljarlista({
                             accessibilityRole="button"
                             accessibilityState={{ expanded: visaPasserade }}
                         >
+                            <Ikon namn="tid" storlek={11} färg="#94a3b8" />
                             <Text style={styles.passeradeText}>
-                                🕐 {passerade.length} har redan varit · {visaPasserade ? 'Dölj' : 'Visa'}
+                                {passerade.length} har redan varit · {visaPasserade ? 'Dölj' : 'Visa'}
                             </Text>
                         </Pressable>
                         {visaPasserade
@@ -1199,13 +1208,14 @@ function EventInnehåll({
     // Nytt stopp, nytt event eller vyväxling flyttar fästet utan scroll.
     useEffect(räknaFäste, [arkHöjd, listLäge, event.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Toppraden uppe = huvudets eventdel göms (härkomst, titel, tid/plats,
-    // VÄRD/PRIS) - titeln stod annars dubbelt (Josef 18/10: "titeln visas 2
-    // gånger i toppen. Ta bort den översta som var där innan"). Webben har
-    // inget fast huvud, där scrollar allt det bort naturligt och toppraden
-    // bär titeln ensam. Kvar står knappraden med sök/hjärta/stäng - samma
-    // hopfällning som sökläget redan gör.
-    const huvudGömt = listLäge || toppRad;
+    // Bara sökläget gömmer huvudets eventdel (härkomst, titel, tid/plats,
+    // VÄRD/PRIS). 18-28/10 gömdes den också när toppraden tändes (titeln
+    // stod dubbelt, Josef 18/10) - men då krympte huvudet mitt i scrollen och
+    // hela innehållet ryckte upp lika mycket (Josef 28/10: "innehållet på
+    // eventkortet hoppar också upp. så det blir för mycket som rör på sig").
+    // Nu står huvudet still och toppraden bär bara knapparna - titeln står
+    // ändå en gång, i huvudet.
+    const huvudGömt = listLäge;
 
     return (
         <>
@@ -1220,9 +1230,8 @@ function EventInnehåll({
                 <Handtag />
                 {/* Webbens headerordning: härkomst-badgen → knappraden → titel
                     → tid/plats → VÄRD/PRIS. Söker man göms eventet (ägarbeslut
-                    7/10 kväll), och detsamma när toppraden är uppe (18/10,
-                    huvudGömt ovan) - kvar är bara knappraden med fältet och
-                    chipsen. Det gömda ligger i TVÅ stabila slottar runt
+                    7/10 kväll, huvudGömt ovan) - kvar är bara knappraden med
+                    fältet och chipsen. Det gömda ligger i TVÅ stabila slottar runt
                     knappraden, så dess plats i trädet står still och
                     TextInputen aldrig remountas (tangentbordet får inte
                     stängas av vyskiftet). */}
@@ -1327,11 +1336,22 @@ function EventInnehåll({
                     fritt i stället. */}
                 <View style={styles.metaYta}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.metaRad}>
-                        <Text style={styles.meta}>🕐 {tid}{harVarit ? ' · har varit' : ''}</Text>
-                        {!vadkulVärdat && plats ? <Text style={styles.meta}>📍 {plats}</Text> : null}
+                        <View style={styles.metaPost}>
+                            <Ikon namn="tid" />
+                            <Text style={styles.meta}>{tid}{harVarit ? ' · har varit' : ''}</Text>
+                        </View>
+                        {!vadkulVärdat && plats ? (
+                            <View style={styles.metaPost}>
+                                <Ikon namn="plats" />
+                                <Text style={styles.meta}>{plats}</Text>
+                            </View>
+                        ) : null}
                     </ScrollView>
                     {vadkulVärdat && plats ? (
-                        <Text style={[styles.meta, styles.metaBruten]}>📍 {plats}</Text>
+                        <View style={[styles.metaPost, styles.metaBruten]}>
+                            <Ikon namn="plats" />
+                            <Text style={[styles.meta, styles.metaBrutenText]}>{plats}</Text>
+                        </View>
                     ) : null}
                 </View>
                 {/* VÄRD/PRIS-raden med avdelare (webbens kortfot i headern):
@@ -1364,7 +1384,7 @@ function EventInnehåll({
                                     sluggen finns (webbens understrukna värdnamn). */}
                                 {flerFrån?.slug ? (
                                     <Pressable
-                                        onPress={() => router.push({ pathname: '/arrangor/[slug]', params: { slug: flerFrån.slug! } })}
+                                        onPress={() => router.push({ pathname: '/arrangor/[slug]', params: { slug: flerFrån.slug!, namn: flerFrån.namn, doman: flerFrån.domän } })}
                                         hitSlop={8}
                                         accessibilityLabel={`Visa alla event från ${värd}`}
                                     >
@@ -1392,7 +1412,7 @@ function EventInnehåll({
                 grepp={grepp}
                 contentContainerStyle={styles.innehållMedFooter}
                 tangentbordsInsets
-                topp={toppRad && !listLäge ? <RsvpToppRad event={event} emoji={emoji} cta={cta} /> : null}
+                topp={toppRad && !listLäge ? <RsvpToppRad event={event} cta={cta} /> : null}
                 onScrollY={räknaFäste}
             >
                 {/* Under sökning - och när filtret valt bort eventet - visas
@@ -1862,7 +1882,11 @@ const styles = StyleSheet.create({
     metaYta: { paddingTop: 6, gap: 4 },
     metaRad: { flexDirection: 'row', gap: 14, paddingHorizontal: 16 },
     meta: { fontSize: 13, fontWeight: '700', color: '#475569' },
+    /** Symbol + text (components/Ikon - inga emojier för tid/plats, 28/10). */
+    metaPost: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     metaBruten: { paddingHorizontal: 16 },
+    metaBrutenText: { flexShrink: 1 },
+    väljarPlats: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     väljarRäknare: { marginTop: 5, fontSize: 10, fontWeight: '900', color: '#94a3b8', letterSpacing: 1.2 },
     stang: {
         width: 36,
@@ -2068,8 +2092,11 @@ const styles = StyleSheet.create({
     bildKnappPå: { backgroundColor: BLÅ },
     bildKnappText: { fontSize: 10, fontWeight: '900', color: '#64748b', letterSpacing: 1 },
     bildKnappTextPå: { color: '#ffffff' },
-    /** Väljarlistans hopfällda historik (webbens "🕐 N har redan varit · Visa"). */
+    /** Väljarlistans hopfällda historik (webbens "🕐 N har redan varit · Visa" - klockan är en symbol här). */
     passeradeKnapp: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
         marginTop: 6,
         marginHorizontal: 16,
         paddingVertical: 10,

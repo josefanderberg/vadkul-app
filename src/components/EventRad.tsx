@@ -1,13 +1,14 @@
 /**
  * En eventrad - samma rad i kortets listor (mörk), sök, stadssidor och
- * sparade (ljus): bild (eller emoji-ruta), titel, plats + tid, kategori-
- * märke. Sökningen skickar `fråga` så träffen står i fetstil (webbens
+ * sparade (ljus): bild (eller emoji-ruta), titel, plats + tid (med
+ * systemsymboler, inte emojier - components/Ikon), kategorimärke. Sökningen skickar `fråga` så träffen står i fetstil (webbens
  * highlightSegments). Passerade event dimmas i stället för att försvinna
  * där listan ändå visar dem (sparade).
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
+import { Ikon } from '@/components/Ikon';
 import { formatEventTid } from '@/lib/eventTid';
 import { formatKm } from '@/lib/flerEvent';
 import { kategoriFor } from '@/lib/kategorier';
@@ -41,6 +42,7 @@ export function EventRad({
     const emoji = e.emoji || k.emoji;
     const mörk = tema === 'mörk';
     const s = mörk ? mörkStil : ljusStil;
+    const ikonFärg = mörk ? '#94a3b8' : '#475569';
     const plats = [km != null ? formatKm(km) : null, e.locationName].filter(Boolean).join(' · ');
     return (
         <Pressable style={({ pressed }) => [s.rad, pressed && bas.tryckt, dimmad && bas.dimmad]} onPress={onPress}>
@@ -60,12 +62,20 @@ export function EventRad({
                         ))
                         : e.title}
                 </Text>
-                {plats ? <Text style={s.meta} numberOfLines={1}>📍 {plats}</Text> : null}
-                <Text style={s.meta} numberOfLines={1}>
-                    🕐 {formatEventTid(e.time, e.hasSpecificTime)}
-                    {harVarit ? ' · har varit' : ''}
-                    {e.pop ? '  🔥' : ''}
-                </Text>
+                {plats ? (
+                    <View style={bas.metaRad}>
+                        <Ikon namn="plats" storlek={11} färg={ikonFärg} />
+                        <Text style={[s.meta, bas.metaText]} numberOfLines={1}>{plats}</Text>
+                    </View>
+                ) : null}
+                <View style={bas.metaRad}>
+                    <Ikon namn="tid" storlek={11} färg={ikonFärg} />
+                    <Text style={[s.meta, bas.metaText]} numberOfLines={1}>
+                        {formatEventTid(e.time, e.hasSpecificTime)}
+                        {harVarit ? ' · har varit' : ''}
+                        {e.pop ? '  🔥' : ''}
+                    </Text>
+                </View>
             </View>
             {höger ?? (
                 <View style={[bas.märke, { backgroundColor: isTicketmasterEvent(e) ? '#f0b42933' : `${k.hex}33` }]}>
@@ -84,6 +94,8 @@ const bas = StyleSheet.create({
     bild: { width: 56, height: 56, borderRadius: 10 },
     bildEmoji: { fontSize: 24 },
     text: { flex: 1 },
+    metaRad: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+    metaText: { marginTop: 0, flexShrink: 1 },
     träff: { fontWeight: '900' },
     märke: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
     märkeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },

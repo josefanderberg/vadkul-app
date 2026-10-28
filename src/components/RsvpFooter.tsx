@@ -187,22 +187,22 @@ function SvarsRad({ svar, event, cta }: {
  * den stå kvar genom chatt, arrangörsrad och listan - det är raden som
  * följt med i botten som stannar i toppen. Ingen avatarrad och ingen
  * inbjudningsbanner - de bor kvar i raden i kortet.
+ *
+ * SEDAN 28/10 UTAN TITELRAD: emoji + titel står kvar i kortets huvud, som
+ * inte längre göms när toppraden tänds (huvudet krympte och hela innehållet
+ * ryckte upp - Josef 28/10: "för mycket som rör på sig"). Titeln en gång,
+ * i huvudet, och här bara knapparna.
  */
-export function RsvpToppRad({ event, emoji, cta }: {
+export function RsvpToppRad({ event, cta }: {
     event: AppFeedEvent & { userCreated?: boolean; hostName?: string };
-    emoji: string;
     cta: RsvpCta | null;
 }) {
     const svar = useSvar(event);
     return (
         <View style={styles.topp}>
-            <View style={styles.toppTitelRad}>
-                <Text style={styles.toppEmoji}>{emoji}</Text>
-                <Text style={styles.toppTitel} numberOfLines={1}>{event.title}</Text>
-                {/* Annons-märkningen följer provisionslänken även här - den
-                    långa texten bor i raden i kortet. */}
-                {cta?.annons ? <Text style={styles.toppAnnons}>ANNONS</Text> : null}
-            </View>
+            {/* Annons-märkningen följer provisionslänken även här - den
+                långa texten bor i raden i kortet. */}
+            {cta?.annons ? <Text style={styles.toppAnnons}>ANNONS</Text> : null}
             <SvarsRad svar={svar} event={event} cta={cta} />
         </View>
     );
@@ -430,12 +430,11 @@ const styles = StyleSheet.create({
     antalPå: { color: 'rgba(255,255,255,0.75)' },
     /** Toppraden: vit platta med kantlinje + skugga nedåt (webbens bg-card
      *  border-b shadow-md). Ligger ÖVERST i kortets scrollyta. Sidoluften
-     *  bor i titelraden och i plattan (SvarsRad), inte här. */
+     *  bor i plattan (SvarsRad), inte här. */
     topp: {
         backgroundColor: '#ffffff',
         borderBottomWidth: 1,
         borderBottomColor: '#e2e8f0',
-        paddingTop: 8,
         paddingBottom: 10,
         shadowColor: '#000',
         shadowOpacity: 0.12,
@@ -443,10 +442,7 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 3 },
         elevation: 4,
     },
-    toppTitelRad: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12 },
-    toppEmoji: { fontSize: 20 },
-    toppTitel: { flex: 1, fontSize: 14, fontWeight: '900', color: '#0f172a' },
-    toppAnnons: { fontSize: 9, fontWeight: '900', letterSpacing: 1, color: '#94a3b8' },
+    toppAnnons: { alignSelf: 'flex-end', paddingHorizontal: 12, paddingTop: 6, fontSize: 9, fontWeight: '900', letterSpacing: 1, color: '#94a3b8' },
     inbjudan: {
         flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 12, marginTop: 10,
         paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: '#006AA7',

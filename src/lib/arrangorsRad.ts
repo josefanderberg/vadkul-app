@@ -40,6 +40,8 @@ export interface ArrangörsRad {
     slug: string | null;
     /** Värdnamnet när det finns, annars domänen. */
     namn: string;
+    /** Källdomänen raden valdes på - följer med länken till arrangörssidan. */
+    domän: string;
     rader: AppFeedEvent[];
 }
 
@@ -65,5 +67,5 @@ export function arrangörsRad(
 
     const namn = (värdNamn ?? '').replace(/\s+/g, ' ').trim();
     const slug = namn.length >= 3 ? organizerSlug(namn) : '';
-    return { slug: slug.length >= 2 ? slug : null, namn: namn || domän, rader };
+    return { slug: slug.length >= 2 ? slug : null, namn: namn || domän, domän, rader };
 }

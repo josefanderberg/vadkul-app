@@ -72,7 +72,9 @@ export function useEvent(region: string) {
         if (anv.data?.length) delar.push(anv.data);
         return delar.length === 1 ? feed.data.events : delar.flat();
     }, [feed.data, andra, anv.data]);
-    return { ...feed, data, användarEvent: anv.data ?? [] };
+    // Horisonten (flödets `days`) styr hur långt dagväljaren når. Alla län
+    // byggs i samma nattkörning, så det egna länets värde gäller alla.
+    return { ...feed, data, användarEvent: anv.data ?? [], horisontDagar: feed.data?.days };
 }
 
 /** Ett användarskapat event ur den delade listan (djuplänkar, Mina event). */

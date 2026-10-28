@@ -25,14 +25,15 @@ import type { CameraRef, Expression, FilterSpecification, LngLat, MapRef, StyleS
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { hittaAnvändarEvent, useEvent } from '@/api/useEvent';
 import { fetchEventSomFlöde } from '@/api/eventDetalj';
-import { DagValjare, MAX_OFFSET } from '@/components/DagValjare';
+import { DagValjare } from '@/components/DagValjare';
 import { EventKort, type KortNav } from '@/components/EventKort';
 import { FilterBricka } from '@/components/FilterBricka';
+import { Ikon } from '@/components/Ikon';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
 import { prenumereraStjärnmärkta } from '@/data/stjarnor';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
 import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE } from '@/lib/brickor';
-import { eventIPeriod, periodLabel } from '@/lib/dagar';
+import { eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
 import { byggBrickor, byggÖnskningar } from '@/lib/kartlager';
@@ -94,6 +95,7 @@ const ETIKETT_STIL = {
 export default function KartScreen() {
     const { city, region, fromGps, manuell, klar, introKlar, väljStad } = useRegionVal();
     const feed = useEvent(region);
+    const maxOffset = horisontOffset(feed.horisontDagar);
     const filter = useFilter();
     const { ärSparad } = useSparade();
     const nuMs = useNu();
@@ -238,7 +240,7 @@ export default function KartScreen() {
             router.setParams({ event: undefined, inb: undefined, fran: undefined });
             if (!e) return;
             setLängd(1);
-            setOffset(Math.max(0, Math.min(13, dagOffset(e.time))));
+            setOffset(Math.max(0, Math.min(maxOffset, dagOffset(e.time))));
             cameraRef.current?.flyTo({ center: [e.lng, e.lat], zoom: 14, duration: 900 });
             ankareRef.current = e;
             setBesökta(new Set());
@@ -268,7 +270,7 @@ export default function KartScreen() {
         const e = h.event;
         const iFlödet = (feed.data ?? []).some(x => x.id === e.id);
         const målStad = hoppStad(e, { iFlödet, stad: city, stadSlug: h.stadSlug });
-        const d = hoppDag(e, new Date(), MAX_OFFSET);
+        const d = hoppDag(e, new Date(), maxOffset);
         hoppPeriodRef.current = (d !== offset || längd !== 1) && !eventIPeriod(e.time, d, 1);
         setLängd(1);
         setOffset(d);
@@ -778,7 +780,7 @@ export default function KartScreen() {
             <View style={styles.topKrom} pointerEvents="box-none">
                 <View style={styles.topKolumn}>
                     <Pressable style={styles.rundKnapp} onPress={() => router.push('/profil')} accessibilityLabel="Profil">
-                        <Text style={styles.rundIkon}>👤</Text>
+                        <Ikon namn="profil" storlek={20} färg="#0f172a" />
                     </Pressable>
                 </View>
                 <View style={styles.mittKolumn} pointerEvents="box-none">
@@ -857,6 +859,7 @@ export default function KartScreen() {
                 onOffset={setOffset}
                 onLängd={setLängd}
                 onSkapa={skapa}
+                maxOffset={maxOffset}
             />
 
             {kort ? (

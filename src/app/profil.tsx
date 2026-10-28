@@ -21,6 +21,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { glömAnvändarEvent, useAnvändarEvent } from '@/api/useEvent';
 import { EventRad } from '@/components/EventRad';
+import { Ikon } from '@/components/Ikon';
 import { VannerSektion } from '@/components/VannerSektion';
 import { ärSerie } from '@/lib/anvandarEvent';
 import { useFilter } from '@/lib/filterContext';
@@ -194,7 +195,12 @@ export default function ProfilScreen() {
                         <View style={styles.kort}>
                             <Text style={styles.kortText}>{konto.profil?.displayName ?? konto.användare.displayName ?? 'Inloggad'}</Text>
                             {konto.användare.email ? <Text style={styles.kortHjalp}>{konto.användare.email}</Text> : null}
-                            {konto.profil?.city ? <Text style={styles.kortHjalp}>📍 {konto.profil.city}</Text> : null}
+                            {konto.profil?.city ? (
+                                <View style={styles.stadRad}>
+                                    <Ikon namn="plats" storlek={12} färg="#475569" />
+                                    <Text style={[styles.kortHjalp, styles.stadText]}>{konto.profil.city}</Text>
+                                </View>
+                            ) : null}
                             {/* Troféerna - en diskret rad, ingen symbol vid namnet. */}
                             <Troféer troféer={konto.profil?.trophies ?? []} />
                             <Pressable
@@ -376,6 +382,8 @@ const styles = StyleSheet.create({
     kort: { backgroundColor: '#ffffff', borderRadius: 16, padding: 16, marginHorizontal: 16, marginTop: 4 },
     kortText: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
     kortHjalp: { marginTop: 6, fontSize: 13, color: '#475569' },
+    stadRad: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+    stadText: { marginTop: 0 },
     växelRad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
     växelText: { fontSize: 15, fontWeight: '600', color: '#0f172a' },
     växelEtikett: { flex: 1, paddingRight: 12 },

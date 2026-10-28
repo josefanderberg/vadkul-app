@@ -75,11 +75,26 @@ export function dagSektioner<T extends { time: string }>(events: T[], nu: Date =
     return ut;
 }
 
+/** Appflödets horisont innan nattkedjan började skicka `days` i flödet. */
+export const STANDARD_HORISONT_DAGAR = 14;
+
+/**
+ * Sista dagen dagväljaren och kalendern når: flödets horisont (`days` i
+ * appflödet) minus ett, eftersom idag är dag 0. Flödet bestämmer - förlängs
+ * horisonten i nattkedjan följer appen med utan ny version (Josef 28/10:
+ * "varför går det inte klicka sig längre fram än 10 november"). Saknat eller
+ * trasigt värde = den gamla 14-dagarshorisonten.
+ */
+export function horisontOffset(dagar: number | null | undefined): number {
+    const d = typeof dagar === 'number' && Number.isFinite(dagar) && dagar >= 1 ? Math.floor(dagar) : STANDARD_HORISONT_DAGAR;
+    return d - 1;
+}
+
 /**
  * Kalenderns val (webbens handleCalendarPick i dagväljaren): datumet blir
  * dagens offset från idag. Passerade dygn ger null ("passerade dygn visas
- * inte"), liksom dagar bortom flödets horisont (appflödet är 14 dagar -
- * webben har ingen övre gräns, där hämtas resten av tidslinjen).
+ * inte"), liksom dagar bortom flödets horisont (horisontOffset - webben har
+ * ingen övre gräns, där hämtas resten av tidslinjen).
  */
 export function offsetFörDatum(datum: Date, maxOffset: number, nu: Date = new Date()): number | null {
     if (Number.isNaN(datum.getTime())) return null;
