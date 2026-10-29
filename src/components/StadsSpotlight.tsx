@@ -18,6 +18,7 @@ import { Image } from 'expo-image';
 import { ärEgetVadkulEvent } from '@/lib/appEvent';
 import type { AppEvent } from '@/lib/appEvent';
 import { kategoriFor } from '@/lib/kategorier';
+import { normaliseraPris } from '@/lib/skapaEvent';
 import { spotSpann, spotTid, type SpotRad } from '@/lib/stadsSpotlight';
 
 const BLÅ = '#006AA7';
@@ -74,7 +75,8 @@ function Rad({ rad, stadsnamn, onPress }: { rad: SpotRad; stadsnamn: string; onP
     const värdat = ärEgetVadkulEvent(e);
     const ram = värdat ? styles.ramVärdat : styles.ramTips;
     const spann = spotSpann(rad);
-    const info = [e.locationName || stadsnamn, spotTid(rad)].filter(Boolean).join(' · ');
+    // Plats · tid · pris, som webbens EventInfoRow.
+    const info = [e.locationName || stadsnamn, spotTid(rad), normaliseraPris(e.price)].filter(Boolean).join(' · ');
     const märke = (
         <View style={[styles.märke, e.img ? styles.märkePåBild : värdat ? styles.märkeVärdat : styles.märkeTips]}>
             <Text style={[styles.märkeText, värdat ? styles.märkeTextVärdat : styles.märkeTextTips]}>

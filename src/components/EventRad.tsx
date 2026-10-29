@@ -4,6 +4,10 @@
  * systemsymboler, inte emojier - components/Ikon), kategorimärke. Sökningen skickar `fråga` så träffen står i fetstil (webbens
  * highlightSegments). Passerade event dimmas i stället för att försvinna
  * där listan ändå visar dem (sparade).
+ *
+ * `visaPris` (stadssidan, som webbens EventInfoRow): biljettsymbol + pris
+ * efter tiden när källan angav ett. Josef 29/10: "på stadssidorna ser man
+ * inte ifall eventen kostar något".
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -12,6 +16,7 @@ import { Ikon } from '@/components/Ikon';
 import { formatEventTid } from '@/lib/eventTid';
 import { formatKm } from '@/lib/flerEvent';
 import { kategoriFor } from '@/lib/kategorier';
+import { normaliseraPris } from '@/lib/skapaEvent';
 import { highlightSegments } from '@/lib/sok';
 import { isTicketmasterEvent } from '@/lib/ticketmaster';
 
@@ -23,6 +28,7 @@ export function EventRad({
     km,
     dimmad = false,
     harVarit = false,
+    visaPris = false,
     höger,
 }: {
     event: AppFeedEvent;
@@ -35,6 +41,8 @@ export function EventRad({
     dimmad?: boolean;
     /** "· har varit" efter tiden (väljarlistans historik, webbens infoRow). */
     harVarit?: boolean;
+    /** Priset efter tiden (stadssidans rader). */
+    visaPris?: boolean;
     /** Extra kontroll längst till höger (t.ex. hjärtat i sparade). */
     höger?: React.ReactNode;
 }) {
@@ -44,6 +52,7 @@ export function EventRad({
     const s = mörk ? mörkStil : ljusStil;
     const ikonFärg = mörk ? '#94a3b8' : '#475569';
     const plats = [km != null ? formatKm(km) : null, e.locationName].filter(Boolean).join(' · ');
+    const pris = visaPris ? normaliseraPris(e.price) : null;
     return (
         <Pressable style={({ pressed }) => [s.rad, pressed && bas.tryckt, dimmad && bas.dimmad]} onPress={onPress}>
             {e.img ? (
@@ -75,6 +84,12 @@ export function EventRad({
                         {harVarit ? ' · har varit' : ''}
                         {e.pop ? '  🔥' : ''}
                     </Text>
+                    {pris ? (
+                        <>
+                            <Ikon namn="pris" storlek={11} färg={ikonFärg} style={bas.prisIkon} />
+                            <Text style={[s.meta, bas.prisText]} numberOfLines={1}>{pris}</Text>
+                        </>
+                    ) : null}
                 </View>
             </View>
             {höger ?? (
@@ -96,6 +111,9 @@ const bas = StyleSheet.create({
     text: { flex: 1 },
     metaRad: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
     metaText: { marginTop: 0, flexShrink: 1 },
+    prisIkon: { marginLeft: 6 },
+    /** Priset krymper sist - det är kort ("160 kr", "Gratis"), tiden får ge sig. */
+    prisText: { marginTop: 0, flexShrink: 0, maxWidth: 120 },
     träff: { fontWeight: '900' },
     märke: { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
     märkeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },

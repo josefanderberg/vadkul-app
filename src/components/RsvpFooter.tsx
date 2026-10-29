@@ -64,6 +64,10 @@ export type RsvpCta = { url: string; label: string; guld: boolean; annons?: stri
  *  tränga ut ANMÄL, och raden får aldrig bli två (23/10). */
 const TEXTSKALA = 1.2;
 
+/** Luften under knapparna i kortets egen kopia - samma som ovanför (platta
+ *  paddingTop), i stället för hemindikatorns ~34 pt. */
+const KORT_LUFT = 10;
+
 /** Svarsläget, räknarna och Bjud med - delas av footern och toppraden
  *  (webbens useRsvpCounts). eventStats-läsningen är sessionscachad per
  *  event, så båda raderna kan vara monterade utan extra läsningar. */
@@ -246,6 +250,7 @@ export function RsvpFooter({
     cta,
     anmälan = null,
     inbjudan = null,
+    iKortet = false,
 }: {
     event: AppFeedEvent & { userCreated?: boolean; hostName?: string };
     cta: RsvpCta | null;
@@ -253,6 +258,13 @@ export function RsvpFooter({
     anmälan?: Anmälan | null;
     /** Bjud med-länken (?inb=1&fran=<uid>): bannern ovanför knapparna. */
     inbjudan?: { fran: string | null; onStäng: () => void } | null;
+    /**
+     * Kopian i kortets innehåll: ingen hemindikator under, så bara
+     * KORT_LUFT under knapparna (Josef 29/10: "lite mindre padding under
+     * intresserad, kommer, anmäl knappraden"). Den pinnade kopian i botten
+     * behåller safe area-luften.
+     */
+    iKortet?: boolean;
 }) {
     const { användare } = useKonto();
     const insets = useSafeAreaInsets();
@@ -321,7 +333,7 @@ export function RsvpFooter({
     };
 
     return (
-        <View style={[styles.hållare, { paddingBottom: Math.max(10, insets.bottom) }]}>
+        <View style={[styles.hållare, { paddingBottom: iKortet ? KORT_LUFT : Math.max(10, insets.bottom) }]}>
         {inbjudan ? (
             <View style={styles.inbjudan}>
                 <View style={styles.inbjudanText}>

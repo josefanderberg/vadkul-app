@@ -317,7 +317,7 @@ export default function StadScreen() {
                         </View>
                     )}
                     renderItem={({ item }) => (
-                        <EventRad event={item} fråga={qNorm || undefined} onPress={() => öppna(item as AppEvent)} />
+                        <EventRad event={item} fråga={qNorm || undefined} visaPris onPress={() => öppna(item as AppEvent)} />
                     )}
                 />
                 {chipsY !== null && chipsY > 0 ? (

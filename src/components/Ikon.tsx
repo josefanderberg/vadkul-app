@@ -1,5 +1,5 @@
 /**
- * Systemsymboler i stället för emojier för tid, plats och profil (Josef
+ * Systemsymboler i stället för emojier för tid, plats, pris och profil (Josef
  * 28/10: "jag tycker inte om emoji för platser och tid. det blir för många
  * sådana emoji ikoner. även profilknappen ... ha vanlig symbol bara").
  * SF Symbols på iOS, Material Symbols på Android (expo-symbols - finns i
@@ -16,6 +16,7 @@ const SYMBOLER = {
     tid: { ios: 'clock', android: 'schedule' },
     plats: { ios: 'mappin', android: 'location_on' },
     profil: { ios: 'person.fill', android: 'person' },
+    pris: { ios: 'ticket', android: 'confirmation_number' },
 } as const satisfies Record<string, SymbolViewProps['name']>;
 
 export type IkonNamn = keyof typeof SYMBOLER;

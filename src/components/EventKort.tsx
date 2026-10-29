@@ -83,6 +83,7 @@ import { seriensRytm } from '@/lib/anvandarEvent';
 import { useEventDetalj } from '@/api/eventDetalj';
 import { hämtaEngagemang } from '@/data/eventStats';
 import { hämtaStjärnorKvar, prenumereraStjärnmärkta, sättStjärna } from '@/data/stjarnor';
+import { normaliseraPris } from '@/lib/skapaEvent';
 import { kanSättaStjärna } from '@/lib/stjarnor';
 import { useKonto } from '@/lib/kontoContext';
 import { EventChat } from '@/components/EventChat';
@@ -1135,7 +1136,9 @@ function EventInnehåll({
         ? (event.isTip ? '💡 TIPSAT AV EN VADKUL-ANVÄNDARE' : '✨ SKAPAT PÅ VADKUL')
         : null;
     const rytm = event.userCreated ? seriensRytm(event) : null;
-    const pris = event.price != null && String(event.price).trim() ? String(event.price).trim() : null;
+    // Webbens normalizePriceLabel: "160:-" → "160 kr", "fri entré" → "Gratis"
+    // (skrapade event bär källans råtext i flödet sedan 29/10).
+    const pris = normaliseraPris(event.price);
     const utlänk = eventOutlink(event.id, detalj.data?.url ?? event.url);
     const annons = isAffiliateUrl(utlänk);
     // Värd-radens favicon (webbens hostFaviconUrl) - grön initial-avatar för
@@ -1191,9 +1194,14 @@ function EventInnehåll({
     //  - synligt innehåll = arkets höjd minus huvudet; arkets botten är
     //    skärmens botten, så platsen "syns" när slotbotten kommit ovanför.
     //  - setState bara vid flippar (samma värde = ingen omritning).
+    //  - kopian i kortet har mindre luft under knapparna än den pinnade
+    //    (ingen hemindikator under den, Josef 29/10), så släppet mäts mot
+    //    den PINNADE kopians höjd: då står knapparna pixellika i
+    //    släppögonblicket och bara den vita luften under dem skiljer.
     const [fäst, setFäst] = useState(true);
     const [toppRad, setToppRad] = useState(false);
     const slotRef = useRef<{ y: number; h: number } | null>(null);
+    const fotHRef = useRef<number | null>(null);
     const huvudHRef = useRef(230);
     const arkHöjdRef = useRef(arkHöjd);
     arkHöjdRef.current = arkHöjd;
@@ -1209,7 +1217,7 @@ function EventInnehåll({
         }
         const synligt = Math.max(0, arkHöjdRef.current - huvudHRef.current);
         const y = grepp.scrollYRef.current;
-        setFäst(slot.y + slot.h > y + synligt + 1);
+        setFäst(slot.y + (fotHRef.current ?? slot.h) > y + synligt + 1);
         setToppRad(y > slot.y);
     };
     // Nytt stopp, nytt event eller vyväxling flyttar fästet utan scroll.
@@ -1446,7 +1454,7 @@ function EventInnehåll({
                                 räknaFäste();
                             }}
                         >
-                            <RsvpFooter event={event} inbjudan={inbjudan} cta={cta} anmälan={anmälan} />
+                            <RsvpFooter event={event} inbjudan={inbjudan} cta={cta} anmälan={anmälan} iKortet />
                         </View>
                         {/* Vilka som anmält sig (webbens "N anmälda") - bara
                             i kortet, inte i den pinnade kopian eller toppen. */}
@@ -1484,6 +1492,10 @@ function EventInnehåll({
                 {...panHandlers}
                 style={[styles.footerHållare, { transform: [{ translateY: Animated.multiply(footerSkjut, -1) }] }, !fäst && styles.footerSläppt]}
                 pointerEvents={fäst ? 'box-none' : 'none'}
+                onLayout={ev => {
+                    fotHRef.current = ev.nativeEvent.layout.height;
+                    räknaFäste();
+                }}
             >
                 <RsvpFooter event={event} inbjudan={inbjudan} cta={cta} anmälan={anmälan} />
             </Animated.View>
@@ -2041,7 +2053,9 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
     },
     bildChipText: { fontSize: 10, fontWeight: '700', color: '#ffffff' },
-    beskrivning: { paddingHorizontal: 16, paddingTop: 12, fontSize: 14, lineHeight: 21, color: '#334155' },
+    /** Luft under texten innan svarsradens kantlinje (Josef 29/10: "mer
+     *  padding under beskrivningen") - förr stod texten mot linjen. */
+    beskrivning: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 18, fontSize: 14, lineHeight: 21, color: '#334155' },
     anmälda: { paddingHorizontal: 16, paddingTop: 4, fontSize: 12, fontWeight: '800', color: '#64748b' },
     scrollaPill: {
         alignSelf: 'center',

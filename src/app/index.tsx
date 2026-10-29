@@ -28,6 +28,7 @@ import { fetchEventSomFlöde } from '@/api/eventDetalj';
 import { DagValjare } from '@/components/DagValjare';
 import { EventKort, type KortNav } from '@/components/EventKort';
 import { FilterBricka } from '@/components/FilterBricka';
+import { FilterIkon } from '@/components/FilterIkon';
 import { Ikon } from '@/components/Ikon';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
 import { prenumereraStjärnmärkta } from '@/data/stjarnor';
@@ -814,7 +815,7 @@ export default function KartScreen() {
                         onPress={() => router.push({ pathname: '/sok', params: { dag: String(offset) } })}
                         accessibilityLabel="Sök och filtrera"
                     >
-                        <Text style={[styles.rundIkon, filter.aktivt && styles.rundIkonPå]}>☰</Text>
+                        <FilterIkon färg={filter.aktivt ? '#ffffff' : '#0f172a'} />
                     </Pressable>
                 </View>
             </View>
@@ -922,9 +923,7 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         elevation: 4,
     },
-    rundIkon: { fontSize: 19, color: '#0f172a' },
     rundKnappPå: { backgroundColor: '#006AA7' },
-    rundIkonPå: { color: '#ffffff' },
     /** EN kapsel: stadsraden överst, dagchipet inuti längst ner. Insatsen
      *  (6) är skillnaden mellan kapselns radie (22) och chipets (16), så
      *  hörnen blir koncentriska oavsett textlängd - ingen mätning. */

@@ -31,7 +31,6 @@ export type AppEvent = AppFeedEvent & {
     /** Skaparens uid - ägarskap (ta bort/redigera). */
     hostUid?: string;
     description?: string;
-    price?: number | string;
     repeatWeekly?: boolean;
     /** Seriens längd i VECKOR inklusive första. Saknas = tills vidare. */
     repeatWeeks?: number;

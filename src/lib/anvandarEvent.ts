@@ -258,7 +258,8 @@ function tolkaDokument(id: string, v: Record<string, unknown>): Tolkat | null {
         hostName: text(v.hostName) ?? 'VADKUL-användare',
         hostUid: text(v.hostUid),
         description: text(v.description),
-        price: typeof v.price === 'number' || typeof v.price === 'string' ? v.price : undefined,
+        // Flödets form är text (AppFeedEvent.price) - äldre event bär talet.
+        price: typeof v.price === 'number' ? String(v.price) : typeof v.price === 'string' ? v.price : undefined,
         repeatWeekly: !!v.repeatWeekly,
         repeatWeeks: typeof v.repeatWeeks === 'number' && v.repeatWeeks >= 1 ? Math.floor(v.repeatWeeks) : undefined,
         // Utan rytmen vecklades en varannan vecka-serie ut VARJE vecka (webben 15/9).

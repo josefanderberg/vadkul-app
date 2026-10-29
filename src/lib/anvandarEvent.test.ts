@@ -250,7 +250,7 @@ describe('tolkaAnvändarEvent: mappningen', () => {
             id: 'abc', docId: 'abc', title: 'Pubquiz', hasSpecificTime: true, lat: 59.3, lng: 18.1,
             locationName: 'Kvarnen', category: 'music', emoji: '🎤', img: 'https://x/y.jpg',
             userCreated: true, isTip: false, anonTip: false, hostName: 'Anna', hostUid: 'u1',
-            description: 'Välkomna!', price: 50, repeatWeekly: false,
+            description: 'Välkomna!', price: '50', repeatWeekly: false,
         });
         expect(tid(e)).toEqual(new Date(2026, 9, 9, 19, 0));
         expect(typeof e.time).toBe('string');
