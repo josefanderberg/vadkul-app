@@ -966,7 +966,8 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
     },
     laddText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
-    promptYta: { position: 'absolute', left: 16, right: 16, bottom: 196, alignItems: 'center' },
+    // Ovanför dagväljarens + och ↺ (56 pt sedan 29/10, toppen ~202 från botten).
+    promptYta: { position: 'absolute', left: 16, right: 16, bottom: 208, alignItems: 'center' },
     prompt: {
         backgroundColor: '#ffffff',
         borderRadius: 18,

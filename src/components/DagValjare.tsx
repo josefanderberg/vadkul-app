@@ -192,7 +192,8 @@ function KalenderIkon({ färg }: { färg: string }) {
 }
 
 const ikon = StyleSheet.create({
-    ram: { width: 20, height: 20 },
+    // Ritad i 20 pt, skalad till den större cirkeln (56 pt sedan 29/10).
+    ram: { width: 20, height: 20, transform: [{ scale: 1.25 }] },
     kropp: { position: 'absolute', left: 1, top: 3, width: 18, height: 16, borderRadius: 3.5, borderWidth: 2 },
     ögla: { position: 'absolute', top: 0.5, width: 2, height: 5, borderRadius: 1 },
     linje: { position: 'absolute', left: 1, top: 7.5, width: 18, height: 2 },
@@ -200,6 +201,15 @@ const ikon = StyleSheet.create({
 });
 
 const MÖRK = 'rgba(36,42,51,0.92)';
+/** Sidoknapparna = webbens h-14 w-14-cirklar (56 px). Josef 29/10: "den ska
+ *  vara mer rund på sidorna ... sidoknapparna ska vara lite större som på
+ *  webben", och + och ↺ "följdaktligen lika stora". */
+const KNAPP = 56;
+/** Plattans insats runt pilarna. Plattan är KNAPP + 2 * INSATS hög och helt
+ *  rund, så pilcirklarna blir koncentriska med plattans ändar. */
+const INSATS = 4;
+/** Luft mellan + / ↺ och plattan under. */
+const KNAPP_LUFT = 10;
 
 const styles = StyleSheet.create({
     yta: { position: 'absolute', left: 0, right: 0, bottom: 72, alignItems: 'center', gap: 6 },
@@ -208,11 +218,11 @@ const styles = StyleSheet.create({
     rad: { flexDirection: 'row', alignItems: 'center' },
     nollKnapp: {
         position: 'absolute',
-        left: 4,
-        top: -58,
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        left: INSATS,
+        top: -(KNAPP + KNAPP_LUFT),
+        width: KNAPP,
+        height: KNAPP,
+        borderRadius: KNAPP / 2,
         backgroundColor: MÖRK,
         alignItems: 'center',
         justifyContent: 'center',
@@ -222,14 +232,14 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         elevation: 5,
     },
-    nollText: { fontSize: 20, color: '#ffffff', fontWeight: '700' },
+    nollText: { fontSize: 24, color: '#ffffff', fontWeight: '700' },
     skapaKnapp: {
         position: 'absolute',
-        right: 4,
-        top: -58,
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        right: INSATS,
+        top: -(KNAPP + KNAPP_LUFT),
+        width: KNAPP,
+        height: KNAPP,
+        borderRadius: KNAPP / 2,
         backgroundColor: '#0077BC',
         borderWidth: 2,
         borderColor: '#f0b429',
@@ -241,14 +251,13 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         elevation: 5,
     },
-    skapaText: { fontSize: 24, fontWeight: '700', color: '#ffffff', marginTop: -2 },
+    skapaText: { fontSize: 28, fontWeight: '700', color: '#ffffff', marginTop: -2 },
     platta: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: MÖRK,
-        borderRadius: 26,
-        paddingHorizontal: 6,
-        paddingVertical: 6,
+        borderRadius: 999,
+        padding: INSATS,
         shadowColor: '#000',
         shadowOpacity: 0.25,
         shadowRadius: 8,
@@ -258,9 +267,9 @@ const styles = StyleSheet.create({
     /** Pilarna är ÄKTA CIRKLAR med synlig platta - webbens dagpilar
      *  (bg-white/10, kart-ui 1/9: "lika hög som bred"), så rundningen syns. */
     pil: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: KNAPP,
+        height: KNAPP,
+        borderRadius: KNAPP / 2,
         backgroundColor: 'rgba(255,255,255,0.1)',
         alignItems: 'center',
         justifyContent: 'center',
@@ -293,7 +302,7 @@ const styles = StyleSheet.create({
     kalenderRubrik: { fontSize: 16, fontWeight: '900', color: '#0f172a', paddingHorizontal: 8, marginBottom: 4 },
     kalenderStäng: { alignSelf: 'center', marginTop: 4, paddingHorizontal: 20, paddingVertical: 10 },
     kalenderStängText: { fontSize: 15, fontWeight: '800', color: '#006AA7' },
-    pilText: { fontSize: 24, fontWeight: '700', color: '#ffffff', marginTop: -3 },
+    pilText: { fontSize: 30, fontWeight: '700', color: '#ffffff', marginTop: -3 },
     radKolumn: { minWidth: 210, gap: 2 },
     periodRad: {
         flexDirection: 'row',
@@ -301,7 +310,9 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         borderRadius: 999,
         paddingHorizontal: 14,
-        paddingVertical: 5,
+        // 4 (inte 5): de två raderna ska rymmas i pilcirkelns höjd, annars
+        // blir plattan högre än KNAPP + 2 * INSATS och ändarna ovala.
+        paddingVertical: 4,
     },
     periodRadVald: { backgroundColor: '#ffffff' },
     radText: { fontSize: 13, fontWeight: '800', color: 'rgba(255,255,255,0.85)', letterSpacing: 1 },

@@ -1964,9 +1964,12 @@ const styles = StyleSheet.create({
     stjärnKnapp: { width: 36, height: 36, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fcd34d' },
     stjärnHar: { backgroundColor: '#fef3c7' },
     stjärnText: { fontSize: 17, color: '#f59e0b', marginTop: -1 },
-    hjärtKnapp: { width: 36, height: 36, backgroundColor: '#ffffff', borderWidth: 1, borderColor: KANT },
-    /** Med gilla-siffra: släpp fasta bredden (webbens px-2.5 + gap-1). */
-    hjärtKnappBred: { width: undefined, flexDirection: 'row', gap: 4, paddingHorizontal: 10 },
+    // minWidth, inte width: `width: undefined` i Bred-stilen släppte INTE
+    // den fasta bredden, så hjärtat + siffran trängdes in i 36 pt och
+    // hjärtat klipptes på sidan (Josef 29/10).
+    hjärtKnapp: { minWidth: 36, height: 36, backgroundColor: '#ffffff', borderWidth: 1, borderColor: KANT },
+    /** Med gilla-siffra: växer med innehållet (webbens px-2.5 + gap-1). */
+    hjärtKnappBred: { flexDirection: 'row', gap: 4, paddingHorizontal: 10 },
     hjärtSparad: { backgroundColor: '#fff1f2', borderColor: '#fecdd3' },
     hjärtText: { fontSize: 18, color: '#94a3b8', marginTop: -2 },
     hjärtTextSparad: { color: '#f43f5e' },
