@@ -49,6 +49,7 @@ import { useKonto } from '@/lib/kontoContext';
 import { inbjudningsUrl, rsvpShareId, type RsvpStatus } from '@/lib/rsvp';
 import { hämtaEngagemang, räknaKlick, type Engagemang } from '@/data/eventStats';
 import { hämtaAnsikten, type RsvpAnsikte } from '@/data/rsvp';
+import type { Anmälan } from '@/lib/useAnmalan';
 import { accepteraVänförfrågan, hämtaAnvändareLite, hämtaMinVänrelation, skickaVänförfrågan } from '@/data/vanner';
 
 /** Räknaren efter eget tryck: baslinjen från läsningen, justerad för hur
@@ -154,6 +155,34 @@ function CtaKnapp({ event, cta }: { event: AppFeedEvent & { hostName?: string };
 }
 
 /**
+ * ANMÄL för VADKUL-värdade event (29/10, Josef: "anmälknappen finns inte
+ * ens"): samma plats och form som utlänkens pill, men trycket anmäler i
+ * appen (lib/useAnmalan) i stället för att öppna en länk - därför ingen
+ * pil. Anmäld = grön "ANMÄLD" (webbens "DU ÄR ANMÄLD", utan ✓ - inga
+ * symboler i svarsradens knappar, 7/10); ett nytt tryck tar bort anmälan.
+ */
+function AnmälKnapp({ anmälan }: { anmälan: Anmälan }) {
+    return (
+        <Pressable
+            onPress={anmälan.växla}
+            disabled={anmälan.upptagen}
+            accessibilityRole="button"
+            accessibilityState={{ selected: anmälan.anmäld, busy: anmälan.upptagen }}
+            accessibilityLabel={anmälan.anmäld ? 'Du är anmäld - tryck för att ta bort anmälan' : 'Anmäl dig till eventet'}
+            style={({ pressed }) => [
+                styles.cta,
+                anmälan.anmäld ? styles.ctaAnmäld : styles.ctaBlå,
+                (pressed || anmälan.upptagen) && styles.tryckt,
+            ]}
+        >
+            <Text style={[styles.ctaText, styles.ctaTextBlå]} numberOfLines={1} maxFontSizeMultiplier={TEXTSKALA}>
+                {anmälan.anmäld ? 'ANMÄLD' : 'ANMÄL'}
+            </Text>
+        </Pressable>
+    );
+}
+
+/**
  * HELA RADEN PÅ EN RAD: Intresserad · Kommer · Bjud med · ANMÄL/BOKA (Josef
  * 23/10: "kommer, intresserad, anmäl - den ska aldrig vara på 2 rader").
  * Samma rad i footern, på radens plats i kortet och i toppraden - ANMÄL
@@ -161,16 +190,17 @@ function CtaKnapp({ event, cta }: { event: AppFeedEvent & { hostName?: string };
  * Textknapparna får krympa (flexShrink, avklippt text) innan något bryts;
  * ikonknappen och ANMÄL håller sin bredd.
  */
-function SvarsRad({ svar, event, cta }: {
+function SvarsRad({ svar, event, cta, anmälan }: {
     svar: Svarsläge;
     event: AppFeedEvent & { hostName?: string };
     cta: RsvpCta | null;
+    anmälan: Anmälan | null;
 }) {
     return (
         <View style={styles.platta}>
             <SvarsKnappar svar={svar} />
             <View style={styles.fyll} />
-            {cta ? <CtaKnapp event={event} cta={cta} /> : null}
+            {cta ? <CtaKnapp event={event} cta={cta} /> : anmälan ? <AnmälKnapp anmälan={anmälan} /> : null}
         </View>
     );
 }
@@ -193,9 +223,11 @@ function SvarsRad({ svar, event, cta }: {
  * ryckte upp - Josef 28/10: "för mycket som rör på sig"). Titeln en gång,
  * i huvudet, och här bara knapparna.
  */
-export function RsvpToppRad({ event, cta }: {
+export function RsvpToppRad({ event, cta, anmälan = null }: {
     event: AppFeedEvent & { userCreated?: boolean; hostName?: string };
     cta: RsvpCta | null;
+    /** VADKUL-värdade event: ANMÄL i appen (lib/useAnmalan), annars null. */
+    anmälan?: Anmälan | null;
 }) {
     const svar = useSvar(event);
     return (
@@ -203,7 +235,7 @@ export function RsvpToppRad({ event, cta }: {
             {/* Annons-märkningen följer provisionslänken även här - den
                 långa texten bor i raden i kortet. */}
             {cta?.annons ? <Text style={styles.toppAnnons}>ANNONS</Text> : null}
-            <SvarsRad svar={svar} event={event} cta={cta} />
+            <SvarsRad svar={svar} event={event} cta={cta} anmälan={anmälan} />
         </View>
     );
 }
@@ -212,10 +244,13 @@ export function RsvpFooter({
     event,
     /** ANMÄL/BOKA-pillret - null när eventet saknar utlänk. */
     cta,
+    anmälan = null,
     inbjudan = null,
 }: {
     event: AppFeedEvent & { userCreated?: boolean; hostName?: string };
     cta: RsvpCta | null;
+    /** VADKUL-värdade event: ANMÄL i appen (lib/useAnmalan), annars null. */
+    anmälan?: Anmälan | null;
     /** Bjud med-länken (?inb=1&fran=<uid>): bannern ovanför knapparna. */
     inbjudan?: { fran: string | null; onStäng: () => void } | null;
 }) {
@@ -336,7 +371,7 @@ export function RsvpFooter({
                 </Text>
             </View>
         ) : null}
-        <SvarsRad svar={svar} event={event} cta={cta} />
+        <SvarsRad svar={svar} event={event} cta={cta} anmälan={anmälan} />
         {/* Annons-märkningen för affiliatelänkar bor i footern (7/10 kväll). */}
         {cta?.annons ? <Text style={styles.annons}>{cta.annons}</Text> : null}
         </View>
@@ -479,6 +514,8 @@ const styles = StyleSheet.create({
     cta: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, flexShrink: 0 },
     ctaBlå: { backgroundColor: '#0077BC' },
     ctaGuld: { backgroundColor: '#f0b429' },
+    /** Anmäld till ett VADKUL-event - webbens emerald "DU ÄR ANMÄLD". */
+    ctaAnmäld: { backgroundColor: '#059669' },
     ctaText: { fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
     ctaTextBlå: { color: '#ffffff' },
     ctaTextGuld: { color: '#451a03' },

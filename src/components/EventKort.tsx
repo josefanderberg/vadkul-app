@@ -23,6 +23,8 @@
  *    (kart-ui 2/9). Bakåt/Nästa står där även när kortet visar
  *    VÄLJARLISTAN (23/10) - Nästa går då vidare från högens plats.
  *  - Hjärtat sparar på enheten (lib/sparadeContext), ANMÄL öppnar källan -
+ *    på egna VADKUL-event anmäler den i appen i stället (29/10,
+ *    lib/useAnmalan, med "N anmälda" under raden) -
  *    BOKA i guld för Ticketmaster (ägarbeslut 1/9) med webbens
  *    "Annons"-märkning under. DELA-KNAPPEN ÄR RIVEN (webben 7/10) - Bjud med
  *    i footern delar.
@@ -111,6 +113,8 @@ import { distanceKm, nearestCity } from '@/lib/regionVal';
 import { klistradDag, type DagPlats } from '@/lib/klistradDag';
 import { höjdEfterHuvudbyte, landning, sheetStops } from '@/lib/sheetSnap';
 import { useSparade } from '@/lib/sparadeContext';
+import { anmäldaRad } from '@/lib/anmalan';
+import { useAnmälan } from '@/lib/useAnmalan';
 import { AFFILIATE_DISCLOSURE, isAffiliateUrl, isTicketmasterEvent } from '@/lib/ticketmaster';
 import { eventDagar } from '@/lib/vy';
 
@@ -1172,6 +1176,9 @@ function EventInnehåll({
     const cta: RsvpCta | null = utlänk
         ? { url: utlänk, label: tm ? 'BOKA' : 'ANMÄL', guld: tm, annons: annons ? AFFILIATE_DISCLOSURE : null }
         : null;
+    // Egna VADKUL-event har ingen utlänk - där anmäler ANMÄL i appen (29/10,
+    // webbens "ANMÄL DIG" i LinkEventCard). En instans för radens tre kopior.
+    const anmälan = useAnmälan(event);
 
     // SVARSRADENS FÄSTE (webbens sticky bottom-0, Josef 7/10 kväll: "den kan
     // ju vara där nere i footern tills dess att vi kommer fram till där de
@@ -1412,7 +1419,7 @@ function EventInnehåll({
                 grepp={grepp}
                 contentContainerStyle={styles.innehållMedFooter}
                 tangentbordsInsets
-                topp={toppRad && !listLäge ? <RsvpToppRad event={event} cta={cta} /> : null}
+                topp={toppRad && !listLäge ? <RsvpToppRad event={event} cta={cta} anmälan={anmälan} /> : null}
                 onScrollY={räknaFäste}
             >
                 {/* Under sökning - och när filtret valt bort eventet - visas
@@ -1439,8 +1446,11 @@ function EventInnehåll({
                                 räknaFäste();
                             }}
                         >
-                            <RsvpFooter event={event} inbjudan={inbjudan} cta={cta} />
+                            <RsvpFooter event={event} inbjudan={inbjudan} cta={cta} anmälan={anmälan} />
                         </View>
+                        {/* Vilka som anmält sig (webbens "N anmälda") - bara
+                            i kortet, inte i den pinnade kopian eller toppen. */}
+                        {anmälan ? <Text style={styles.anmälda}>{anmäldaRad(anmälan.lista)}</Text> : null}
                         <EventChat event={event} fran={inbjudan?.fran ?? null} />
                         <FlerFran
                             rad={flerFrån}
@@ -1475,7 +1485,7 @@ function EventInnehåll({
                 style={[styles.footerHållare, { transform: [{ translateY: Animated.multiply(footerSkjut, -1) }] }, !fäst && styles.footerSläppt]}
                 pointerEvents={fäst ? 'box-none' : 'none'}
             >
-                <RsvpFooter event={event} inbjudan={inbjudan} cta={cta} />
+                <RsvpFooter event={event} inbjudan={inbjudan} cta={cta} anmälan={anmälan} />
             </Animated.View>
             <HelskarmsBild uri={helskärm} onClose={() => setHelskärm(null)} />
         </>
@@ -2029,6 +2039,7 @@ const styles = StyleSheet.create({
     },
     bildChipText: { fontSize: 10, fontWeight: '700', color: '#ffffff' },
     beskrivning: { paddingHorizontal: 16, paddingTop: 12, fontSize: 14, lineHeight: 21, color: '#334155' },
+    anmälda: { paddingHorizontal: 16, paddingTop: 4, fontSize: 12, fontWeight: '800', color: '#64748b' },
     scrollaPill: {
         alignSelf: 'center',
         marginTop: 16,
