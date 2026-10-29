@@ -14,7 +14,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 
 const SYMBOLER = {
     tid: { ios: 'clock', android: 'schedule' },
-    plats: { ios: 'mappin.and.ellipse', android: 'location_on' },
+    plats: { ios: 'mappin', android: 'location_on' },
     profil: { ios: 'person.fill', android: 'person' },
 } as const satisfies Record<string, SymbolViewProps['name']>;
 
