@@ -95,7 +95,7 @@ const ETIKETT_STIL = {
 };
 
 export default function KartScreen() {
-    const { city, region, fromGps, manuell, klar, introKlar, väljStad } = useRegionVal();
+    const { city, region, fromGps, manuell, gpsValt, klar, introKlar, väljStad } = useRegionVal();
     const feed = useEvent(region);
     const maxOffset = horisontOffset(feed.horisontDagar);
     const filter = useFilter();
@@ -161,12 +161,14 @@ export default function KartScreen() {
      *  (webbens liveCityName) - kartans mitt beskriver ännu förra stället.
      *  Släpps när kartan stannat. */
     const [hoppNamn, setHoppNamn] = useState<string | null>(null);
-    /** Stadsläget vid förra körningen - GPS-svaret jämförs mot det. */
-    const förraStadRef = useRef<KartStadsläge>({ slug: city.slug, fromGps, manuell });
+    /** Stadsläget vid förra körningen - GPS-svaret jämförs mot det. "Återgå
+     *  till min plats" (gpsValt) är ett eget val: då flyger kameran även när
+     *  GPS:en landar i staden som redan visas (startvalet 31/10). */
+    const förraStadRef = useRef<KartStadsläge>({ slug: city.slug, fromGps, manuell: manuell || gpsValt });
     useEffect(() => {
         if (!klar) return;
         const förra = förraStadRef.current;
-        const ny: KartStadsläge = { slug: city.slug, fromGps, manuell };
+        const ny: KartStadsläge = { slug: city.slug, fromGps, manuell: manuell || gpsValt };
         förraStadRef.current = ny;
         if (förstaRef.current) {
             förstaRef.current = false;
@@ -188,7 +190,7 @@ export default function KartScreen() {
         landningRef.current = city.slug;
         setHoppNamn(city.name);
         cameraRef.current?.flyTo({ center: [city.lng, city.lat], zoom: 11, duration: 1500 });
-    }, [klar, city.slug, city.name, city.lng, city.lat, fromGps, manuell]);
+    }, [klar, city.slug, city.name, city.lng, city.lat, fromGps, manuell, gpsValt]);
 
     // Auto-hoppet till Imorgon: en gång per landning, när rutan står över
     // staden och flödet finns (webbens utils/autoDayBump - kartans ruta).

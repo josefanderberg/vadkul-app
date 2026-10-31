@@ -34,6 +34,10 @@ export interface RegionState {
     fromGps: boolean;
     /** true när användaren valt stad själv (under besöket). */
     manuell: boolean;
+    /** true när användaren själv bett om GPS-staden ("Återgå till min plats")
+     *  - kartan räknar det som ett eget val och flyger dit, även när GPS:en
+     *  landar i staden som redan visas (lib/startstad stadsbyteFlyger). */
+    gpsValt: boolean;
     /** Startstaden och startvalet är inlästa - kartan kan ritas. */
     klar: boolean;
     /** Användarens position (första GPS-fixen), null utan behörighet. */
@@ -107,6 +111,7 @@ export function RegionProvider({ children }: { children: ReactNode }) {
         region: city.region,
         fromGps,
         manuell: vald !== null,
+        gpsValt: gpsVald,
         klar,
         minPos: gps.pos,
         väljStad: setVald,
@@ -125,7 +130,7 @@ export function RegionProvider({ children }: { children: ReactNode }) {
         introKlar: introLaddad ? introKlar : null,
         avslutaIntro: () => setIntroKlar(true),
         begärPlats: () => setPlatsBegärd(true),
-    }), [city, vald, fromGps, valdStart, gps.pos, klar, introLaddad, introKlar, setIntroKlar]);
+    }), [city, vald, fromGps, gpsVald, valdStart, gps.pos, klar, introLaddad, introKlar, setIntroKlar]);
 
     return <RegionContext.Provider value={value}>{children}</RegionContext.Provider>;
 }

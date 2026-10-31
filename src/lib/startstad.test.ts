@@ -29,6 +29,10 @@ describe('stadsbyteFlyger (kameran när kartans stad ändras)', () => {
         expect(stadsbyteFlyger(läge('vaxjo', false, false), läge('umea', false, true))).toBe(true);
         expect(stadsbyteFlyger(läge('vaxjo', true, false), läge('vaxjo', false, true))).toBe(true);
     });
+    it('"Återgå till min plats" från startstaden flyger även när GPS:en landar i samma stad', () => {
+        // Startvalet Växjö visas, man trycker på knappen (gpsValt -> manuell) och GPS:en säger Växjö.
+        expect(stadsbyteFlyger(läge('vaxjo', false, false), läge('vaxjo', true, true))).toBe(true);
+    });
     it('tillbaka från ett eget val till GPS-staden flyger, även om sluggen är densamma', () => {
         expect(stadsbyteFlyger(läge('vaxjo', false, true), läge('vaxjo', true, false))).toBe(true);
         expect(stadsbyteFlyger(läge('umea', false, true), läge('vaxjo', true, false))).toBe(true);

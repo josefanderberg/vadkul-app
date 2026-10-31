@@ -28,7 +28,8 @@ export interface KartStadsläge {
     slug: string;
     /** Staden kommer ur en riktig GPS-fix (regionContext). */
     fromGps: boolean;
-    /** Staden är ett eget val (stadssidan, söket, Städer). */
+    /** Staden är ett eget val (stadssidan, söket, Städer) - eller en egen
+     *  begäran om GPS-staden ("Återgå till min plats", regionContext gpsValt). */
     manuell: boolean;
 }
 
