@@ -27,7 +27,7 @@ import {
 const BLÅ = '#006AA7';
 
 export default function StaderScreen() {
-    const { city, manuell, tillGpsStad } = useRegionVal();
+    const { city, manuell, fromGps, valdStartstad, tillGpsStad } = useRegionVal();
     const [filter, setFilter] = useState('');
     const [sortering, setSortering] = useState<TopplistSortering>('totalt');
     const { antal } = useStadsAntal();
@@ -52,7 +52,7 @@ export default function StaderScreen() {
                 <View style={styles.huvudText}>
                     <Text style={styles.rubrik}>Städer</Text>
                     <Text style={styles.underRubrik}>
-                        Kartans stad: {city.name}{manuell ? '' : ' (via din plats)'}
+                        Kartans stad: {city.name}{fromGps ? ' (via din plats)' : ''}
                     </Text>
                 </View>
                 <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stangKnapp} accessibilityLabel="Stäng">
@@ -68,7 +68,7 @@ export default function StaderScreen() {
                 autoCorrect={false}
                 clearButtonMode="while-editing"
             />
-            {manuell ? (
+            {manuell || (valdStartstad !== null && !fromGps) ? (
                 <Pressable style={({ pressed }) => [styles.gpsKnapp, pressed && styles.tryckt]} onPress={tillGpsStad}>
                     <Text style={styles.gpsText}>📡 Återgå till min plats</Text>
                 </Pressable>
