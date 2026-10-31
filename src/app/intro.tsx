@@ -1,6 +1,17 @@
 /**
- * Introt - första starten. Fem sidor på VADKUL-blått: vad VADKUL är, hur
- * kartan läses, sök/filter/spara, platsfrågan och kontot.
+ * Introt - första starten. Sex sidor på VADKUL-blått: vad VADKUL är, hur
+ * kartan läses, sök/filter/spara, startstadsvalet, kategorierna och kontot.
+ *
+ * Startstadsvalet (sida 4) + kategorisidan (sida 5) är webbens StartCityPicker
+ * (ägarbeslut 8/10 2026, förebild happymap.se) i introts form:
+ *  - "Använd min plats" ELLER en startstad ur kontraktets CITIES (snabbval +
+ *    sök). Valet sparas (lib/startval via regionContext.väljStartstad) och
+ *    VINNER över GPS:en och Stockholm-fallbacken; med vald stad ställs ingen
+ *    platsfråga vid start.
+ *  - Kategorisidan är väljarens steg 2: 🔥 Populära först, kategorierna och
+ *    Fler (källorna). Valen går rakt in i det vanliga sparade kartfiltret
+ *    (lib/filterContext, som redan har sökpanelens växlingsregler: källan
+ *    utesluter kategorierna och 🔥; kategorier sparas, 🔥/källa gäller besöket).
  *
  * Två saker introt INTE är:
  *  - ingen kamerarörelse på kartan (kart-ui: "DET FINNS INGET INTRO" gäller
@@ -19,14 +30,17 @@ import { useRef, useState } from 'react';
 import {
     Animated,
     Image,
+    Keyboard,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     useWindowDimensions,
     View,
 } from 'react-native';
 import { router } from 'expo-router';
+import { CITIES, EVENT_CATEGORY_KEYS, type City, type EventCategoryType } from '@vadkul/kontrakt';
 import { Ikon, type IkonNamn } from '@/components/Ikon';
 import {
     INTRO_EVENT,
@@ -34,20 +48,29 @@ import {
     INTRO_SÖK,
     IntroBakgrund,
     MolnMedBrickor,
-    PlatsPuls,
     SvävandeTelefon,
     TelefonPar,
     useTelefonHöjd,
 } from '@/components/IntroScen';
-import { useRegionVal } from '@/lib/regionContext';
+import { useFilter } from '@/lib/filterContext';
 import { KONTON_PÅ } from '@/lib/funktioner';
+import { KÄLLOR } from '@/lib/kartFilter';
+import { KATEGORIER } from '@/lib/kategorier';
+import { useRegionVal } from '@/lib/regionContext';
+import { searchCities } from '@/lib/sok';
+import { snabbvalsStäder } from '@/lib/startval';
 
 const BLÅ = '#006aa7';
 const MOLN = require('../../assets/images/splash-icon.png');
 
-/** Kontosidan utgår i v1 (lib/funktioner: KONTON_PÅ) - då är platsfrågan sista steget. */
-const SIDOR = KONTON_PÅ ? 5 : 4;
+/** Kontosidan utgår i v1 (lib/funktioner: KONTON_PÅ) - då är kategorisidan sista steget. */
+const SIDOR = KONTON_PÅ ? 6 : 5;
 const PLATS_SIDA = 3;
+const KATEGORI_SIDA = 4;
+
+/** Väljarens kategorier - Övrigt är inget val (webbens CATEGORY_KEYS). */
+const INTRO_KATEGORIER = EVENT_CATEGORY_KEYS.filter(k => k !== 'other');
+const SNABBVAL = snabbvalsStäder(8);
 
 /** Kontosidans fördelar - symboler, inte emojier, för profil och plats (ägarbeslut 28/10). */
 const FÖRDELAR: [IkonNamn | '✨', string][] = [
@@ -58,16 +81,36 @@ const FÖRDELAR: [IkonNamn | '✨', string][] = [
 
 export default function IntroScreen() {
     const { width } = useWindowDimensions();
-    const { avslutaIntro, begärPlats } = useRegionVal();
+    const { avslutaIntro, begärPlats, väljStartstad } = useRegionVal();
+    const filter = useFilter();
     const scrollRef = useRef<ScrollView>(null);
     const scrollX = useRef(new Animated.Value(0)).current;
     const telefonHöjd = useTelefonHöjd();
     const [sida, setSida] = useState(0);
-    const [platsSvar, setPlatsSvar] = useState(false);
+    /** Platssidans svar: 'plats' = min plats, City = vald startstad. */
+    const [svar, setSvar] = useState<'plats' | City | null>(null);
+    const [ortSök, setOrtSök] = useState('');
+    const [flerÖppet, setFlerÖppet] = useState(false);
+
+    const valdOrt = svar !== null && svar !== 'plats' ? svar : null;
+    const träffar = ortSök.trim().length >= 2 ? searchCities(ortSök, 8) : SNABBVAL;
 
     const gåTill = (i: number) => {
         scrollRef.current?.scrollTo({ x: i * width, animated: true });
         setSida(i);
+    };
+
+    const väljPlats = () => {
+        väljStartstad(null);
+        setSvar('plats');
+        begärPlats();
+    };
+
+    const väljOrt = (c: City) => {
+        väljStartstad(c);
+        setSvar(c);
+        Keyboard.dismiss();
+        gåTill(KATEGORI_SIDA);
     };
 
     const klar = (vidare?: '/konto?lage=skapa' | '/konto?lage=logga-in') => {
@@ -94,6 +137,7 @@ export default function IntroScreen() {
                     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
                     { useNativeDriver: true },
                 )}
+                keyboardShouldPersistTaps="handled"
                 onMomentumScrollEnd={e => setSida(Math.round(e.nativeEvent.contentOffset.x / width))}
             >
                 <Sida width={width}>
@@ -123,23 +167,88 @@ export default function IntroScreen() {
                     </Text>
                 </Sida>
 
-                <Sida width={width}>
-                    <PlatsPuls />
-                    <Text style={styles.rubrik}>Var är du?</Text>
+                {/* Startvalet behöver plats för sökfält och orter ovanför
+                    tangentbordet - därför innehållet i topp och ingen
+                    platspuls här (components/IntroScen PlatsPuls). */}
+                <Sida width={width} topp>
+                    <Text style={styles.rubrik}>Var vill du börja?</Text>
                     <Text style={styles.text}>
-                        Med din plats öppnar kartan direkt över din stad. Platsen stannar i telefonen - vi sparar
-                        bara vilken stad du är i.
+                        Kartan öppnar där varje gång du kommer tillbaka - och din plats stannar i telefonen.
                     </Text>
-                    {platsSvar ? (
+                    {svar === 'plats' ? (
                         <Text style={styles.kvitto}>Tack! Kartan hittar din stad.</Text>
                     ) : (
                         <Pressable
                             style={({ pressed }) => [styles.knappVit, pressed && styles.tryckt]}
-                            onPress={() => { begärPlats(); setPlatsSvar(true); }}
+                            onPress={väljPlats}
                         >
-                            <Text style={styles.knappVitText}>Använd min plats</Text>
+                            <View style={styles.knappRad}>
+                                <Ikon namn="plats" storlek={17} färg={BLÅ} />
+                                <Text style={styles.knappVitText}>Använd min plats</Text>
+                            </View>
                         </Pressable>
                     )}
+                    <Text style={styles.eller}>eller välj en startstad</Text>
+                    <TextInput
+                        style={styles.sökFält}
+                        value={ortSök}
+                        onChangeText={setOrtSök}
+                        placeholder={`Sök bland ${CITIES.length} orter …`}
+                        placeholderTextColor="rgba(255,255,255,0.55)"
+                        autoCorrect={false}
+                        autoCapitalize="words"
+                        returnKeyType="search"
+                        clearButtonMode="while-editing"
+                        onSubmitEditing={() => { if (träffar[0]) väljOrt(träffar[0]); }}
+                    />
+                    <View style={styles.valChipRad}>
+                        {träffar.length === 0 ? (
+                            <Text style={styles.ingenTräff}>Hittar ingen ort som heter så.</Text>
+                        ) : (
+                            träffar.map(c => (
+                                <ValChip
+                                    key={c.slug}
+                                    text={c.name}
+                                    vald={valdOrt?.slug === c.slug}
+                                    onPress={() => väljOrt(c)}
+                                />
+                            ))
+                        )}
+                    </View>
+                </Sida>
+
+                <Sida width={width}>
+                    <Text style={styles.rubrik}>Vad gillar du?</Text>
+                    <Text style={styles.text}>
+                        {valdOrt ? `Vi visar det först i ${valdOrt.name}.` : 'Vi visar det först där du är.'}
+                        {' '}Välj ingen så ser du allt.
+                    </Text>
+                    <View style={styles.valChipRad}>
+                        <ValChip text="🔥 Populära" vald={filter.populärt} onPress={filter.växlaPopulärt} />
+                        {INTRO_KATEGORIER.map(k => (
+                            <ValChip
+                                key={k}
+                                text={`${KATEGORIER[k].emoji} ${KATEGORIER[k].label}`}
+                                vald={filter.kategorier.has(k as EventCategoryType)}
+                                onPress={() => filter.växlaKategori(k as EventCategoryType)}
+                            />
+                        ))}
+                        <ValChip
+                            text={flerÖppet ? 'Färre' : 'Fler …'}
+                            vald={flerÖppet || filter.källa !== null}
+                            onPress={() => setFlerÖppet(o => !o)}
+                        />
+                        {flerÖppet
+                            ? KÄLLOR.map(k => (
+                                <ValChip
+                                    key={k.key}
+                                    text={`${k.emoji} ${k.label}`}
+                                    vald={filter.källa === k.key}
+                                    onPress={() => filter.växlaKälla(k.key)}
+                                />
+                            ))
+                            : null}
+                    </View>
                 </Sida>
 
                 {KONTON_PÅ ? (
@@ -185,7 +294,7 @@ export default function IntroScreen() {
                         style={({ pressed }) => [styles.nästa, pressed && styles.tryckt]}
                         onPress={() => gåTill(sida + 1)}
                     >
-                        <Text style={styles.nästaText}>{sida === PLATS_SIDA && !platsSvar ? 'Inte nu' : 'Nästa'}</Text>
+                        <Text style={styles.nästaText}>{sida === PLATS_SIDA && !svar ? 'Inte nu' : 'Nästa'}</Text>
                     </Pressable>
                 ) : KONTON_PÅ ? (
                     <View style={styles.nästaPlats} />
@@ -194,7 +303,7 @@ export default function IntroScreen() {
                         style={({ pressed }) => [styles.nästa, pressed && styles.tryckt]}
                         onPress={() => klar()}
                     >
-                        <Text style={styles.nästaText}>{platsSvar ? 'Kom igång' : 'Inte nu'}</Text>
+                        <Text style={styles.nästaText}>{filter.aktivt ? 'Visa kartan' : 'Visa allt'}</Text>
                     </Pressable>
                 )}
             </View>
@@ -202,8 +311,20 @@ export default function IntroScreen() {
     );
 }
 
-function Sida({ width, children }: { width: number; children: React.ReactNode }) {
-    return <View style={[styles.sida, { width }]}>{children}</View>;
+function Sida({ width, topp, children }: { width: number; topp?: boolean; children: React.ReactNode }) {
+    return <View style={[styles.sida, { width }, topp && styles.sidaTopp]}>{children}</View>;
+}
+
+/** Valbart chip på den blå botten (orter, kategorier, källor). */
+function ValChip({ text, vald, onPress }: { text: string; vald: boolean; onPress: () => void }) {
+    return (
+        <Pressable
+            onPress={onPress}
+            style={({ pressed }) => [styles.valChip, vald && styles.valChipVald, pressed && styles.tryckt]}
+        >
+            <Text style={[styles.valChipText, vald && styles.valChipTextVald]}>{text}</Text>
+        </Pressable>
+    );
 }
 
 const styles = StyleSheet.create({
@@ -211,10 +332,49 @@ const styles = StyleSheet.create({
     hoppa: { position: 'absolute', top: 62, right: 22, zIndex: 2 },
     hoppaText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '700' },
     sida: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, paddingBottom: 110 },
+    /** Platssidan: innehållet i topp så sökfältet och orterna går fria från tangentbordet. */
+    sidaTopp: { alignItems: 'stretch', justifyContent: 'flex-start', paddingTop: 84 },
     litetMoln: { width: 120, height: 84, marginBottom: 20 },
     rubrik: { color: '#ffffff', fontSize: 28, fontWeight: '900', textAlign: 'center' },
     text: { marginTop: 14, color: 'rgba(255,255,255,0.9)', fontSize: 16, lineHeight: 24, textAlign: 'center' },
-    kvitto: { marginTop: 26, color: '#ffffff', fontSize: 16, fontWeight: '800' },
+    kvitto: { marginTop: 24, color: '#ffffff', fontSize: 16, fontWeight: '800', textAlign: 'center', paddingVertical: 8 },
+    knappRad: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    eller: {
+        marginTop: 20,
+        marginBottom: 10,
+        color: 'rgba(255,255,255,0.75)',
+        fontSize: 13,
+        fontWeight: '800',
+        textAlign: 'center',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    sökFält: {
+        backgroundColor: 'rgba(255,255,255,0.16)',
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    valChipRad: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 8,
+        marginTop: 14,
+    },
+    valChip: {
+        backgroundColor: 'rgba(255,255,255,0.16)',
+        borderRadius: 999,
+        paddingHorizontal: 13,
+        paddingVertical: 8,
+    },
+    valChipVald: { backgroundColor: '#ffffff' },
+    valChipText: { fontSize: 14, fontWeight: '800', color: '#ffffff' },
+    valChipTextVald: { color: BLÅ },
+    ingenTräff: { color: 'rgba(255,255,255,0.75)', fontSize: 14, fontWeight: '600' },
     fördelar: { marginTop: 18, marginBottom: 26, gap: 10, alignSelf: 'stretch' },
     fördelRad: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
     fördelIkon: { width: 26, height: 22, alignItems: 'center', justifyContent: 'center' },

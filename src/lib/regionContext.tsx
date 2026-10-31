@@ -8,29 +8,44 @@
  * står still; GPS-svaret gör ETT hopp om man flyttat sig. `klar` är false tills
  * lagringen lästs - kartan väntar på den så första bildrutan redan ligger rätt
  * (ingen hoppande kamera från Stockholm).
+ *
+ * VALD startstad (lib/startval, webbens utils/startChoice - ägarbeslut 8/10
+ * 2026): introts stadsval VINNER över GPS:en och Stockholm-fallbacken, och
+ * med en vald stad ställs ingen platsfråga vid start alls (webbens "Vald
+ * stad = ingen fråga alls") - GPS:en begärs först när användaren ber om den
+ * ("Använd min plats" / "Återgå till min plats"). Hela prioritetskedjan bor
+ * i lib/startval (utgångsStad) så den kan testas rent.
  */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { City } from '@vadkul/kontrakt';
 import { läs, NYCKEL, skriv, useLagrad } from './lagring';
 import { DEFAULT_CITY } from './regionVal';
 import { tolkaStartstad, type SparadStartstad } from './startstad';
+import { tolkaStartval, utgångsStad } from './startval';
 import { useRegion } from './useRegion';
 
 export interface RegionState {
-    /** Staden kartan och flödet utgår från (manuell > GPS > sparad start > standard). */
+    /** Staden kartan och flödet utgår från (prioriteten i lib/startval). */
     city: City;
     /** Flödets region (län-slug). */
     region: string;
-    /** true när staden kommer ur en riktig GPS-fix (och inget manuellt val gjorts). */
+    /** true när staden kommer ur en riktig GPS-fix (och varken manuellt val
+     *  eller startval står i vägen). */
     fromGps: boolean;
-    /** true när användaren valt stad själv. */
+    /** true när användaren valt stad själv (under besöket). */
     manuell: boolean;
-    /** Startstaden är inläst - kartan kan ritas. */
+    /** Startstaden och startvalet är inlästa - kartan kan ritas. */
     klar: boolean;
     /** Användarens position (första GPS-fixen), null utan behörighet. */
     minPos: { lat: number; lng: number } | null;
     väljStad: (city: City) => void;
+    /** Hoppa till GPS-staden nu (begär plats om den saknas). Rör INTE
+     *  startvalet - kartan öppnar fortfarande i den valda staden nästa start. */
     tillGpsStad: () => void;
+    /** Den valda startstaden (introts val), null = "där jag är"/aldrig frågat. */
+    valdStartstad: City | null;
+    /** Välj startstad (null = "där jag är") - sparas och vinner över GPS:en. */
+    väljStartstad: (city: City | null) => void;
     /** Introt är klart (eller hoppat) - null tills lagringen lästs. */
     introKlar: boolean | null;
     /** Markera introt klart. Hoppade man över platsfrågan ställs den först
@@ -45,44 +60,72 @@ const RegionContext = createContext<RegionState | null>(null);
 export function RegionProvider({ children }: { children: ReactNode }) {
     const [introKlar, setIntroKlar, introLaddad] = useLagrad(NYCKEL.välkomstKlar, false);
     const [platsBegärd, setPlatsBegärd] = useState(false);
-    const gps = useRegion(platsBegärd || (introLaddad && introKlar));
     const [vald, setVald] = useState<City | null>(null);
+    const [gpsVald, setGpsVald] = useState(false);
+    const [valdStart, setValdStart] = useState<City | null>(null);
     const [start, setStart] = useState<City | null>(null);
     const [klar, setKlar] = useState(false);
 
+    // Med en vald startstad ställs platsfrågan ALDRIG vid start - bara när
+    // användaren själv ber om platsen (begärPlats/tillGpsStad).
+    const gps = useRegion(platsBegärd || (introLaddad && introKlar && klar && !valdStart));
+
     useEffect(() => {
         let aktiv = true;
-        läs<unknown>(NYCKEL.startstad, null).then(raw => {
+        Promise.all([
+            läs<unknown>(NYCKEL.startstad, null),
+            läs<unknown>(NYCKEL.startval, null),
+        ]).then(([rawStart, rawVal]) => {
             if (!aktiv) return;
-            setStart(tolkaStartstad(raw, Date.now()));
+            setStart(tolkaStartstad(rawStart, Date.now()));
+            setValdStart(tolkaStartval(rawVal));
             setKlar(true);
         });
         return () => { aktiv = false; };
     }, []);
 
-    const city = vald ?? (gps.fromGps ? gps.city : start ?? DEFAULT_CITY);
+    const { city, fromGps } = utgångsStad({
+        manuell: vald,
+        gpsStad: gps.fromGps ? gps.city : null,
+        gpsVald,
+        startval: valdStart,
+        sparad: start,
+        standard: DEFAULT_CITY,
+    });
 
-    // Staden man landat i skrivs ner för nästa start (GPS eller eget val).
+    // Staden man landat i skrivs ner för nästa start (GPS eller eget val) -
+    // aldrig när det är startvalet/fallbacken som visas, de är inga landningar.
     useEffect(() => {
         if (!klar) return;
-        if (!vald && !gps.fromGps) return;
+        if (!vald && !fromGps) return;
         const post: SparadStartstad = { slug: city.slug, savedAt: Date.now() };
         void skriv(NYCKEL.startstad, post);
-    }, [klar, city.slug, vald, gps.fromGps]);
+    }, [klar, city.slug, vald, fromGps]);
 
     const value = useMemo<RegionState>(() => ({
         city,
         region: city.region,
-        fromGps: !vald && gps.fromGps,
+        fromGps,
         manuell: vald !== null,
         klar,
         minPos: gps.pos,
         väljStad: setVald,
-        tillGpsStad: () => setVald(null),
+        tillGpsStad: () => {
+            setVald(null);
+            setGpsVald(true);
+            setPlatsBegärd(true);
+        },
+        valdStartstad: valdStart,
+        väljStartstad: (c: City | null) => {
+            setValdStart(c);
+            setVald(null);
+            setGpsVald(false);
+            void skriv(NYCKEL.startval, c?.slug ?? null);
+        },
         introKlar: introLaddad ? introKlar : null,
         avslutaIntro: () => setIntroKlar(true),
         begärPlats: () => setPlatsBegärd(true),
-    }), [city, vald, gps.fromGps, gps.pos, klar, introLaddad, introKlar, setIntroKlar]);
+    }), [city, vald, fromGps, valdStart, gps.pos, klar, introLaddad, introKlar, setIntroKlar]);
 
     return <RegionContext.Provider value={value}>{children}</RegionContext.Provider>;
 }

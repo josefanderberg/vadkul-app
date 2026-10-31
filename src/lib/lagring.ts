@@ -11,6 +11,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 /** Nycklarna på ett ställe så ingen skriver över en annan av misstag. */
 export const NYCKEL = {
     startstad: 'vadkul.startstad',
+    /** VALD startstad (introts stadsval, lib/startval): slug, null = "där jag är". */
+    startval: 'vadkul.startval',
     optIn: 'vadkul.optIn',
     kartfilter: 'vadkul.kartfilter',
     sparade: 'vadkul.sparade',
