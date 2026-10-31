@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STARTSTAD_MAX_ÅLDER_MS, tolkaStartstad } from './startstad';
+import { STARTSTAD_MAX_ÅLDER_MS, stadsbyteFlyger, tolkaStartstad, type KartStadsläge } from './startstad';
 
 const NU = 1_800_000_000_000;
 
@@ -13,5 +13,24 @@ describe('tolkaStartstad', () => {
         expect(tolkaStartstad('umea', NU)).toBeNull();
         expect(tolkaStartstad(null, NU)).toBeNull();
         expect(tolkaStartstad({ slug: 'umea' }, NU)).toBeNull();
+    });
+});
+
+describe('stadsbyteFlyger (kameran när kartans stad ändras)', () => {
+    const läge = (slug: string, fromGps: boolean, manuell: boolean): KartStadsläge => ({ slug, fromGps, manuell });
+
+    it('GPS-svaret i startstaden: inget hopp', () => {
+        expect(stadsbyteFlyger(läge('vaxjo', false, false), läge('vaxjo', true, false))).toBe(false);
+    });
+    it('GPS-svaret i en annan stad (man har flyttat sig): ETT hopp', () => {
+        expect(stadsbyteFlyger(läge('vaxjo', false, false), läge('umea', true, false))).toBe(true);
+    });
+    it('eget val flyger alltid, även till staden man står i', () => {
+        expect(stadsbyteFlyger(läge('vaxjo', false, false), läge('umea', false, true))).toBe(true);
+        expect(stadsbyteFlyger(läge('vaxjo', true, false), läge('vaxjo', false, true))).toBe(true);
+    });
+    it('tillbaka från ett eget val till GPS-staden flyger, även om sluggen är densamma', () => {
+        expect(stadsbyteFlyger(läge('vaxjo', false, true), läge('vaxjo', true, false))).toBe(true);
+        expect(stadsbyteFlyger(läge('umea', false, true), läge('vaxjo', true, false))).toBe(true);
     });
 });

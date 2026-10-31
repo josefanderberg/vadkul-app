@@ -65,6 +65,7 @@ import {
     type Rytm,
 } from '@/lib/skapaEvent';
 import { BOOTSTRAP_STYLE, fetchThemeParkStyle, STREETS_STYLE_URL, type StyleJson } from '@/lib/themeParkStyle';
+import { useModalTopp } from '@/lib/useModalTopp';
 import { laddaUppEventBild, skapaEgetEvent, uppdateraEgetEvent } from '@/data/egnaEvent';
 import { markeraÖnskanUppfylld, skapaÖnskan } from '@/data/onskningar';
 
@@ -88,6 +89,7 @@ export default function SkapaScreen() {
     }>();
     const { användare, säkerställIdentitet } = useKonto();
     const qc = useQueryClient();
+    const modalTopp = useModalTopp();
 
     // ── Redigeringsläget: eventet ur den delade listan, förifyllnaden ur
     // lib/skapaEvent (webbens handleEditOwnEvent). Hittas det inte (kallstart
@@ -397,7 +399,7 @@ export default function SkapaScreen() {
     }
 
     return (
-        <View style={styles.root}>
+        <View style={[styles.root, { paddingTop: modalTopp }]}>
             <View style={styles.huvud}>
                 <Text style={styles.rubrik}>{redigerar ? 'Ändra event' : ärÖnskan ? 'Önska ett event' : 'Skapa event'}</Text>
                 <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stängKnapp} accessibilityLabel="Stäng">

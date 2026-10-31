@@ -35,6 +35,7 @@ import { minaEventRader } from '@/lib/minaEvent';
 import { useRegionVal } from '@/lib/regionContext';
 import { skapaFelKod } from '@/lib/skapaEvent';
 import { useSparade } from '@/lib/sparadeContext';
+import { useModalTopp } from '@/lib/useModalTopp';
 import { läsFält, sättFält } from '@/data/anvandare';
 import { raderaEgetEvent } from '@/data/egnaEvent';
 import { pushTillstånd, slåAvPush, slåPåPush, type PushTillstånd } from '@/data/push';
@@ -107,6 +108,7 @@ function Notiser({ uid, harStad }: { uid: string; harStad: boolean }) {
 }
 
 export default function ProfilScreen() {
+    const modalTopp = useModalTopp();
     const { city, fromGps, manuell } = useRegionVal();
     const { sparade, växla } = useSparade();
     const filter = useFilter();
@@ -180,7 +182,7 @@ export default function ProfilScreen() {
     const nu = Date.now();
 
     return (
-        <View style={styles.root}>
+        <View style={[styles.root, { paddingTop: modalTopp }]}>
             <View style={styles.huvud}>
                 <Text style={styles.rubrik}>Profil</Text>
                 <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stangKnapp} accessibilityLabel="Stäng">

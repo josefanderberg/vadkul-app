@@ -52,8 +52,10 @@ import {
     splitCityFromQuery,
     withinCitySearch,
 } from '@/lib/sok';
+import { useModalTopp } from '@/lib/useModalTopp';
 
 export default function SokScreen() {
+    const modalTopp = useModalTopp();
     const { city, region, väljStad, minPos } = useRegionVal();
     const filter = useFilter();
     // ?q= = tillbaka från kortet (← ☰ "Tillbaka till sökningen"); ?dag= =
@@ -121,7 +123,7 @@ export default function SokScreen() {
     };
 
     return (
-        <View style={styles.root}>
+        <View style={[styles.root, { paddingTop: modalTopp }]}>
             <View style={styles.huvud}>
                 <Text style={styles.rubrik}>Sök</Text>
                 <Pressable onPress={() => router.back()} hitSlop={12} style={styles.stangKnapp} accessibilityLabel="Stäng">

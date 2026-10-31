@@ -15,6 +15,15 @@ export function dagStart(nu: Date, offset: number): Date {
     return d;
 }
 
+/**
+ * Dygnets nyckel: lokal midnatt (ms) för `nuMs`. Byts bara när datumet byts,
+ * så kartans dagfilter kan räkna om vid midnatt och när appen väcks nästa
+ * dag (lib/useNu) utan att räkna om varje minut (PR #1:s dagbyte, 31/10).
+ */
+export function dygnetsStart(nuMs: number): number {
+    return dagStart(new Date(nuMs), 0).getTime();
+}
+
 const kortDatum = (d: Date) => `${d.getDate()} ${MANADER[d.getMonth()]}`;
 
 /**
