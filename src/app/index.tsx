@@ -34,7 +34,7 @@ import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
 import { prenumereraStjärnmärkta } from '@/data/stjarnor';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
 import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE } from '@/lib/brickor';
-import { eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
+import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
 import { byggBrickor, byggÖnskningar } from '@/lib/kartlager';
@@ -52,6 +52,7 @@ import { avståndPt, FÖRFILTER_PT, PRICK_RADIE, träffadBricka, träffadPrick, 
 import { nearestCityPoint } from '@/lib/orter';
 import { distanceKm, nearestCity } from '@/lib/regionVal';
 import { useSparade } from '@/lib/sparadeContext';
+import { stadsbyteFlyger, type KartStadsläge } from '@/lib/startstad';
 import { useNu } from '@/lib/useNu';
 import { BOOTSTRAP_STYLE, fetchThemeParkStyle, STREETS_STYLE_URL, type StyleJson } from '@/lib/themeParkStyle';
 import { dagOffset, iBild, KORT_TÄCKER, nästaIBild, nästaPeriodMedEvent, sammaPlats, type Ruta } from '@/lib/vy';
@@ -115,19 +116,25 @@ export default function KartScreen() {
         () => (feed.data ?? []).filter(e => matcharFilter(e, filter)),
         [feed.data, filter],
     );
+    // DYGNET SOM NYCKEL (PR #1:s dagbyte, 31/10): dagfiltren räknas mot
+    // `idag` i stället för en egen new Date(), så "Idag" räknas om efter
+    // midnatt och när appen väcks nästa dag (useNu) även om flödet, filtret
+    // och rutan står still.
+    const idagMs = dygnetsStart(nuMs);
+    const idag = useMemo(() => new Date(idagMs), [idagMs]);
     const iPeriod = useMemo(
-        () => filtrerade.filter(e => eventIPeriod(e.time, offset, längd)),
-        [filtrerade, offset, längd],
+        () => filtrerade.filter(e => eventIPeriod(e.time, offset, längd, idag)),
+        [filtrerade, offset, längd, idag],
     );
     const iRutan = useMemo(
         () => (ruta ? filtrerade.filter(e => iBild(e.lat, e.lng, ruta)) : []),
         [filtrerade, ruta],
     );
-    const räkna = (o: number, l: number) => iRutan.filter(e => eventIPeriod(e.time, o, l));
+    const räkna = (o: number, l: number) => iRutan.filter(e => eventIPeriod(e.time, o, l, idag));
     const antalDag = ruta && feed.data ? räkna(offset, 1).length : null;
     const antalVecka = ruta && feed.data ? räkna(offset, 7).length : null;
-    const idagIRutan = useMemo(() => iRutan.filter(e => eventIPeriod(e.time, 0, 1)), [iRutan]);
-    const imorgonIRutan = useMemo(() => iRutan.filter(e => eventIPeriod(e.time, 1, 1)), [iRutan]);
+    const idagIRutan = useMemo(() => iRutan.filter(e => eventIPeriod(e.time, 0, 1, idag)), [iRutan, idag]);
+    const imorgonIRutan = useMemo(() => iRutan.filter(e => eventIPeriod(e.time, 1, 1, idag)), [iRutan, idag]);
     const hemmadag = shouldAutoBumpDay(idagIRutan, imorgonIRutan, nuMs) ? 1 : 0;
 
     // ── Stilen: bootstrap-plattan tills nöjesfältet hämtats, Voyager vid fel.
@@ -154,8 +161,13 @@ export default function KartScreen() {
      *  (webbens liveCityName) - kartans mitt beskriver ännu förra stället.
      *  Släpps när kartan stannat. */
     const [hoppNamn, setHoppNamn] = useState<string | null>(null);
+    /** Stadsläget vid förra körningen - GPS-svaret jämförs mot det. */
+    const förraStadRef = useRef<KartStadsläge>({ slug: city.slug, fromGps, manuell });
     useEffect(() => {
         if (!klar) return;
+        const förra = förraStadRef.current;
+        const ny: KartStadsläge = { slug: city.slug, fromGps, manuell };
+        förraStadRef.current = ny;
         if (förstaRef.current) {
             förstaRef.current = false;
             return;
@@ -169,6 +181,10 @@ export default function KartScreen() {
             cameraRef.current?.flyTo({ center: [hopp.lng, hopp.lat], zoom: 11, duration: 1500 });
             return;
         }
+        // GPS-svaret landade i staden kartan redan står i (startstaden):
+        // inget hopp och ingen ny landning - man kan redan ha panorerat
+        // (PR #1:s kamerafix, 31/10, lib/startstad).
+        if (!stadsbyteFlyger(förra, ny)) return;
         landningRef.current = city.slug;
         setHoppNamn(city.name);
         cameraRef.current?.flyTo({ center: [city.lng, city.lat], zoom: 11, duration: 1500 });
@@ -564,8 +580,8 @@ export default function KartScreen() {
     // N = veckoradens tal EFTER trycket (🔥 släpper även igenom användarskapade
     // och veckans passerade); grinden räknar bara kommande populära.
     const veckaMedPopulärt = useMemo(
-        () => iRutan.filter(e => eventIPeriod(e.time, offset, 7) && matcharFilter(e, { ...filter, populärt: true })),
-        [iRutan, offset, filter],
+        () => iRutan.filter(e => eventIPeriod(e.time, offset, 7, idag) && matcharFilter(e, { ...filter, populärt: true })),
+        [iRutan, offset, filter, idag],
     );
     const banner = !kort && !prompt && feed.data
         ? kartBanner({
@@ -799,7 +815,10 @@ export default function KartScreen() {
                             <ActivityIndicator size="small" color="#ffffff" />
                             <Text style={styles.laddText}>Hämtar event …</Text>
                         </View>
-                    ) : feed.isError ? (
+                    ) : feed.isError && !feed.data ? (
+                        // Bara när flödet saknas helt (PR #1, 31/10): en
+                        // misslyckad bakgrundshämtning medan eventen syns
+                        // är ingen nyhet - det sparade flödet står kvar.
                         <Pressable style={styles.laddPill} onPress={() => feed.refetch()}>
                             <Text style={styles.laddText}>Kunde inte hämta event - tryck för att försöka igen</Text>
                         </Pressable>

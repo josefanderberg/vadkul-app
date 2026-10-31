@@ -33,6 +33,7 @@ import { KONTON_PÅ } from '@/lib/funktioner';
 import { useKonto } from '@/lib/kontoContext';
 import { felText, ärAvbrutet } from '@/lib/kontoFel';
 import { useRegionVal } from '@/lib/regionContext';
+import { useModalTopp } from '@/lib/useModalTopp';
 
 type Läge = 'skapa' | 'logga-in' | 'om-dig' | 'glömt';
 
@@ -46,6 +47,7 @@ export default function KontoScreen() {
 }
 
 function KontoInnehåll() {
+    const modalTopp = useModalTopp();
     const { lage } = useLocalSearchParams<{ lage?: string }>();
     const konto = useKonto();
     const [läge, setLäge] = useState<Läge>(
@@ -75,7 +77,7 @@ function KontoInnehåll() {
     };
 
     return (
-        <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={[styles.root, { paddingTop: modalTopp }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <View style={styles.huvud}>
                 <Text style={styles.rubrik}>
                     {läge === 'skapa' ? 'Skapa konto' : läge === 'logga-in' ? 'Logga in' : läge === 'glömt' ? 'Glömt lösenordet' : 'Om dig'}

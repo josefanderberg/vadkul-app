@@ -17,6 +17,7 @@ import { router } from 'expo-router';
 import { CITIES, type City } from '@vadkul/kontrakt';
 import { useStadsAntal } from '@/api/stadsAntal';
 import { useRegionVal } from '@/lib/regionContext';
+import { useModalTopp } from '@/lib/useModalTopp';
 import {
     bokstavsAvdelare,
     topplistRader,
@@ -31,6 +32,7 @@ export default function StaderScreen() {
     const [filter, setFilter] = useState('');
     const [sortering, setSortering] = useState<TopplistSortering>('totalt');
     const { antal } = useStadsAntal();
+    const modalTopp = useModalTopp();
 
     const rader = useMemo(() => topplistRader(CITIES, antal, sortering), [antal, sortering]);
     const q = filter.toLowerCase().trim();
@@ -47,7 +49,7 @@ export default function StaderScreen() {
     };
 
     return (
-        <View style={styles.root}>
+        <View style={[styles.root, { paddingTop: modalTopp }]}>
             <View style={styles.huvud}>
                 <View style={styles.huvudText}>
                     <Text style={styles.rubrik}>Städer</Text>

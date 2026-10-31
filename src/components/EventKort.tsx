@@ -61,10 +61,11 @@
  *
  * HÅRD REGEL (CLAUDE.md): appen säljer ingenting - ingen boost, inga priser.
  */
-import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     Alert,
     Animated,
+    BackHandler,
     PanResponder,
     Pressable,
     ScrollView,
@@ -76,7 +77,7 @@ import {
     type GestureResponderEvent,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { eventShareSlug, type AppFeedEvent } from '@vadkul/kontrakt';
 import type { AppEvent } from '@/lib/appEvent';
 import { seriensRytm } from '@/lib/anvandarEvent';
@@ -360,10 +361,23 @@ export function EventKort({
 
     // Arket glider ut under skärmkanten och kortet stängs - neddraget förbi
     // default och karttrycket delar samma utgång.
-    const glidUt = () => {
+    const glidUt = useCallback(() => {
         Animated.timing(translate, { toValue: tak, duration: 160, useNativeDriver: true })
             .start(() => stäng.current());
-    };
+    }, [translate, tak]);
+    // Androids bakåtknapp (PR #1, portad 31/10) stänger kortet - samma
+    // utgång som neddraget - i stället för att lämna skärmen eller appen.
+    // Bara medan skärmen under har fokus: ett kort på kartan bakom en öppen
+    // modal (sök, profil) ska inte äta modalens bakåttryck. Inget kort =
+    // ingen lyssnare = vanlig bakåt. Kortets egna Modal-ark (helskärmsbilden,
+    // chattmenyn, Rapportera) tar trycket själva via onRequestClose.
+    useFocusEffect(useCallback(() => {
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            glidUt();
+            return true;
+        });
+        return () => sub.remove();
+    }, [glidUt]));
     // Karttrycket (13/10): kortet stänger helt så dagväljaren syns. Noncen
     // jämförs mot den kortet monterades med - annars stänger ett tidigare
     // tryck på tom karta nästa kort i samma stund som det öppnas.

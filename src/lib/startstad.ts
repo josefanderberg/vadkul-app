@@ -22,3 +22,25 @@ export function tolkaStartstad(raw: unknown, nowMs: number): City | null {
     if (nowMs - savedAt > STARTSTAD_MAX_ÅLDER_MS) return null;
     return CITIES.find(c => c.slug === slug) ?? null;
 }
+
+/** Kartans stadsläge - det kamerans stadshopp jämför före och efter. */
+export interface KartStadsläge {
+    slug: string;
+    /** Staden kommer ur en riktig GPS-fix (regionContext). */
+    fromGps: boolean;
+    /** Staden är ett eget val (stadssidan, söket, Städer). */
+    manuell: boolean;
+}
+
+/**
+ * Ska kameran flyga till staden när kartans stad ändras? Alltid - utom när
+ * GPS-svaret bara bekräftar staden kartan redan öppnat i: då står kameran
+ * redan där, och man kan ha hunnit panorera, så ett hopp till stadens mitt
+ * vore ett ryck tillbaka (PR #1:s kamerafix, portad 31/10). Har man flyttat
+ * sig (annan stad) gör GPS-svaret ETT hopp som förut, och egna val flyger
+ * alltid - även tillbaka till samma stad.
+ */
+export function stadsbyteFlyger(förra: KartStadsläge, ny: KartStadsläge): boolean {
+    const gpsLandning = ny.fromGps && !förra.fromGps && !ny.manuell && !förra.manuell;
+    return !(gpsLandning && ny.slug === förra.slug);
+}

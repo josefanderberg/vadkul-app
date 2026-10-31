@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dagSektioner, eventIPeriod, horisontOffset, offsetFörDatum, periodLabel } from './dagar';
+import { dagSektioner, dygnetsStart, eventIPeriod, horisontOffset, offsetFörDatum, periodLabel } from './dagar';
 
 const NU = new Date(2026, 8, 27, 14, 0); // sön 27 sep 2026, lokal tid
 const iso = (d: Date) => d.toISOString();
@@ -108,5 +108,23 @@ describe('horisontOffset', () => {
         const max = horisontOffset(60);
         expect(offsetFörDatum(new Date(2026, 10, 25), max, NU)).toBe(59);
         expect(offsetFörDatum(new Date(2026, 10, 26), max, NU)).toBeNull();
+    });
+});
+
+describe('dygnetsStart (kartans dagnyckel, PR #1:s dagbyte)', () => {
+    it('samma nyckel hela dygnet, lokal midnatt', () => {
+        const midnatt = new Date(2026, 8, 27).getTime();
+        expect(dygnetsStart(NU.getTime())).toBe(midnatt);
+        expect(dygnetsStart(new Date(2026, 8, 27, 0, 0).getTime())).toBe(midnatt);
+        expect(dygnetsStart(new Date(2026, 8, 27, 23, 59, 59).getTime())).toBe(midnatt);
+    });
+
+    it('byts vid midnatt - och dagfiltret med den', () => {
+        const före = dygnetsStart(new Date(2026, 8, 27, 23, 59).getTime());
+        const efter = dygnetsStart(new Date(2026, 8, 28, 0, 1).getTime());
+        expect(efter).not.toBe(före);
+        const imorgonBitti = new Date(2026, 8, 28, 9, 0).toISOString();
+        expect(eventIPeriod(imorgonBitti, 1, 1, new Date(före))).toBe(true);
+        expect(eventIPeriod(imorgonBitti, 0, 1, new Date(efter))).toBe(true);
     });
 });
