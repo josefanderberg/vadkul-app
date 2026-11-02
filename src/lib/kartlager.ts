@@ -18,9 +18,10 @@
  */
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { ärEgetVadkulEvent, type AppEvent } from './appEvent';
-import { brickaIkon } from './brickor';
+import { brickaIkon, brickansKategori, type BrickTillstånd } from './brickor';
+import { emojiBild } from './emojiBricka';
 import { isEventPast } from './harVarit';
-import { kategoriFor } from './kategorier';
+import { eventEmoji, kategoriFor } from './kategorier';
 import type { Önskan } from './onskningar';
 import { isTicketmasterEvent } from './ticketmaster';
 import { platsNyckel } from './vy';
@@ -31,7 +32,14 @@ export const ETIKETT_MAX_TECKEN = 18;
 export interface BrickProps {
     /** Representantens id - trycket slår upp gruppen via platsNyckel. */
     id: string;
+    /** Den förbakade brickan - kategorins emoji. */
     ikon: string;
+    /** Brickan med representantens EGEN emoji (lib/emojiBricka), '' när
+     *  `ikon` redan visar den. Kartan byter till den när bilden är klar. */
+    emojiBild: string;
+    /** Samma bild för brickan som VALD - förbakas så trycket inte visar
+     *  kategorins emoji en stund. '' när brickan redan är vald. */
+    valdEmojiBild: string;
     /** Kategorins kortnamn ("Musik") - reserven när titeln inte får plats. */
     label: string;
     /** Representantens titel, kapad till ETIKETT_MAX_TECKEN. */
@@ -100,12 +108,20 @@ export function byggBrickor(
         // Webbens sticky (kart-ui): TM/stjärnor (guld), gillade (sparad) och
         // användarskapade - de senare så fort NÅGOT kommande i gruppen är det.
         const fast = guld || sparad || grön || levande.some(e => e.userCreated === true);
+        const tillstånd: BrickTillstånd = { category: String(rep.category), pop: rep.pop === true, guld, sparad, grön };
+        const ikon = brickaIkon({ ...tillstånd, vald: !!vald });
+        // Kortets emoji mot den som är bakad i brickan (okänd kategori - även
+        // kyrkan och PRO - har Övrigts bricka).
+        const kortets = eventEmoji(rep);
+        const brickans = kategoriFor(brickansKategori(tillstånd.category)).emoji;
         features.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [rep.lng, rep.lat] },
             properties: {
                 id: rep.id,
-                ikon: brickaIkon({ category: String(rep.category), pop: rep.pop === true, guld, sparad, grön, vald: !!vald }),
+                ikon,
+                emojiBild: emojiBild(ikon, kortets, brickans),
+                valdEmojiBild: vald ? '' : emojiBild(brickaIkon({ ...tillstånd, vald: true }), kortets, brickans),
                 label: kategoriFor(String(rep.category)).kort,
                 titel: kapaEtikett(rep.title ?? ''),
                 antal: grupp.length,

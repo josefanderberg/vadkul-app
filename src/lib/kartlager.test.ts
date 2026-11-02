@@ -49,6 +49,26 @@ describe('byggBrickor', () => {
         const sparad = byggBrickor([ev('s', 17)], { nowMs: NU, ärSparad: id => id === 's' });
         expect(sparad.features[0].properties.ikon).toBe('bricka-music-sparad');
     });
+    it('eventets egen emoji ger en egen bild, även för den valda varianten (Josef 1/11: ⚽ på kartan, 🤿 i kortet)', () => {
+        const fc = byggBrickor([ev('dyk', 17, { category: 'sport', emoji: '🤿' })], { nowMs: NU });
+        expect(fc.features[0].properties).toMatchObject({
+            ikon: 'bricka-sport',
+            emojiBild: 'bricka-sport~1f93f',
+            valdEmojiBild: 'bricka-sport-vald~1f93f',
+        });
+        const vald = byggBrickor([ev('dyk', 17, { category: 'sport', emoji: '🤿', pop: true })], { nowMs: NU, valtId: 'dyk' });
+        expect(vald.features[0].properties).toMatchObject({ ikon: 'bricka-sport-vald', emojiBild: 'bricka-sport-vald~1f93f', valdEmojiBild: '' });
+    });
+    it('ingen egen bild när brickan redan visar kortets emoji', () => {
+        for (const extra of [{ category: 'sport', emoji: '⚽' }, { category: 'sport' }, { category: 'sport', emoji: '' }]) {
+            const fc = byggBrickor([ev('a', 17, extra)], { nowMs: NU });
+            expect(fc.features[0].properties).toMatchObject({ emojiBild: '', valdEmojiBild: '' });
+        }
+    });
+    it('kyrkan och PRO har Övrigts bricka men sin egen emoji i kortet - samma på kartan', () => {
+        const fc = byggBrickor([ev('k', 17, { category: 'svenskakyrkan' })], { nowMs: NU });
+        expect(fc.features[0].properties).toMatchObject({ ikon: 'bricka-other', emojiBild: 'bricka-other~26ea' });
+    });
     it('badgen är en bakad bild per antal, ingen för ensamma event', () => {
         expect(antalIkon(1)).toBe('');
         expect(antalIkon(2)).toBe('antal-2');

@@ -66,7 +66,13 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
   webben = ny rad här, annars hamnar brickorna fel på bilden.
 - **Brickorna bakas med WEBBENS ritkod**: `node scripts/baka-brickor.mjs`
   (headless Chrome ur huvudrepots node_modules) skriver assets/brickor/ +
-  src/lib/brick*.generated.ts. Redigera aldrig de genererade filerna.
+  src/lib/brick*.generated.ts och emoji*.generated.ts. Redigera aldrig de
+  genererade filerna. Markören visar eventets EGEN emoji som kortet (1/11
+  2026): kropp + emoji sätts ihop i appen (lib/emojiBricka). Skriptet bakar
+  emojierna som finns i appflödena just nu (scripts/brick-emojier.json
+  krymper aldrig) - kör det då och då, en obakad emoji visar kategorins
+  bricka. Lägg aldrig till ett npm-script för det: `scripts` i package.json
+  ingår i OTA-avtrycket.
 - **EAS dev build, aldrig Expo Go** — kartan/push är native-moduler.
 - Inga tokens i AsyncStorage (lib/lagring är bara för inställningar) — RN
   Firebase håller sessionen i nyckelringen/Keystore själv.

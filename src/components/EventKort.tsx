@@ -105,7 +105,7 @@ import { formatTidSpann } from '@/lib/eventTid';
 import { useFilter } from '@/lib/filterContext';
 import { formatKm } from '@/lib/flerEvent';
 import { isEventPast } from '@/lib/harVarit';
-import { kategoriFor } from '@/lib/kategorier';
+import { eventEmoji } from '@/lib/kategorier';
 import { matcharKortSök } from '@/lib/kortSok';
 import { NYCKEL, useLagrad } from '@/lib/lagring';
 import { bildflöde, delaVäljarlista, väljarRäknare } from '@/lib/listRad';
@@ -160,7 +160,7 @@ export interface KortNav {
 }
 
 function navEmoji(e: AppFeedEvent): string {
-    return e.emoji || kategoriFor(String(e.category)).emoji;
+    return eventEmoji(e);
 }
 
 export function EventKort({
@@ -1064,8 +1064,7 @@ function EventInnehåll({
     const detalj = useEventDetalj(event.userCreated ? null : event.id);
     const [helskärm, setHelskärm] = useState<string | null>(null);
 
-    const kat = kategoriFor(String(event.category));
-    const emoji = event.emoji || kat.emoji;
+    const emoji = eventEmoji(event);
     const tm = isTicketmasterEvent(event);
     const sparad = ärSparad(event.id);
     const nu = Date.now();

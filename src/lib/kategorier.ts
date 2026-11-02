@@ -43,3 +43,9 @@ export function kategoriFor(key: string): KategoriPresentation {
     }
     return SPECIAL[key] ?? KATEGORIER.other;
 }
+
+/** Eventets emoji (webbens eventEmoji): egen i första hand, annars
+ *  kategorins. Kortet och kartans bricka (lib/kartlager) läser båda härifrån. */
+export function eventEmoji(e: { emoji?: string | null; category?: unknown }): string {
+    return e.emoji || kategoriFor(String(e.category)).emoji;
+}

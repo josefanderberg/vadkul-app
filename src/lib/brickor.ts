@@ -10,8 +10,8 @@
  *          kategorifärg
  *   kant:  vald (vit ram) > guld/sparad > 🔥 pop (tjockare) > vanlig
  *
- * MEDVETEN AVGRÄNSNING: kategorins standard-emoji, inte eventets fria
- * LLM-emoji (den kräver runtime-bakning - skia - och är ett eget steg).
+ * De förbakade brickorna bär kategorins emoji. Eventets egen emoji (webbens
+ * eventEmoji) sätts ihop i appen ur kropp + emoji - lib/emojiBricka.
  * Ren modul (inga require) så den går att testa; bildregistret importeras
  * av kartan direkt ur brickBilder.generated.
  */
@@ -35,9 +35,14 @@ export interface BrickTillstånd {
     vald?: boolean;
 }
 
-/** Bildnyckeln i registret för en bricka. Okänd kategori → other (webbens fallback). */
+/** Kategorin vars bricka ett event får. Okänd kategori → other (webbens fallback). */
+export function brickansKategori(category: string): string {
+    return (EVENT_CATEGORY_KEYS as readonly string[]).includes(category) ? category : 'other';
+}
+
+/** Bildnyckeln i registret för en bricka. */
 export function brickaIkon(t: BrickTillstånd): string {
-    const cat = (EVENT_CATEGORY_KEYS as readonly string[]).includes(t.category) ? t.category : 'other';
+    const cat = brickansKategori(t.category);
     const kropp = t.guld ? 'guld' : t.sparad ? 'sparad' : t.grön ? 'gron' : '';
     let variant: string;
     if (kropp) variant = t.vald ? `${kropp}-vald` : kropp;

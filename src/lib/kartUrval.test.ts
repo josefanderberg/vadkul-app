@@ -30,7 +30,7 @@ function plats(id: string, lng: number, extra: Partial<BrickProps> = {}): GeoJSO
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [lng, MITT.lat] },
         properties: {
-            id, ikon: 'x', label: 'Musik', titel: id, antal: 1, antalIkon: '',
+            id, ikon: 'x', emojiBild: '', valdEmojiBild: '', label: 'Musik', titel: id, antal: 1, antalIkon: '',
             past: false, vald: false, sort: 1, etikettPrio: 0,
             fast: false, pop: false, färg: '#ec4899',
             ...extra,

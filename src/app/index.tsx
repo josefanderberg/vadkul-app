@@ -35,6 +35,7 @@ import { prenumereraStjärnmärkta } from '@/data/stjarnor';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
 import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE } from '@/lib/brickor';
 import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
+import { medEmojiBilder } from '@/lib/emojiBricka';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
 import { byggBrickor, byggÖnskningar } from '@/lib/kartlager';
@@ -53,6 +54,7 @@ import { nearestCityPoint } from '@/lib/orter';
 import { distanceKm, nearestCity } from '@/lib/regionVal';
 import { useSparade } from '@/lib/sparadeContext';
 import { stadsbyteFlyger, type KartStadsläge } from '@/lib/startstad';
+import { useEmojiBrickor } from '@/lib/useEmojiBrickor';
 import { useNu } from '@/lib/useNu';
 import { BOOTSTRAP_STYLE, fetchThemeParkStyle, STREETS_STYLE_URL, type StyleJson } from '@/lib/themeParkStyle';
 import { dagOffset, iBild, KORT_TÄCKER, nästaIBild, nästaPeriodMedEvent, sammaPlats, type Ruta } from '@/lib/vy';
@@ -455,6 +457,24 @@ export default function KartScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const prickar = useMemo(() => byggPrickar(platser), [prickNyckeln]);
     const brickIds = useMemo(() => new Set(brickor.features.map(f => f.properties.id)), [brickor]);
+    // EVENTETS EGEN EMOJI på brickan (lib/emojiBricka, Josef 1/11): bilderna
+    // sätts ihop i bakgrunden - den valda först, sedan resten i bild, sist de
+    // valda varianterna så ett tryck inte visar kategorins emoji en stund.
+    // Tills en bild är klar står kategorins bricka kvar.
+    const önskadeBilder = useMemo(
+        () => [...brickor.features]
+            .sort((a, b) => Number(b.properties.vald) - Number(a.properties.vald))
+            .map(f => f.properties.emojiBild)
+            .filter(Boolean),
+        [brickor],
+    );
+    const förladdadeBilder = useMemo(
+        () => brickor.features.map(f => f.properties.valdEmojiBild).filter(Boolean),
+        [brickor],
+    );
+    const emojiBrickor = useEmojiBrickor(önskadeBilder, förladdadeBilder);
+    const kartBilder = useMemo(() => ({ ...BRICKA_IMAGES, ...emojiBrickor.bilder }), [emojiBrickor.bilder]);
+    const visadeBrickor = useMemo(() => medEmojiBilder(brickor, emojiBrickor.klara), [brickor, emojiBrickor.klara]);
     const dolda = useMemo(() => prickFilter([...brickIds]) as unknown as FilterSpecification, [brickIds]);
 
     // ── Önskningarna (webbens drömska wish-brickor) ───────────────────────
@@ -663,7 +683,7 @@ export default function KartScreen() {
                     onPress={karttryck}
                 >
                     <Camera ref={cameraRef} initialViewState={{ center: [city.lng, city.lat], zoom: 11 }} />
-                    <Images images={BRICKA_IMAGES} />
+                    <Images images={kartBilder} />
                     {/* PRICKARNA (Josef 19/10, lib/kartUrval): allt utanför
                         urvalet kring mitten - webbens nål-prickar i
                         kategorins färg med vit ring, passerade dämpade till
@@ -684,7 +704,7 @@ export default function KartScreen() {
                             }}
                         />
                     </GeoJSONSource>
-                    <GeoJSONSource id="events" data={brickor}>
+                    <GeoJSONSource id="events" data={visadeBrickor}>
                         {/* Etiketterna (webbens LABEL_LAYER_IDS): TITEL FÖRE
                             KATEGORI NÄR DEN FÅR PLATS, annars kategorin, annars
                             inget. Båda ligger UNDER brickorna (en etikett får

@@ -9,6 +9,8 @@
  *    läsbarhets-scrim (rivna på webben 20/9, "den behövs inte").
  *  - Brickorna är kartans egna bakade PNG:er (samma kropp, kant och "+N"-
  *    badge som huvudkartan) i webbherons storlek, 32 i stället för 40 pt.
+ *    Har eventet en egen emoji (lib/emojiBricka) ritas kroppen utan emoji
+ *    och emojin ovanpå på webbens plats - samma emoji som i kortet.
  *  - PERIODCHIPSEN överst till vänster är sidans ENDA periodval och styr
  *    både brickorna och daglistan. Flytta dem inte till listan (webbens
  *    filterrad revs 20/9).
@@ -23,8 +25,12 @@ import { Image } from 'expo-image';
 import type { City } from '@vadkul/kontrakt';
 import { ärEgetVadkulEvent, type AppEvent } from '@/lib/appEvent';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
-import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE, brickaIkon } from '@/lib/brickor';
+import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE, brickaIkon, brickansKategori } from '@/lib/brickor';
+import { EMOJI_KÄLLOR, KROPP_KÄLLOR } from '@/lib/emojiBilder.generated';
+import { emojiBild, emojiBildDelar } from '@/lib/emojiBricka';
+import { EMOJI_LÄGE } from '@/lib/emojiNycklar.generated';
 import { antalIkon } from '@/lib/kartlager';
+import { eventEmoji, kategoriFor } from '@/lib/kategorier';
 import { HERO_STÄDER, heroBildUrl, väljHeroMarkörer } from '@/lib/stadsHero';
 import { PERIODER, type Period } from '@/lib/stadsPeriod';
 import { THEMEPARK_LAND_COLOR_NEAR } from '@/lib/themeParkStyle';
@@ -42,6 +48,19 @@ function mått(nyckel: string): { width: number; height: number } | null {
     if (!src) return null;
     const { width, height } = RNImage.resolveAssetSource(src);
     return { width: width * BRICKA_ICON_SIZE * SKALA, height: height * BRICKA_ICON_SIZE * SKALA };
+}
+
+/** Kropp + eventets egen emoji (på webbens plats, i heron-storlek), eller
+ *  null när den förbakade brickan redan visar kortets emoji. */
+function egenEmoji(ikon: string, e: AppEvent) {
+    const delar = emojiBildDelar(emojiBild(ikon, eventEmoji(e), kategoriFor(brickansKategori(String(e.category))).emoji));
+    const kropp = delar && KROPP_KÄLLOR[delar.kropp];
+    const emoji = delar && EMOJI_KÄLLOR[delar.id];
+    const läge = delar && EMOJI_LÄGE[delar.id];
+    if (!kropp || !emoji || !läge) return null;
+    const f = BRICKA_ICON_SIZE * SKALA;
+    const { width, height } = RNImage.resolveAssetSource(emoji);
+    return { kropp, emoji, stil: { left: läge.x * f, top: läge.y * f, width: width * f, height: height * f } };
 }
 
 export function StadsHero({
@@ -116,6 +135,7 @@ export function StadsHero({
                     });
                     const m = mått(ikon);
                     if (!m) return null;
+                    const egen = egenEmoji(ikon, e);
                     const badge = antalIkon(antal);
                     const bm = badge ? mått(badge) : null;
                     return (
@@ -126,7 +146,14 @@ export function StadsHero({
                             accessibilityLabel={`Visa ${e.title} på kartan${antal > 1 ? ` (${antal} på platsen)` : ''}`}
                             style={[styles.bricka, { left: x - m.width / 2, top: y - m.height, width: m.width, height: m.height }]}
                         >
-                            <Image source={BRICKA_IMAGES[ikon]} style={m} contentFit="contain" />
+                            {egen ? (
+                                <>
+                                    <Image source={egen.kropp} style={m} contentFit="contain" />
+                                    <Image source={egen.emoji} style={[styles.emoji, egen.stil]} contentFit="contain" />
+                                </>
+                            ) : (
+                                <Image source={BRICKA_IMAGES[ikon]} style={m} contentFit="contain" />
+                            )}
                             {bm ? (
                                 <Image
                                     source={BRICKA_IMAGES[badge]}
@@ -171,6 +198,7 @@ const styles = StyleSheet.create({
         backgroundColor: THEMEPARK_LAND_COLOR_NEAR,
     },
     bricka: { position: 'absolute' },
+    emoji: { position: 'absolute' },
     badge: { position: 'absolute' },
     // Överst till vänster på kartan, bryts till en rad till hellre än att klippas (webbens flex-wrap).
     chipRad: { position: 'absolute', top: 8, left: 8, right: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
