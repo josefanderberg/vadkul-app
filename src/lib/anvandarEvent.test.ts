@@ -274,6 +274,18 @@ describe('tolkaAnvändarEvent: mappningen', () => {
         expect(e.description).toBeUndefined();
     });
 
+    it('boostat eget event: featuredUntil följer med som ISO, utan boost saknas fältet (4/11)', () => {
+        const slut = new Date(2026, 9, 20, 12, 0);
+        const [e] = tolka(dok('b', { title: 'Boostad', time: new Date(2026, 9, 9, 19, 0), featuredUntil: ts(slut) }));
+        expect(e.featuredUntil).toBe(slut.toISOString());
+        const [u] = tolka(dok('u', { title: 'Vanlig', time: new Date(2026, 9, 9, 19, 0) }));
+        expect('featuredUntil' in u).toBe(false);
+        // Serien: varje tillfälle bär seriens boost.
+        const [t1, t2] = tolka(dok('s', { title: 'Serie', time: new Date(2026, 9, 9, 19, 0), repeatWeekly: true, featuredUntil: ts(slut) }));
+        expect(t1.featuredUntil).toBe(slut.toISOString());
+        expect(t2.featuredUntil).toBe(slut.toISOString());
+    });
+
     it('ett vanligt AppFeedEvent är ett AppEvent och har ingen serierad', () => {
         const skrapat: AppEvent = { id: 'https://x.se/e', title: 'X', time: NU.toISOString(), hasSpecificTime: true, lat: 0, lng: 0, category: 'music' };
         expect(seriensRytm(skrapat, NU)).toBeNull();

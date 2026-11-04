@@ -32,6 +32,8 @@ import { FilterIkon } from '@/components/FilterIkon';
 import { Ikon } from '@/components/Ikon';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
 import { prenumereraStjärnmärkta } from '@/data/stjarnor';
+import { synligVarjeDag } from '@/lib/boost';
+import { useBoostar } from '@/lib/useBoostar';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
 import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE } from '@/lib/brickor';
 import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
@@ -124,9 +126,15 @@ export default function KartScreen() {
     // och rutan står still.
     const idagMs = dygnetsStart(nuMs);
     const idag = useMemo(() => new Date(idagMs), [idagMs]);
+    // Boostade event (eventBoosts + egna featuredUntil): guldbricka + lyft
+    // som stjärnan (4/11) - samma delade lyssnare som kortet (lib/useBoostar).
+    // De KRINGGÅR dagklippet nedan (webbens isBoostShownEveryDay): boosten
+    // köper synlighet alla dagar t.o.m. featuredUntil, så ett boostat
+    // lördagsevent står på kartan redan i dag.
+    const boostar = useBoostar();
     const iPeriod = useMemo(
-        () => filtrerade.filter(e => eventIPeriod(e.time, offset, längd, idag)),
-        [filtrerade, offset, längd, idag],
+        () => filtrerade.filter(e => eventIPeriod(e.time, offset, längd, idag) || synligVarjeDag(e, boostar, nuMs, idagMs)),
+        [filtrerade, offset, längd, idag, boostar, nuMs, idagMs],
     );
     const iRutan = useMemo(
         () => (ruta ? filtrerade.filter(e => iBild(e.lat, e.lng, ruta)) : []),
@@ -425,7 +433,9 @@ export default function KartScreen() {
             hoppPeriodRef.current = false;
             return;
         }
-        if (kort?.event && !eventIPeriod(kort.event.time, offset, längd)) stängKort();
+        // Ett boostat event står på kartan alla dagar (synligVarjeDag) - kortet
+        // ska då inte stängas av dagbytet heller.
+        if (kort?.event && !eventIPeriod(kort.event.time, offset, längd) && !synligVarjeDag(kort.event, boostar, nuMs, idagMs)) stängKort();
         // bara vid periodbyte
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [offset, längd]);
@@ -437,8 +447,8 @@ export default function KartScreen() {
     useEffect(() => prenumereraStjärnmärkta(setStjärnmärkta), []);
     const valtId = kort ? kort.event?.id ?? kort.grupp[0]?.id ?? null : null;
     const platser = useMemo(
-        () => byggBrickor(iPeriod, { nowMs: nuMs, valtId, ärSparad, stjärnor: stjärnmärkta }),
-        [iPeriod, nuMs, valtId, ärSparad, stjärnmärkta],
+        () => byggBrickor(iPeriod, { nowMs: nuMs, valtId, ärSparad, stjärnor: stjärnmärkta, boostar }),
+        [iPeriod, nuMs, valtId, ärSparad, stjärnmärkta, boostar],
     );
     // BRICKOR KRING MITTEN, PRICKAR ANNARS (Josef 19/10, lib/kartUrval -
     // webbens reveal-urval): de ~50 platserna närmast kartans mitt är

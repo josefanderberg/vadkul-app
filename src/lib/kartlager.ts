@@ -18,6 +18,7 @@
  */
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { ärEgetVadkulEvent, type AppEvent } from './appEvent';
+import { INGA_BOOSTAR, ärBoostad, type Boostar } from './boost';
 import { brickaIkon, brickansKategori, type BrickTillstånd } from './brickor';
 import { emojiBild } from './emojiBricka';
 import { isEventPast } from './harVarit';
@@ -84,8 +85,14 @@ export function byggBrickor(
          *  LYFTER representanten i en grupp (kart-ui: "sortKey-lyftningen är
          *  stjärnans/boostens privilegium"). */
         stjärnor?: ReadonlySet<string>;
+        /** Aktiva boostar (data/boostar; egna event bär featuredUntil själva)
+         *  - samma guldbricka + lyftning som stjärnan (webbens boostedRep,
+         *  Josef 4/11: "så de syns ännu längre"). */
+        boostar?: Boostar;
     },
 ): GeoJSON.FeatureCollection<GeoJSON.Point, BrickProps> {
+    const boostar = opts.boostar ?? INGA_BOOSTAR;
+    const boostad = (e: AppEvent) => ärBoostad(e, boostar, opts.nowMs);
     const grupper = new Map<string, AppEvent[]>();
     for (const e of events) {
         const k = platsNyckel(e);
@@ -99,9 +106,9 @@ export function byggBrickor(
         const levande = grupp.filter(e => !isEventPast(e, opts.nowMs));
         const vald = opts.valtId ? grupp.find(e => e.id === opts.valtId) : undefined;
         const stjärnmärkt = opts.stjärnor ? levande.find(e => opts.stjärnor!.has(e.id)) : undefined;
-        const rep = vald ?? stjärnmärkt ?? levande[0] ?? grupp[0];
+        const rep = vald ?? stjärnmärkt ?? levande.find(boostad) ?? levande[0] ?? grupp[0];
         const past = levande.length === 0;
-        const guld = isTicketmasterEvent(rep) || !!(opts.stjärnor && opts.stjärnor.has(rep.id));
+        const guld = isTicketmasterEvent(rep) || !!(opts.stjärnor && opts.stjärnor.has(rep.id)) || (!past && boostad(rep));
         const sparad = !!opts.ärSparad && grupp.some(e => opts.ärSparad!(e.id));
         const grön = ärEgetVadkulEvent(rep);
         const nivå = rep.pop || guld ? 0 : grön ? 1 : 2;

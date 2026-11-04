@@ -229,7 +229,7 @@ export function vecklaUtSerie<T extends SerieRegel & { id: string }>(
 // ── Dokument → AppEvent ─────────────────────────────────────────────────────
 
 /** Ett tolkat dokument innan tiderna blir ISO-strängar. */
-type Tolkat = Omit<AppEvent, 'time' | 'seriesEndsAt'> & { time: Date; seriesEndsAt?: Date };
+type Tolkat = Omit<AppEvent, 'time' | 'seriesEndsAt' | 'featuredUntil'> & { time: Date; seriesEndsAt?: Date; featuredUntil?: Date };
 
 const text = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
 
@@ -258,6 +258,9 @@ function tolkaDokument(id: string, v: Record<string, unknown>): Tolkat | null {
         hostName: text(v.hostName) ?? 'VADKUL-användare',
         hostUid: text(v.hostUid),
         description: text(v.description),
+        // Boosten (webbens confirmBoost skriver featuredUntil på dokumentet) -
+        // stjärnan + lyftningen bor i lib/boost; passerad tid gäller inte där.
+        featuredUntil: tolkaTid(v.featuredUntil) ?? undefined,
         // Flödets form är text (AppFeedEvent.price) - äldre event bär talet.
         price: typeof v.price === 'number' ? String(v.price) : typeof v.price === 'string' ? v.price : undefined,
         repeatWeekly: !!v.repeatWeekly,
@@ -269,11 +272,12 @@ function tolkaDokument(id: string, v: Record<string, unknown>): Tolkat | null {
     };
 }
 
-function tillAppEvent({ time, seriesEndsAt, ...rest }: Tolkat): AppEvent {
+function tillAppEvent({ time, seriesEndsAt, featuredUntil, ...rest }: Tolkat): AppEvent {
     return {
         ...rest,
         time: time.toISOString(),
         ...(seriesEndsAt ? { seriesEndsAt: seriesEndsAt.toISOString() } : {}),
+        ...(featuredUntil ? { featuredUntil: featuredUntil.toISOString() } : {}),
     };
 }
 

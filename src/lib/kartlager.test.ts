@@ -41,6 +41,18 @@ describe('byggBrickor', () => {
         expect(förbi.features[0].properties.id).toBe('tidig');
         expect(förbi.features[0].properties.ikon).toBe('bricka-music');
     });
+    it('boostat → guldbricka och lyft representant, via overlayn ELLER eventets eget featuredUntil (4/11)', () => {
+        const slut = new Date(2026, 8, 30).getTime();
+        const fc = byggBrickor([ev('tidig', 17), ev('sen', 19)], { nowMs: NU, boostar: new Map([['sen', slut]]) });
+        expect(fc.features[0].properties).toMatchObject({ id: 'sen', ikon: 'bricka-music-guld', sort: 2, fast: true });
+        const egen = byggBrickor([ev('tidig', 17), ev('eget', 19, { featuredUntil: new Date(slut).toISOString() } as Partial<AppFeedEvent>)], { nowMs: NU });
+        expect(egen.features[0].properties).toMatchObject({ id: 'eget', ikon: 'bricka-music-guld' });
+        // Utgången boost = vanlig bricka; passerat boostat event lyfts inte.
+        const utgången = byggBrickor([ev('x', 17)], { nowMs: NU, boostar: new Map([['x', NU - 1]]) });
+        expect(utgången.features[0].properties.ikon).toBe('bricka-music');
+        const förbi = byggBrickor([ev('tidig', 17), ev('gammal', 10)], { nowMs: NU, boostar: new Map([['gammal', slut]]) });
+        expect(förbi.features[0].properties).toMatchObject({ id: 'tidig', ikon: 'bricka-music' });
+    });
     it('Ticketmaster → guld, pop → tjock kant, sparad → vit kropp', () => {
         const tm = byggBrickor([ev('https://www.ticketmaster.se/event/1', 17, { category: 'stage' })], { nowMs: NU });
         expect(tm.features[0].properties.ikon).toBe('bricka-stage-guld');
