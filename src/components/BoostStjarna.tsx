@@ -3,7 +3,8 @@
  * vänster på eventkortet och även i listan under ... gäller på web och
  * mobil") - webbens components/ui/BoostStar: samma guldrunda platta med ⭐
  * som kartbrickans badge, uppe till vänster på kortet (`pill` med texten
- * UTVALT - inte "boostat", appen säljer inget, CLAUDE.md) och på raderna
+ * BOOSTAD - ägarbeslut 4/11, Josef: "jag ser hellre att det står boostad";
+ * ett STATUSORD, ingen köpknapp eller pris - CLAUDE.md) och på raderna
  * (bara stjärnan; `liten` på emoji-cirkeln i de kompakta raderna).
  */
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -13,13 +14,13 @@ export const BOOST_GULD = '#fbbf24';
 export function BoostStjärna({ pill = false, liten = false, style }: { pill?: boolean; liten?: boolean; style?: StyleProp<ViewStyle> }) {
     if (pill) {
         return (
-            <View style={[styles.pill, style]} accessibilityLabel="Utvalt event">
-                <Text style={styles.pillText}>⭐ UTVALT</Text>
+            <View style={[styles.pill, style]} accessibilityLabel="Boostat event">
+                <Text style={styles.pillText}>⭐ BOOSTAD</Text>
             </View>
         );
     }
     return (
-        <View style={[styles.platta, liten && styles.liten, style]} accessibilityLabel="Utvalt event">
+        <View style={[styles.platta, liten && styles.liten, style]} accessibilityLabel="Boostat event">
             <Text style={[styles.stjärna, liten && styles.litenStjärna]}>⭐</Text>
         </View>
     );

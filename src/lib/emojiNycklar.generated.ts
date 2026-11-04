@@ -2,7 +2,7 @@
 /** Brickans ruta i px (DPR 2,5) - kroppar och brickor har samma. */
 export const BRICK_RUTA = { bredd: 208, höjd: 178 } as const;
 /** Ändras när någon kropp eller emoji bakats om - appens diskcache byter mapp. */
-export const BAKNING = '1ad8fd85c8';
+export const BAKNING = '635d746da0';
 export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-art',
     'kropp-art-gron',
@@ -12,6 +12,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-art-pop',
     'kropp-art-sparad',
     'kropp-art-sparad-vald',
+    'kropp-art-stjarna',
+    'kropp-art-stjarna-vald',
     'kropp-art-vald',
     'kropp-course',
     'kropp-course-gron',
@@ -21,6 +23,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-course-pop',
     'kropp-course-sparad',
     'kropp-course-sparad-vald',
+    'kropp-course-stjarna',
+    'kropp-course-stjarna-vald',
     'kropp-course-vald',
     'kropp-family',
     'kropp-family-gron',
@@ -30,6 +34,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-family-pop',
     'kropp-family-sparad',
     'kropp-family-sparad-vald',
+    'kropp-family-stjarna',
+    'kropp-family-stjarna-vald',
     'kropp-family-vald',
     'kropp-food',
     'kropp-food-gron',
@@ -39,6 +45,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-food-pop',
     'kropp-food-sparad',
     'kropp-food-sparad-vald',
+    'kropp-food-stjarna',
+    'kropp-food-stjarna-vald',
     'kropp-food-vald',
     'kropp-market',
     'kropp-market-gron',
@@ -48,6 +56,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-market-pop',
     'kropp-market-sparad',
     'kropp-market-sparad-vald',
+    'kropp-market-stjarna',
+    'kropp-market-stjarna-vald',
     'kropp-market-vald',
     'kropp-music',
     'kropp-music-gron',
@@ -57,6 +67,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-music-pop',
     'kropp-music-sparad',
     'kropp-music-sparad-vald',
+    'kropp-music-stjarna',
+    'kropp-music-stjarna-vald',
     'kropp-music-vald',
     'kropp-other',
     'kropp-other-gron',
@@ -66,6 +78,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-other-pop',
     'kropp-other-sparad',
     'kropp-other-sparad-vald',
+    'kropp-other-stjarna',
+    'kropp-other-stjarna-vald',
     'kropp-other-vald',
     'kropp-party',
     'kropp-party-gron',
@@ -75,6 +89,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-party-pop',
     'kropp-party-sparad',
     'kropp-party-sparad-vald',
+    'kropp-party-stjarna',
+    'kropp-party-stjarna-vald',
     'kropp-party-vald',
     'kropp-social',
     'kropp-social-gron',
@@ -84,6 +100,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-social-pop',
     'kropp-social-sparad',
     'kropp-social-sparad-vald',
+    'kropp-social-stjarna',
+    'kropp-social-stjarna-vald',
     'kropp-social-vald',
     'kropp-sport',
     'kropp-sport-gron',
@@ -93,6 +111,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-sport-pop',
     'kropp-sport-sparad',
     'kropp-sport-sparad-vald',
+    'kropp-sport-stjarna',
+    'kropp-sport-stjarna-vald',
     'kropp-sport-vald',
     'kropp-stage',
     'kropp-stage-gron',
@@ -102,6 +122,8 @@ export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-stage-pop',
     'kropp-stage-sparad',
     'kropp-stage-sparad-vald',
+    'kropp-stage-stjarna',
+    'kropp-stage-stjarna-vald',
     'kropp-stage-vald'
 ];
 /** Emojins id → tecknet och övre vänstra hörnet i brickans ruta. */

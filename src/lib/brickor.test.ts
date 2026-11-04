@@ -13,6 +13,10 @@ describe('brickaIkon', () => {
         expect(brickaIkon({ category: 'art', pop: true })).toBe('bricka-art-pop');
         expect(brickaIkon({ category: 'art', pop: true, vald: true })).toBe('bricka-art-vald');
     });
+    it('kropp: stjärna (boost/stjärngåva, med ⭐) går före guld (TM, utan ⭐)', () => {
+        expect(brickaIkon({ category: 'music', stjärna: true })).toBe('bricka-music-stjarna');
+        expect(brickaIkon({ category: 'music', stjärna: true, guld: true, vald: true })).toBe('bricka-music-stjarna-vald');
+    });
     it('kropp: guld > sparad, och vald behåller kroppen', () => {
         expect(brickaIkon({ category: 'stage', guld: true, sparad: true, pop: true })).toBe('bricka-stage-guld');
         expect(brickaIkon({ category: 'stage', guld: true, vald: true })).toBe('bricka-stage-guld-vald');
@@ -26,7 +30,7 @@ describe('brickaIkon', () => {
     it('varje nyckel finns som bakad PNG', () => {
         const bakade = new Set(BRICKA_NYCKLAR);
         for (const category of EVENT_CATEGORY_KEYS) {
-            for (const t of [{}, { pop: true }, { vald: true }, { sparad: true }, { sparad: true, vald: true }, { guld: true }, { guld: true, vald: true }, { grön: true }, { grön: true, vald: true }]) {
+            for (const t of [{}, { pop: true }, { vald: true }, { sparad: true }, { sparad: true, vald: true }, { guld: true }, { guld: true, vald: true }, { stjärna: true }, { stjärna: true, vald: true }, { grön: true }, { grön: true, vald: true }]) {
                 expect(bakade.has(brickaIkon({ category, ...t }))).toBe(true);
             }
         }
