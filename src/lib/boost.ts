@@ -35,6 +35,26 @@ export function ärBoostad(e: Boostbar, boostar: Boostar, nuMs: number): boolean
     return isFeaturedAt(boostSlut(e, boostar), nuMs);
 }
 
+/**
+ * BOOST-LÖFTET: ett boostat event syns på kartan VARJE dag t.o.m.
+ * featuredUntil, inte bara sin egen dag (webbens isBoostShownEveryDay -
+ * "99 kr/vecka köper synlighet alla dagar"). Två villkor: boosten är aktiv
+ * OCH eventets egen dag har inte passerat (`dygnetsStartMs` = dagens
+ * midnatt) - dagen efter eventet är det färdigspelat och ska bort oavsett
+ * hur många boostdagar som återstår. Josef 4/11: "boostade event ... synligt
+ * 1 vecka i förväg på iOS-appen? Det visas ju inte där."
+ */
+export function synligVarjeDag(
+    e: Boostbar & Pick<AppFeedEvent, 'time'>,
+    boostar: Boostar,
+    nuMs: number,
+    dygnetsStartMs: number,
+): boolean {
+    if (!ärBoostad(e, boostar, nuMs)) return false;
+    const t = new Date(e.time).getTime();
+    return Number.isFinite(t) && t >= dygnetsStartMs;
+}
+
 /** Boostade först inom dagen (stabilt), resten i sin vanliga ordning. */
 export function boostadeFörst<T extends Boostbar>(events: readonly T[], boostar: Boostar, nuMs: number): T[] {
     return featuredFirst(events, e => ärBoostad(e, boostar, nuMs));

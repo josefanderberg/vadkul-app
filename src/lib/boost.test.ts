@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boostadeFörst, boostadeRader, boostSlut, INGA_BOOSTAR, ärBoostad } from './boost';
+import { boostadeFörst, boostadeRader, boostSlut, INGA_BOOSTAR, synligVarjeDag, ärBoostad } from './boost';
 
 const NU = Date.parse('2026-11-04T12:00:00Z');
 const SEN = '2026-11-10T00:00:00Z';
@@ -23,6 +23,21 @@ describe('boostSlut / ärBoostad', () => {
     it('eventets eget fält vinner över overlayn', () => {
         const boostar = new Map([['a', Date.parse(FÖRBI)]]);
         expect(ärBoostad(ev('a', SEN, SEN), boostar, NU)).toBe(true);
+    });
+});
+
+describe('synligVarjeDag (webbens isBoostShownEveryDay)', () => {
+    const midnatt = Date.parse('2026-11-04T00:00:00Z');
+    it('aktiv boost + eventet har inte passerat sin dag → syns oavsett vald dag', () => {
+        expect(synligVarjeDag(ev('a', '2026-11-07T18:00:00Z', SEN), INGA_BOOSTAR, NU, midnatt)).toBe(true);
+        expect(synligVarjeDag(ev('a', '2026-11-04T09:00:00Z', SEN), INGA_BOOSTAR, NU, midnatt)).toBe(true);
+        expect(synligVarjeDag(ev('s', '2026-11-07T18:00:00Z'), new Map([['s', Date.parse(SEN)]]), NU, midnatt)).toBe(true);
+    });
+    it('dagen efter eventet, utgången boost eller ingen boost → vanlig dagregel', () => {
+        expect(synligVarjeDag(ev('a', '2026-11-03T18:00:00Z', SEN), INGA_BOOSTAR, NU, midnatt)).toBe(false);
+        expect(synligVarjeDag(ev('a', '2026-11-07T18:00:00Z', FÖRBI), INGA_BOOSTAR, NU, midnatt)).toBe(false);
+        expect(synligVarjeDag(ev('a', '2026-11-07T18:00:00Z'), INGA_BOOSTAR, NU, midnatt)).toBe(false);
+        expect(synligVarjeDag(ev('a', 'trasig', SEN), INGA_BOOSTAR, NU, midnatt)).toBe(false);
     });
 });
 
