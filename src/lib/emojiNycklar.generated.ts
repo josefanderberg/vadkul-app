@@ -2,7 +2,7 @@
 /** Brickans ruta i px (DPR 2,5) - kroppar och brickor har samma. */
 export const BRICK_RUTA = { bredd: 208, höjd: 178 } as const;
 /** Ändras när någon kropp eller emoji bakats om - appens diskcache byter mapp. */
-export const BAKNING = '635d746da0';
+export const BAKNING = '798a2899b1';
 export const KROPP_NYCKLAR: readonly string[] = [
     'kropp-art',
     'kropp-art-gron',
@@ -134,7 +134,7 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "y": 46
     },
     "2615": {
-        "e": "☕",
+        "e": "☕️",
         "x": 70,
         "y": 46
     },
@@ -166,6 +166,16 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
     "1f0cf": {
         "e": "🃏",
         "x": 81,
+        "y": 46
+    },
+    "1f1ee-1f1f3": {
+        "e": "🇮🇳",
+        "x": 73,
+        "y": 58
+    },
+    "1f304": {
+        "e": "🌄",
+        "x": 70,
         "y": 46
     },
     "1f305": {
@@ -200,6 +210,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
     },
     "1f310": {
         "e": "🌐",
+        "x": 70,
+        "y": 46
+    },
+    "1f315": {
+        "e": "🌕",
         "x": 70,
         "y": 46
     },
@@ -263,6 +278,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 72,
         "y": 49
     },
+    "1f34e": {
+        "e": "🍎",
+        "x": 70,
+        "y": 47
+    },
     "1f354": {
         "e": "🍔",
         "x": 72,
@@ -308,6 +328,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 71,
         "y": 52
     },
+    "1f371": {
+        "e": "🍱",
+        "x": 70,
+        "y": 52
+    },
     "1f372": {
         "e": "🍲",
         "x": 70,
@@ -332,6 +357,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "e": "🍷",
         "x": 85,
         "y": 46
+    },
+    "1f378": {
+        "e": "🍸",
+        "x": 77,
+        "y": 47
     },
     "1f378-1f969": {
         "e": "🍸🥩",
@@ -613,6 +643,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 70,
         "y": 49
     },
+    "1f3e5": {
+        "e": "🏥",
+        "x": 71,
+        "y": 46
+    },
     "1f3e8": {
         "e": "🏨",
         "x": 70,
@@ -663,6 +698,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 71,
         "y": 46
     },
+    "1f41e": {
+        "e": "🐞",
+        "x": 72,
+        "y": 49
+    },
     "1f41f": {
         "e": "🐟",
         "x": 72,
@@ -672,6 +712,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "e": "🐠",
         "x": 70,
         "y": 50
+    },
+    "1f426": {
+        "e": "🐦",
+        "x": 72,
+        "y": 55
     },
     "1f431": {
         "e": "🐱",
@@ -697,6 +742,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "e": "👋",
         "x": 70,
         "y": 46
+    },
+    "1f453": {
+        "e": "👓",
+        "x": 70,
+        "y": 67
     },
     "1f457": {
         "e": "👗",
@@ -743,6 +793,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 71,
         "y": 46
     },
+    "1f475": {
+        "e": "👵",
+        "x": 70,
+        "y": 46
+    },
     "1f476": {
         "e": "👶",
         "x": 70,
@@ -758,9 +813,19 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 72,
         "y": 46
     },
+    "1f484": {
+        "e": "💄",
+        "x": 79,
+        "y": 47
+    },
     "1f486": {
         "e": "💆",
         "x": 72,
+        "y": 46
+    },
+    "1f490": {
+        "e": "💐",
+        "x": 70,
         "y": 46
     },
     "1f4a1": {
@@ -808,6 +873,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 70,
         "y": 46
     },
+    "1f4c5": {
+        "e": "📅",
+        "x": 70,
+        "y": 46
+    },
     "1f4cb": {
         "e": "📋",
         "x": 70,
@@ -827,6 +897,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "e": "📖",
         "x": 72,
         "y": 54
+    },
+    "1f4d6-2702": {
+        "e": "📖✂️",
+        "x": 38,
+        "y": 46
     },
     "1f4d8": {
         "e": "📘",
@@ -903,6 +978,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 70,
         "y": 46
     },
+    "1f52a": {
+        "e": "🔪",
+        "x": 70,
+        "y": 46
+    },
     "1f52b": {
         "e": "🔫",
         "x": 70,
@@ -968,6 +1048,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 70,
         "y": 46
     },
+    "1f5a4": {
+        "e": "🖤",
+        "x": 72,
+        "y": 48
+    },
     "1f5a5": {
         "e": "🖥️",
         "x": 70,
@@ -1018,6 +1103,16 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 70,
         "y": 46
     },
+    "1f686": {
+        "e": "🚆",
+        "x": 74,
+        "y": 46
+    },
+    "1f687": {
+        "e": "🚇",
+        "x": 70,
+        "y": 55
+    },
     "1f68c": {
         "e": "🚌",
         "x": 70,
@@ -1027,6 +1122,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "e": "🚗",
         "x": 70,
         "y": 58
+    },
+    "1f69c": {
+        "e": "🚜",
+        "x": 70,
+        "y": 52
     },
     "1f6a2": {
         "e": "🚢",
@@ -1041,6 +1141,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
     "1f6a6": {
         "e": "🚦",
         "x": 87,
+        "y": 46
+    },
+    "1f6a7": {
+        "e": "🚧",
+        "x": 70,
         "y": 46
     },
     "1f6a8": {
@@ -1065,6 +1170,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
     },
     "1f6c1": {
         "e": "🛁",
+        "x": 70,
+        "y": 46
+    },
+    "1f6cb": {
+        "e": "🛋️",
         "x": 70,
         "y": 46
     },
@@ -1123,6 +1233,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 71,
         "y": 47
     },
+    "1f90f": {
+        "e": "🤏",
+        "x": 70,
+        "y": 63
+    },
     "1f916": {
         "e": "🤖",
         "x": 74,
@@ -1137,6 +1252,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "e": "🤝",
         "x": 70,
         "y": 61
+    },
+    "1f920": {
+        "e": "🤠",
+        "x": 72,
+        "y": 46
     },
     "1f93c": {
         "e": "🤼",
@@ -1243,6 +1363,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 70,
         "y": 46
     },
+    "1f97f": {
+        "e": "🥿",
+        "x": 70,
+        "y": 86
+    },
     "1f986": {
         "e": "🦆",
         "x": 70,
@@ -1271,6 +1396,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
     "1f9b5": {
         "e": "🦵",
         "x": 89,
+        "y": 46
+    },
+    "1f9b7": {
+        "e": "🦷",
+        "x": 72,
         "y": 46
     },
     "1f9c0": {
@@ -1308,6 +1438,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 70,
         "y": 46
     },
+    "1f9d1-200d-1f373": {
+        "e": "🧑‍🍳",
+        "x": 75,
+        "y": 46
+    },
     "1f9d1-200d-1f3eb": {
         "e": "🧑‍🏫",
         "x": 71,
@@ -1337,6 +1472,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "e": "🧑‍⚖️",
         "x": 80,
         "y": 48
+    },
+    "1f9d1-2696": {
+        "e": "🧑⚖️",
+        "x": 38,
+        "y": 46
     },
     "1f9d3": {
         "e": "🧓",
@@ -1372,6 +1512,16 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "e": "🧠",
         "x": 70,
         "y": 50
+    },
+    "1f9e3": {
+        "e": "🧣",
+        "x": 84,
+        "y": 46
+    },
+    "1f9e6": {
+        "e": "🧦",
+        "x": 70,
+        "y": 46
     },
     "1f9e8": {
         "e": "🧨",
@@ -1443,10 +1593,25 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "x": 72,
         "y": 48
     },
+    "1fa78": {
+        "e": "🩸",
+        "x": 84,
+        "y": 47
+    },
     "1fa79": {
         "e": "🩹",
         "x": 70,
         "y": 47
+    },
+    "1fa7a": {
+        "e": "🩺",
+        "x": 70,
+        "y": 46
+    },
+    "1fa84": {
+        "e": "🪄",
+        "x": 70,
+        "y": 51
     },
     "1fa91": {
         "e": "🪑",
@@ -1527,6 +1692,11 @@ export const EMOJI_LÄGE: Record<string, { e: string; x: number; y: number }> = 
         "e": "⛺",
         "x": 70,
         "y": 55
+    },
+    "270a": {
+        "e": "✊",
+        "x": 75,
+        "y": 48
     },
     "270d": {
         "e": "✍️",
