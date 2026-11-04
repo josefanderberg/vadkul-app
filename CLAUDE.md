@@ -10,8 +10,11 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
 ## Hårda regler
 
 - **APPEN SÄLJER INGENTING.** Ingen boost-knapp, inga priser, ingen länk till
-  köp — ordet "boost" förekommer inte i UI:t. Betalningar sker på webben
-  (Apples IAP-regler; hela resonemanget i plattformsplanen).
+  köp. Betalningar sker på webben (Apples IAP-regler; hela resonemanget i
+  plattformsplanen). STATUSORDET "Boostad" får däremot stå på boostade event
+  (pillen på kortet, "⭐ Boostade"-blocket i listan) - ägarbeslut 4/11 2026,
+  Josef: "jag ser hellre att det står boostad" (ersätter "Utvald"). Det
+  berättar bara vad som hänt på webben och säljer inget.
 - **Eventflödet läses ALDRIG ur Firestore.** Event kommer via CDN-flödet
   (`https://vadkul.se/api/events/app-<region>`) och `/api/event?id=` - samma
   egress-regel som huvudrepots CLAUDE.md. Läs aldrig hela kollektioner.

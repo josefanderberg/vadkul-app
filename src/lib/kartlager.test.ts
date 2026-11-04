@@ -32,21 +32,24 @@ describe('byggBrickor', () => {
         const fc = byggBrickor([ev('a', 17), ev('b', 18, { category: 'art' })], { nowMs: NU, valtId: 'b' });
         expect(fc.features[0].properties).toMatchObject({ id: 'b', ikon: 'bricka-art-vald', sort: 4, label: 'Konst' });
     });
-    it('stjärnmärkt → guldbricka, och stjärnan lyfter representanten i gruppen', () => {
+    it('stjärnmärkt → guldbricka med ⭐, och stjärnan lyfter representanten i gruppen', () => {
         const stjärnor = new Set(['sen']);
         const fc = byggBrickor([ev('tidig', 17), ev('sen', 19)], { nowMs: NU, stjärnor });
-        expect(fc.features[0].properties).toMatchObject({ id: 'sen', ikon: 'bricka-music-guld', sort: 2 });
+        expect(fc.features[0].properties).toMatchObject({ id: 'sen', ikon: 'bricka-music-stjarna', sort: 3 });
         // Ett passerat stjärnevent lyfts inte - stjärnan lyser bara tills det varit.
         const förbi = byggBrickor([ev('tidig', 17), ev('gammal', 10)], { nowMs: NU, stjärnor: new Set(['gammal']) });
         expect(förbi.features[0].properties.id).toBe('tidig');
         expect(förbi.features[0].properties.ikon).toBe('bricka-music');
     });
-    it('boostat → guldbricka och lyft representant, via overlayn ELLER eventets eget featuredUntil (4/11)', () => {
+    it('boostat → guldbricka med ⭐ överst i ritordningen, via overlayn ELLER eventets eget featuredUntil (4/11)', () => {
         const slut = new Date(2026, 8, 30).getTime();
         const fc = byggBrickor([ev('tidig', 17), ev('sen', 19)], { nowMs: NU, boostar: new Map([['sen', slut]]) });
-        expect(fc.features[0].properties).toMatchObject({ id: 'sen', ikon: 'bricka-music-guld', sort: 2, fast: true });
+        expect(fc.features[0].properties).toMatchObject({ id: 'sen', ikon: 'bricka-music-stjarna', sort: 3, fast: true, pop: true });
         const egen = byggBrickor([ev('tidig', 17), ev('eget', 19, { featuredUntil: new Date(slut).toISOString() } as Partial<AppFeedEvent>)], { nowMs: NU });
-        expect(egen.features[0].properties).toMatchObject({ id: 'eget', ikon: 'bricka-music-guld' });
+        expect(egen.features[0].properties).toMatchObject({ id: 'eget', ikon: 'bricka-music-stjarna' });
+        // Vald boostad = vald-varianten av stjärnbrickan, allra överst.
+        const vald = byggBrickor([ev('sen', 19)], { nowMs: NU, valtId: 'sen', boostar: new Map([['sen', slut]]) });
+        expect(vald.features[0].properties).toMatchObject({ ikon: 'bricka-music-stjarna-vald', sort: 4 });
         // Utgången boost = vanlig bricka; passerat boostat event lyfts inte.
         const utgången = byggBrickor([ev('x', 17)], { nowMs: NU, boostar: new Map([['x', NU - 1]]) });
         expect(utgången.features[0].properties.ikon).toBe('bricka-music');

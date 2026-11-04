@@ -5,7 +5,10 @@
  * färg-emoji som text, därför förbakas allt (se src/lib/brickor.ts).
  *
  * Varianter per kategori: vanlig, pop (tjockare vit kant), vald (vit ram),
- * sparad (vit kropp), sparad+vald, guld (Ticketmaster), guld+vald.
+ * sparad (vit kropp), sparad+vald, guld (Ticketmaster, utan ⭐), guld+vald,
+ * stjarna (guld MED ⭐-badge: boostade och stjärnmärkta event, webbens
+ * starred - Josef 4/11: "på appen ser jag inte guldstjärna på
+ * eventmarkören"), stjarna+vald.
  *
  * "+N"-badgen bakas som EGNA bilder (antal-2 … antal-99, antal-99plus): vit
  * pill + siffra i EN bild, med webbens mått (COUNT_BADGE_D, 900 13px). Webben
@@ -74,6 +77,9 @@ const VARIANTER = {
     'sparad-vald': { selected: true, saved: true, gold: false, pop: false },
     guld: { selected: false, saved: false, gold: true, pop: false },
     'guld-vald': { selected: true, saved: false, gold: true, pop: false },
+    // Boostade/stjärnmärkta: webbens starred = guldkropp + ⭐ vid axeln.
+    stjarna: { selected: false, saved: false, gold: false, pop: false, starred: true },
+    'stjarna-vald': { selected: true, saved: false, gold: false, pop: false, starred: true },
     // Egna VADKUL-event: smaragdgrön kropp oavsett kategori (webbens brickaBodyHex).
     gron: { selected: false, saved: false, gold: false, pop: false, grön: true },
     'gron-vald': { selected: true, saved: false, gold: false, pop: false, grön: true },
@@ -112,7 +118,7 @@ try {
         for (const [cat, def] of Object.entries(EVENT_CATEGORIES)) {
             for (const [namn, v] of Object.entries(varianter)) {
                 // makeBrickaImageData(emoji, bodyColor, selected, saved, wish, starred, count, gold, pop)
-                const res = makeBrickaImageData(def.emoji, v.grön ? USER_EVENT_HEX : def.markerHex, v.selected, v.saved, false, false, 0, v.gold, v.pop);
+                const res = makeBrickaImageData(def.emoji, v.grön ? USER_EVENT_HEX : def.markerHex, v.selected, v.saved, false, !!v.starred, 0, v.gold, v.pop);
                 const c = document.createElement('canvas');
                 c.width = res.data.width;
                 c.height = res.data.height;
@@ -198,7 +204,7 @@ try {
         const kroppar = {};
         for (const [cat, def] of Object.entries(EVENT_CATEGORIES)) {
             for (const [namn, v] of Object.entries(varianter)) {
-                const res = makeBrickaImageData('', v.grön ? USER_EVENT_HEX : def.markerHex, v.selected, v.saved, false, false, 0, v.gold, v.pop);
+                const res = makeBrickaImageData('', v.grön ? USER_EVENT_HEX : def.markerHex, v.selected, v.saved, false, !!v.starred, 0, v.gold, v.pop);
                 kroppar[namn ? `kropp-${cat}-${namn}` : `kropp-${cat}`] = tillUrl(res.data);
             }
         }

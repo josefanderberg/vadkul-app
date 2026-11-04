@@ -5,10 +5,12 @@
  * ritkod (scripts/baka-brickor.mjs → assets/brickor/ + brickBilder.generated).
  *
  * Varianterna följer webbens makeBrickaImageData-prioritet:
- *   kropp: guld (Ticketmaster, ägarbeslut 1/9) > sparad (vit) > grön (VADKUL-
- *          värdat användarevent, webbens USER_EVENT_HEX - tips är INTE gröna) >
- *          kategorifärg
- *   kant:  vald (vit ram) > guld/sparad > 🔥 pop (tjockare) > vanlig
+ *   kropp: stjärna (guld MED ⭐-badge: boostade + stjärnmärkta, webbens
+ *          starred - Josef 4/11: "på appen ser jag inte guldstjärna på
+ *          eventmarkören") > guld (Ticketmaster, ägarbeslut 1/9, UTAN ⭐) >
+ *          sparad (vit) > grön (VADKUL-värdat användarevent, webbens
+ *          USER_EVENT_HEX - tips är INTE gröna) > kategorifärg
+ *   kant:  vald (vit ram) > stjärna/guld/sparad > 🔥 pop (tjockare) > vanlig
  *
  * De förbakade brickorna bär kategorins emoji. Eventets egen emoji (webbens
  * eventEmoji) sätts ihop i appen ur kropp + emoji - lib/emojiBricka.
@@ -28,6 +30,8 @@ export const BADGE_Y = 7 + 20 * Math.SQRT2 + 20 * Math.SQRT1_2 + 5;
 export interface BrickTillstånd {
     category: string;
     pop?: boolean;
+    /** Boostat eller stjärnmärkt: guldkropp med ⭐-badge (kvittot, som på webben). */
+    stjärna?: boolean;
     guld?: boolean;
     sparad?: boolean;
     /** Eget VADKUL-event (lib/appEvent ärEgetVadkulEvent) - smaragdgrön kropp. */
@@ -43,7 +47,7 @@ export function brickansKategori(category: string): string {
 /** Bildnyckeln i registret för en bricka. */
 export function brickaIkon(t: BrickTillstånd): string {
     const cat = brickansKategori(t.category);
-    const kropp = t.guld ? 'guld' : t.sparad ? 'sparad' : t.grön ? 'gron' : '';
+    const kropp = t.stjärna ? 'stjarna' : t.guld ? 'guld' : t.sparad ? 'sparad' : t.grön ? 'gron' : '';
     let variant: string;
     if (kropp) variant = t.vald ? `${kropp}-vald` : kropp;
     else variant = t.vald ? 'vald' : t.pop ? 'pop' : '';

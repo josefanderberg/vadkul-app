@@ -1774,7 +1774,7 @@ function FlerEvent({
                 <View>
                     <View style={[styles.dagRubrik, styles.utvaldaRubrik]}>
                         <View style={[styles.dagStreck, styles.utvaldaStreck]} />
-                        <Text style={styles.dagRubrikText}>⭐ Utvalda</Text>
+                        <Text style={styles.dagRubrikText}>⭐ Boostade</Text>
                     </View>
                     {pinnade.map(e => (
                         <ListRad
