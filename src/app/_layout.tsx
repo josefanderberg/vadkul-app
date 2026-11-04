@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Stack, type ErrorBoundaryProps } from 'expo-router';
+import { Stack, usePathname, useSegments, type ErrorBoundaryProps } from 'expo-router';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { rapporteraFel, startaKraschrapportering, sättKraschAnvändare } from '@/data/krasch';
+import { spåraSkärm, startaMätning } from '@/data/matning';
 import { FilterProvider } from '@/lib/filterContext';
 import { KontoProvider, useKonto } from '@/lib/kontoContext';
 import { RegionProvider } from '@/lib/regionContext';
@@ -12,6 +13,8 @@ import { SparadeProvider } from '@/lib/sparadeContext';
 // Först av allt: Crashlytics installerar sin globala JS-felhanterare när
 // modulen skapas (data/krasch), så fel under första renderingen fångas också.
 startaKraschrapportering();
+// Mätningen (data/matning): insamlingen på i butiksbyggen, av i dev-byggen.
+startaMätning();
 
 // En klient för hela appen - flödet cacheas per region (se src/api/appFeed).
 const queryClient = new QueryClient();
@@ -32,6 +35,20 @@ function KraschKonto() {
     useEffect(() => {
         if (svarat) sättKraschAnvändare(uid);
     }, [svarat, uid]);
+    return null;
+}
+
+/**
+ * Skärmvisningar till Analytics: en per ruttbyte, som webbens FirebaseAnalytics
+ * loggar page_view per sidbyte. Sökvägen blir screen_name och rutten (segments,
+ * med platshållare som '/stad/[slug]') screen_class - se lib/matning.
+ */
+function MätSkärm() {
+    const pathname = usePathname();
+    const rutt = useSegments().join('/');
+    useEffect(() => {
+        spåraSkärm(pathname, rutt);
+    }, [pathname, rutt]);
     return null;
 }
 
@@ -62,6 +79,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
             <KontoProvider>
                 <KraschKonto />
+                <MätSkärm />
                 <RegionProvider>
                     <FilterProvider>
                         <SparadeProvider>

@@ -22,6 +22,7 @@ import {
     setDoc,
     writeBatch,
 } from '@react-native-firebase/firestore';
+import { spåra } from '@/data/matning';
 import {
     friendAcceptWrites, friendRemoveWrites, friendRequestWrites, parseFriendRow,
     type FriendDocStatus, type FriendPerson, type FriendRow, type FriendWrite,
@@ -145,6 +146,7 @@ export interface FriendProfileData {
  *  kräver isOwner för shared). Ingen landed-räknare i appen: ?van=-länken
  *  landar alltid i webben, som räknar den. */
 export function räknaInbjudanDelad(uid: string): void {
+    spåra('invite_share'); // webbens friendService
     try {
         setDoc(doc(getFirestore(), 'friendInviteStats', uid), { shared: increment(1) }, { merge: true })
             .catch(() => { /* nätverk/regler nere - släpp räknaren */ });

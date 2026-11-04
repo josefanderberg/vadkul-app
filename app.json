@@ -88,6 +88,14 @@
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       "@react-native-firebase/crashlytics",
+      [
+        "@react-native-firebase/analytics",
+        {
+          "ios": {
+            "withoutAdIdSupport": true
+          }
+        }
+      ],
       "./plugins/withCrashlyticsPlist",
       "@react-native-google-signin/google-signin",
       "expo-apple-authentication",

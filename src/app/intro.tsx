@@ -52,6 +52,7 @@ import {
     TelefonPar,
     useTelefonHöjd,
 } from '@/components/IntroScen';
+import { spåra } from '@/data/matning';
 import { useFilter } from '@/lib/filterContext';
 import { KONTON_PÅ } from '@/lib/funktioner';
 import { KÄLLOR } from '@/lib/kartFilter';
@@ -101,12 +102,14 @@ export default function IntroScreen() {
     };
 
     const väljPlats = () => {
+        spåra('startstad_here'); // webbens StartCityPicker-namn
         väljStartstad(null);
         setSvar('plats');
         begärPlats();
     };
 
     const väljOrt = (c: City) => {
+        spåra('startstad_city');
         väljStartstad(c);
         setSvar(c);
         Keyboard.dismiss();
@@ -114,6 +117,9 @@ export default function IntroScreen() {
     };
 
     const klar = (vidare?: '/konto?lage=skapa' | '/konto?lage=logga-in') => {
+        // Webbens WelcomeOverlay-namn, så introt går att jämföra med välkomstrutan.
+        spåra(vidare === '/konto?lage=skapa' ? 'welcome_create_account'
+            : vidare === '/konto?lage=logga-in' ? 'welcome_login' : 'welcome_explore_map');
         avslutaIntro();
         router.dismissAll();
         if (vidare) router.push(vidare);

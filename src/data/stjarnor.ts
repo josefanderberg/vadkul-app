@@ -11,6 +11,7 @@
  */
 import { getAuth } from '@react-native-firebase/auth';
 import { collection, doc, getDoc, getFirestore, onSnapshot } from '@react-native-firebase/firestore';
+import { spåra } from '@/data/matning';
 import { byggCallableAnrop, tolkaCallableSvar } from '@/lib/stjarnor';
 
 type Lyssnare = (ids: ReadonlySet<string>) => void;
@@ -81,6 +82,7 @@ export async function sättStjärna(eventId: string): Promise<{ success: boolean
         const res = await fetch(url, init);
         const svar = tolkaCallableSvar<{ success: boolean; message: string; starsLeft?: number }>(await res.json());
         if (!svar) return { success: false, message: 'Kunde inte sätta stjärnan. Försök igen.' };
+        if (svar.success) spåra('star_placed'); // webbens starService
         if (användare && typeof svar.starsLeft === 'number') kvarCache.set(användare.uid, Math.max(0, svar.starsLeft));
         return svar;
     } catch (e) {

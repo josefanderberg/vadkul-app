@@ -27,6 +27,7 @@ import {
 } from '@react-native-firebase/firestore';
 import { getDownloadURL, getStorage, putFile, ref } from '@react-native-firebase/storage';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import { spåra } from '@/data/matning';
 import { nyttEventDok, ändratEventDok, type EventInmatning } from '@/lib/skapaEvent';
 
 /** Webbens maxWidthOrHeight - längre sidor än så krymps före uppladdning. */
@@ -82,21 +83,21 @@ export async function skapaEgetEvent(
         createdAt: serverTimestamp(),
     };
     const kollektion = collection(getFirestore(), 'linkEvents');
+    let id: string;
     try {
-        const skapad = await addDoc(kollektion, payload);
-        return skapad.id;
+        id = (await addDoc(kollektion, payload)).id;
     } catch (e: unknown) {
         // Gamla rules utan price i hasOnly avvisar HELA skrivningen - släpp
         // priset och spara eventet ändå (webbens reträtt, se createUserEvent).
         const kod = String((e as { code?: unknown })?.code ?? '');
-        if (kod.includes('permission-denied') && payload.price !== undefined) {
-            console.warn('[event] pris avvisat av reglerna - sparar utan pris');
-            delete payload.price;
-            const skapad = await addDoc(kollektion, payload);
-            return skapad.id;
-        }
-        throw e;
+        if (!kod.includes('permission-denied') || payload.price === undefined) throw e;
+        console.warn('[event] pris avvisat av reglerna - sparar utan pris');
+        delete payload.price;
+        id = (await addDoc(kollektion, payload)).id;
     }
+    // Webbens createUserEvent loggar event_create efter lyckad skrivning - samma parametrar.
+    spåra('event_create', { typ: input.isTip ? 'tips' : 'eget', kategori: input.category || 'other' });
+    return id;
 }
 
 /**
