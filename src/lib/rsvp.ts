@@ -72,3 +72,26 @@ export function inbjudningsUrl(eventId: string, userCreated: boolean | undefined
     const fran = fromUid ? `&fran=${encodeURIComponent(fromUid)}` : '';
     return `https://vadkul.se/e/${eventShareSlug(rsvpShareId(eventId, userCreated))}?inb=1${fran}`;
 }
+
+/**
+ * VADKUL-VÄRDADE EVENT: KOMMER OCH ANMÄL ÄR SAMMA SVAR (ägarbeslut 4/11,
+ * Josef: "man ska väl kunna klicka på någon av dem ... de ska ha samma
+ * verkan") - port av webbens hostedAttendeeAction/hostedRegisterAction.
+ * Två lager finns kvar (svaret här + anmälan i linkEvents/{id}/attendees,
+ * lib/useAnmalan) men ett tryck på den ena slår båda.
+ */
+
+/** Kommer/Intresserad-trycket (prev → next): vad händer med anmälan? */
+export function anmälanVidSvar(prev: RsvpStatus | null, next: RsvpStatus | null): 'anmäl' | 'avanmäl' | null {
+    if (next === 'going' && prev !== 'going') return 'anmäl';
+    if (prev === 'going' && next !== 'going') return 'avanmäl';
+    return null;
+}
+
+/** ANMÄL-knappen: 'svara' = tryck Kommer (svaret byter och anmälan följer
+ *  med via anmälanVidSvar); 'växla' = bara anmälan, svaret står redan rätt
+ *  (anmäld på en annan enhet, eller ett svar från före kopplingen). */
+export function anmälKnappensVerkan(anmäld: boolean, mitt: RsvpStatus | null): 'svara' | 'växla' {
+    if (!anmäld) return mitt !== 'going' ? 'svara' : 'växla';
+    return mitt === 'going' ? 'svara' : 'växla';
+}

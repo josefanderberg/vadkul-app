@@ -22,6 +22,9 @@ export interface Anmälan {
     lista: Anmäld[];
     upptagen: boolean;
     växla: () => void;
+    /** Inloggad med konto - bara då följer anmälan med Kommer-trycket (4/11);
+     *  utloggad får svaret men skickas inte till inloggningen av Kommer. */
+    inloggad: boolean;
 }
 
 export function useAnmälan(event: AppEvent): Anmälan | null {
@@ -56,5 +59,5 @@ export function useAnmälan(event: AppEvent): Anmälan | null {
             .finally(() => setUpptagen(false));
     };
 
-    return { anmäld, lista, upptagen, växla };
+    return { anmäld, lista, upptagen, växla, inloggad: !!användare };
 }

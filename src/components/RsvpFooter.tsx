@@ -46,7 +46,7 @@ import { getAuth } from '@react-native-firebase/auth';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useRsvp } from '@/lib/rsvpContext';
 import { useKonto } from '@/lib/kontoContext';
-import { inbjudningsUrl, rsvpShareId, type RsvpStatus } from '@/lib/rsvp';
+import { anmälKnappensVerkan, anmälanVidSvar, inbjudningsUrl, nextRsvp, rsvpShareId, type RsvpStatus } from '@/lib/rsvp';
 import { hämtaEngagemang, räknaKlick, type Engagemang } from '@/data/eventStats';
 import { hämtaAnsikten, type RsvpAnsikte } from '@/data/rsvp';
 import type { Anmälan } from '@/lib/useAnmalan';
@@ -71,7 +71,7 @@ const KORT_LUFT = 10;
 /** Svarsläget, räknarna och Bjud med - delas av footern och toppraden
  *  (webbens useRsvpCounts). eventStats-läsningen är sessionscachad per
  *  event, så båda raderna kan vara monterade utan extra läsningar. */
-function useSvar(event: AppFeedEvent & { userCreated?: boolean }) {
+function useSvar(event: AppFeedEvent & { userCreated?: boolean }, anmälan: Anmälan | null = null) {
     const { minRsvp, svara } = useRsvp();
     const { säkerställIdentitet } = useKonto();
     const mitt = minRsvp(event.id);
@@ -102,7 +102,19 @@ function useSvar(event: AppFeedEvent & { userCreated?: boolean }) {
         void Share.share({ title: event.title, message: `${text} ${url}`, url });
     };
 
-    return { mitt, välj: (status: RsvpStatus) => svara(event, status), antal, bjudMed };
+    // KOMMER = ANMÄL PÅ VÄRDADE EVENT (ägarbeslut 4/11, Josef: "de ska ha
+    // samma verkan"): Kommer på → anmälan (namnet i listan), Kommer av →
+    // avanmälan. Bara inloggad (anmälan kräver konto); växla är en toggle,
+    // så läget kollas först. Webbens handleSetRsvp gör samma sak.
+    const välj = (status: RsvpStatus) => {
+        const prev = mitt;
+        svara(event, status);
+        if (!anmälan?.inloggad) return;
+        const verkan = anmälanVidSvar(prev, nextRsvp(prev, status));
+        if ((verkan === 'anmäl' && !anmälan.anmäld) || (verkan === 'avanmäl' && anmälan.anmäld)) anmälan.växla();
+    };
+
+    return { mitt, välj, antal, bjudMed };
 }
 
 type Svarsläge = ReturnType<typeof useSvar>;
@@ -165,10 +177,16 @@ function CtaKnapp({ event, cta }: { event: AppFeedEvent & { hostName?: string };
  * pil. Anmäld = grön "ANMÄLD" (webbens "DU ÄR ANMÄLD", utan ✓ - inga
  * symboler i svarsradens knappar, 7/10); ett nytt tryck tar bort anmälan.
  */
-function AnmälKnapp({ anmälan }: { anmälan: Anmälan }) {
+function AnmälKnapp({ anmälan, svar }: { anmälan: Anmälan; svar: Svarsläge }) {
+    // Samma verkan som Kommer (4/11): ska svaret byta trycks Kommer-knappen
+    // (som skriver anmälan på köpet), annars bara anmälan.
+    const tryck = () => {
+        if (anmälan.inloggad && anmälKnappensVerkan(anmälan.anmäld, svar.mitt) === 'svara') svar.välj('going');
+        else anmälan.växla();
+    };
     return (
         <Pressable
-            onPress={anmälan.växla}
+            onPress={tryck}
             disabled={anmälan.upptagen}
             accessibilityRole="button"
             accessibilityState={{ selected: anmälan.anmäld, busy: anmälan.upptagen }}
@@ -204,7 +222,7 @@ function SvarsRad({ svar, event, cta, anmälan }: {
         <View style={styles.platta}>
             <SvarsKnappar svar={svar} />
             <View style={styles.fyll} />
-            {cta ? <CtaKnapp event={event} cta={cta} /> : anmälan ? <AnmälKnapp anmälan={anmälan} /> : null}
+            {cta ? <CtaKnapp event={event} cta={cta} /> : anmälan ? <AnmälKnapp anmälan={anmälan} svar={svar} /> : null}
         </View>
     );
 }
@@ -233,7 +251,7 @@ export function RsvpToppRad({ event, cta, anmälan = null }: {
     /** VADKUL-värdade event: ANMÄL i appen (lib/useAnmalan), annars null. */
     anmälan?: Anmälan | null;
 }) {
-    const svar = useSvar(event);
+    const svar = useSvar(event, anmälan);
     return (
         <View style={styles.topp}>
             {/* Annons-märkningen följer provisionslänken även här - den
@@ -268,7 +286,7 @@ export function RsvpFooter({
 }) {
     const { användare } = useKonto();
     const insets = useSafeAreaInsets();
-    const svar = useSvar(event);
+    const svar = useSvar(event, anmälan);
 
     // Avatarraden - hämtas per event, sessionscachad (data/rsvp).
     const [ansikten, setAnsikten] = useState<RsvpAnsikte[]>([]);

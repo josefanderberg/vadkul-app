@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { eventShareSlug } from '@vadkul/kontrakt';
-import { inbjudningsUrl, minRsvp, nextRsvp, RSVP_MAX, rsvpDeltan, rsvpShareId, TOM_RSVP, växlaRsvp } from './rsvp';
+import { inbjudningsUrl, minRsvp, nextRsvp, RSVP_MAX, rsvpDeltan, rsvpShareId, TOM_RSVP, växlaRsvp, anmälanVidSvar, anmälKnappensVerkan } from './rsvp';
 
 describe('nextRsvp (webbens övergångar)', () => {
     it('samma knapp togglar av', () => {
@@ -84,5 +84,30 @@ describe('inbjudningsUrl', () => {
     it('utan avsändare blir det bara ?inb=1', () => {
         const slug = eventShareSlug('https://x.se/e');
         expect(inbjudningsUrl('https://x.se/e', undefined, null)).toBe(`https://vadkul.se/e/${slug}?inb=1`);
+    });
+});
+
+describe('anmälanVidSvar (Kommer = Anmäl på värdade event, 4/11)', () => {
+    it('Kommer på → anmäl; Kommer av eller byte till Intresserad → avanmäl', () => {
+        expect(anmälanVidSvar(null, 'going')).toBe('anmäl');
+        expect(anmälanVidSvar('interested', 'going')).toBe('anmäl');
+        expect(anmälanVidSvar('going', null)).toBe('avanmäl');
+        expect(anmälanVidSvar('going', 'interested')).toBe('avanmäl');
+    });
+    it('Intresserad fram och tillbaka rör inte anmälan', () => {
+        expect(anmälanVidSvar(null, 'interested')).toBeNull();
+        expect(anmälanVidSvar('interested', null)).toBeNull();
+    });
+});
+
+describe('anmälKnappensVerkan', () => {
+    it('inte anmäld: trycker Kommer när svaret inte är Kommer, annars bara anmälan', () => {
+        expect(anmälKnappensVerkan(false, null)).toBe('svara');
+        expect(anmälKnappensVerkan(false, 'interested')).toBe('svara');
+        expect(anmälKnappensVerkan(false, 'going')).toBe('växla');
+    });
+    it('anmäld: släpper Kommer när svaret är Kommer, annars bara avanmälan', () => {
+        expect(anmälKnappensVerkan(true, 'going')).toBe('svara');
+        expect(anmälKnappensVerkan(true, null)).toBe('växla');
     });
 });
