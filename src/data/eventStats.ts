@@ -6,9 +6,14 @@
  *
  * Räknarna är best-effort precis som på webben: fire-and-forget, fel sväljs,
  * och läsningen ger null (siffran döljs) i stället för att ljuga "0".
+ *
+ * GA4-händelserna loggas härifrån också, som webbens track()-rader i samma
+ * funktioner: event_view, event_anmal_click, event_like, event_rsvp
+ * (data/matning - samma namn och parametrar som webben).
  */
 import { doc, getDoc, getFirestore, increment, setDoc } from '@react-native-firebase/firestore';
 import { eventShareSlug } from '@vadkul/kontrakt';
+import { spåra } from '@/data/matning';
 
 const statsDoc = (eventId: string) => doc(getFirestore(), 'eventStats', eventShareSlug(eventId));
 
@@ -24,11 +29,15 @@ function skrivTyst(eventId: string, fält: Record<string, unknown>): void {
 
 /** Hjärtat: +1 vid gillning, -1 när den tas bort (webbens recordEventLike). */
 export function räknaGilla(eventId: string, delta: 1 | -1): void {
+    if (delta === 1) spåra('event_like', { event_slug: eventShareSlug(eventId) });
     skrivTyst(eventId, { likes: increment(delta) });
 }
 
 /** Kommer/Intresserad-räknarna - deltan från lib/rsvp (rsvpDeltan). */
 export function räknaRsvp(eventId: string, d: { going: number; interested: number }): void {
+    // Bara nya svar (positiv delta) - ett byte loggas som det nya valet, som webben.
+    if (d.going > 0) spåra('event_rsvp', { status: 'going', event_slug: eventShareSlug(eventId) });
+    else if (d.interested > 0) spåra('event_rsvp', { status: 'interested', event_slug: eventShareSlug(eventId) });
     const fält: Record<string, unknown> = {};
     if (d.going) fält.going = increment(d.going);
     if (d.interested) fält.interested = increment(d.interested);
@@ -37,6 +46,7 @@ export function räknaRsvp(eventId: string, d: { going: number; interested: numb
 
 /** En kortöppning (webbens recordEventView). Siffran visas aldrig (31/8). */
 export function räknaVisning(eventId: string): void {
+    spåra('event_view', { event_slug: eventShareSlug(eventId) });
     skrivTyst(eventId, { views: increment(1) });
 }
 
@@ -49,6 +59,7 @@ export function räknaKlick(e: { id: string; url?: string; title?: string; hostN
     const nu = new Date().toISOString();
     let domain: string | null = null;
     try { domain = new URL(e.url || e.id).hostname.replace(/^www\./, ''); } catch { /* icke-URL */ }
+    spåra('event_anmal_click', { event_slug: eventShareSlug(e.id), ...(domain ? { domain } : {}) });
     skrivTyst(e.id, {
         clicks: increment(1),
         clicksByMonth: { [nu.slice(0, 7)]: increment(1) },

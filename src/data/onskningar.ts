@@ -16,6 +16,7 @@ import {
     updateDoc,
 } from '@react-native-firebase/firestore';
 import { EVENT_CATEGORY_KEYS } from '@vadkul/kontrakt';
+import { spåra } from '@/data/matning';
 import { aktivaÖnskningar, utgångsTid, type Önskan } from '@/lib/onskningar';
 
 const tillMs = (v: unknown): number => {
@@ -76,6 +77,7 @@ export async function skapaÖnskan(input: {
         expiresAt: Timestamp.fromMillis(utgångsTid(createdAt)),
         fulfilled: false,
     });
+    spåra('event_wish', { kategori: input.category || 'other' }); // webbens wishService
     return ref.id;
 }
 
