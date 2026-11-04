@@ -66,6 +66,7 @@ import {
     Alert,
     Animated,
     BackHandler,
+    Linking,
     PanResponder,
     Pressable,
     ScrollView,
@@ -78,7 +79,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
-import { eventShareSlug, type AppFeedEvent } from '@vadkul/kontrakt';
+import { eventShareSlug, splitTextLinks, type AppFeedEvent } from '@vadkul/kontrakt';
 import type { AppEvent } from '@/lib/appEvent';
 import { seriensRytm } from '@/lib/anvandarEvent';
 import { useEventDetalj } from '@/api/eventDetalj';
@@ -95,6 +96,7 @@ import { HelskarmsBild } from '@/components/HelskarmsBild';
 import { Ikon } from '@/components/Ikon';
 import { KategoriRad } from '@/components/KategoriRad';
 import { ListRad } from '@/components/ListRad';
+import { BOOST_GULD, BoostStjärna } from '@/components/BoostStjarna';
 import { RsvpFooter, RsvpToppRad, type RsvpCta } from '@/components/RsvpFooter';
 import { arrangörsRad, källDomän } from '@/lib/arrangorsRad';
 import { periodLabel } from '@/lib/dagar';
@@ -119,6 +121,8 @@ import { anmäldaRad } from '@/lib/anmalan';
 import { useAnmälan } from '@/lib/useAnmalan';
 import { AFFILIATE_DISCLOSURE, isAffiliateUrl, isTicketmasterEvent } from '@/lib/ticketmaster';
 import { eventDagar } from '@/lib/vy';
+import { boostadeFörst, boostadeRader, ärBoostad } from '@/lib/boost';
+import { useBoostar } from '@/lib/useBoostar';
 
 export function eventUrl(e: AppFeedEvent): string {
     return `https://vadkul.se/e/${eventShareSlug(e.id)}`;
@@ -858,6 +862,33 @@ function månadsTal(lista: AppFeedEvent[], frånOffset: number, utesluten: strin
     return dagar.reduce((n, d) => n + d.events.length, 0);
 }
 
+/**
+ * Beskrivningen med KLICKBARA LÄNKAR (Josef 4/11: "gör så att länkarna blir
+ * klickbara") - kontraktets textLinks delar texten exakt som webbens
+ * LinkedText; länken öppnas i systemets webbläsare (Spotify-länkar landar i
+ * Spotify-appen via universal links). Nästlad Text med onPress - inget eget
+ * tryckelement, så radbrytningen i stycket står kvar.
+ */
+function LänkadText({ text }: { text: string }) {
+    const delar = useMemo(() => splitTextLinks(text), [text]);
+    return (
+        <>
+            {delar.map((d, i) => d.href ? (
+                <Text
+                    key={i}
+                    style={styles.länk}
+                    accessibilityRole="link"
+                    onPress={() => { Linking.openURL(d.href!).catch(() => {}); }}
+                >
+                    {d.text}
+                </Text>
+            ) : (
+                <Fragment key={i}>{d.text}</Fragment>
+            ))}
+        </>
+    );
+}
+
 /** Dagrubriken i kortets listor - webbens blå streck + dagen i fetstil. */
 function DagRubrik({ offset }: { offset: number }) {
     const text = periodLabel(offset, 1);
@@ -911,7 +942,13 @@ function Väljarlista({
     // Kommande dag för dag, passerade HOPFÄLLDA längst ner (webbens
     // EventCardGroupList: "Passerade event ligger hopfällda tills man ber om
     // dem"). Dagrubrikerna bara när högen spänner över flera dagar.
-    const { dagar, passerade } = useMemo(() => delaVäljarlista(grupp, new Date()), [grupp]);
+    // nuMs följer med ur samma memo - boost-stjärnan på högens rader (4/11)
+    // jämför mot samma klocka som delningen.
+    const { dagar, passerade, nuMs } = useMemo(() => {
+        const nu = new Date();
+        return { ...delaVäljarlista(grupp, nu), nuMs: nu.getTime() };
+    }, [grupp]);
+    const boostar = useBoostar();
     // Utfällningen gäller bara den hög den gjordes i (ny bricka = hopfällt).
     const högNyckel = `${grupp[0]?.id ?? ''}:${grupp.length}`;
     const [utfälldHög, setUtfälldHög] = useState<string | null>(null);
@@ -961,7 +998,7 @@ function Väljarlista({
                 {dagar.map(d => (
                     <DagSektion key={d.offset} offset={d.offset} rubrik={dagar.length > 1}>
                         {d.events.map(e => (
-                            <EventRad key={e.id} event={e} tema="ljus" onPress={() => onVälj(e)} />
+                            <EventRad key={e.id} event={e} tema="ljus" boostad={ärBoostad(e, boostar, nuMs)} onPress={() => onVälj(e)} />
                         ))}
                     </DagSektion>
                 ))}
@@ -1069,6 +1106,11 @@ function EventInnehåll({
     const sparad = ärSparad(event.id);
     const nu = Date.now();
     const harVarit = isEventPast(event, nu);
+    // Boostat på webben (lib/boost: eget featuredUntil eller eventBoosts-
+    // overlayn) → guldstjärnan längst till vänster i härkomst-raden (Josef
+    // 4/11: "en stjärna längst upp åt vänster på eventkortet").
+    const boostar = useBoostar();
+    const boostad = ärBoostad(event, boostar, nu);
     /** VADKUL-värdat (eget event, inte tips) - webbens isVadkulHostedEvent:
      *  platsen är enda vägen dit och får en egen radbruten rad nedan. */
     const vadkulVärdat = !!event.userCreated && !event.isTip;
@@ -1263,13 +1305,18 @@ function EventInnehåll({
                     knappraden, så dess plats i trädet står still och
                     TextInputen aldrig remountas (tangentbordet får inte
                     stängas av vyskiftet). */}
-                {!huvudGömt && härkomst ? (
+                {/* Boost-stjärnan FÖRST i raden (4/11) - raden renderas då
+                    även för skrapade event, som annars saknar härkomst. */}
+                {!huvudGömt && (härkomst || boostad) ? (
                     <View style={styles.härkomstRad}>
-                        <View style={[styles.härkomstBadge, event.isTip ? styles.tipsBadge : styles.egetBadge]}>
-                            <Text style={[styles.härkomstText, event.isTip ? styles.tipsText : styles.egetText]} numberOfLines={1}>
-                                {härkomst}
-                            </Text>
-                        </View>
+                        {boostad ? <BoostStjärna pill /> : null}
+                        {härkomst ? (
+                            <View style={[styles.härkomstBadge, event.isTip ? styles.tipsBadge : styles.egetBadge]}>
+                                <Text style={[styles.härkomstText, event.isTip ? styles.tipsText : styles.egetText]} numberOfLines={1}>
+                                    {härkomst}
+                                </Text>
+                            </View>
+                        ) : null}
                         {rytm ? <Text style={styles.rytm} numberOfLines={1}>{rytm}</Text> : null}
                     </View>
                 ) : null}
@@ -1456,7 +1503,10 @@ function EventInnehåll({
                                 </View>
                             </Pressable>
                         ) : null}
-                        <Text style={styles.beskrivning}>{beskrivning}</Text>
+                        {/* Länkarna i texten är KLICKBARA (Josef 4/11: "Den har ju
+                            2 Spotify-länkar bland annat") - samma delning som
+                            webbens LinkedText (kontraktets textLinks). */}
+                        <Text style={styles.beskrivning}><LänkadText text={beskrivning} /></Text>
                         {/* SVARSRADENS EGEN PLATS (webbens ordning: eventinfo →
                             svarsrad → chatt → arrangörsrad → listan): hit
                             scrollar man fram till raden och här släpper den
@@ -1585,21 +1635,29 @@ function FlerEvent({
     }, [zoomar]);
 
     const söker = sök.trim().length > 0;
-    const underlag = useMemo(() => {
-        const träffar = söker ? lista.filter(e => matcharKortSök(e, sök)) : lista;
-        return bildflödesLäge ? bildflöde(träffar) : träffar;
-    }, [lista, sök, söker, bildflödesLäge]);
+    const träffar = useMemo(() => (söker ? lista.filter(e => matcharKortSök(e, sök)) : lista), [lista, sök, söker]);
+    const underlag = useMemo(() => (bildflödesLäge ? bildflöde(träffar) : träffar), [träffar, bildflödesLäge]);
 
     const nu = new Date();
     const nuMs = nu.getTime();
     const harVarit = (e: AppFeedEvent) => isEventPast(e, nuMs) || e.id === valtId;
-    const alla = useMemo(() => eventDagar(underlag, frånOffset, nu, harVarit),
+    // BOOSTADE (Josef 4/11, webbens boostedRows + featuredFirst): de aktivt
+    // boostade pinnas ÖVERST i listan oavsett dag och bildflöde (en boostad
+    // rad utan bild visas ändå), och ligger dessutom först inom sin dag.
+    // Samma i båda flikarna - boostade är populära på webben också.
+    const boostar = useBoostar();
+    const pinnade = useMemo(() => boostadeRader(träffar, boostar, nuMs, harVarit),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [träffar, valtId, boostar]);
+    const lyftDagar = (dagar: ReturnType<typeof eventDagar<AppFeedEvent>>) =>
+        dagar.map(d => ({ ...d, events: boostadeFörst(d.events, boostar, nuMs) }));
+    const alla = useMemo(() => lyftDagar(eventDagar(underlag, frånOffset, nu, harVarit)),
         // nu/harVarit räknas om med listan
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [underlag, frånOffset, valtId]);
-    const populära = useMemo(() => eventDagar(underlag, frånOffset, nu, harVarit, e => e.pop === true),
+        [underlag, frånOffset, valtId, boostar]);
+    const populära = useMemo(() => lyftDagar(eventDagar(underlag, frånOffset, nu, harVarit, e => e.pop === true || ärBoostad(e, boostar, nuMs))),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [underlag, frånOffset, valtId]);
+        [underlag, frånOffset, valtId, boostar]);
     const flikDagar = flik === 'månaden' ? alla : populära;
     const totalt = (d: typeof alla) => d.reduce((n, x) => n + x.events.length, 0);
     // Ring 0 först, sedan varje utzoomning från första dagen igen.
@@ -1708,6 +1766,29 @@ function FlerEvent({
             ) : null}
             <View style={styles.listYta}>
             <View ref={flikradVy} onLayout={() => register?.mät()}>{flikrad}</View>
+            {/* BOOSTADE HÖGST UPP (4/11): guldrubrik + raderna före dagarna,
+                samma form som dagrubriken men i guld. Ingen klistrad rubrik -
+                blocket ligger ändå överst. Raderna står kvar på sin dag också,
+                med stjärnan: pinningen är annonsplatsen, dagraden tidslinjen. */}
+            {pinnade.length > 0 ? (
+                <View>
+                    <View style={[styles.dagRubrik, styles.utvaldaRubrik]}>
+                        <View style={[styles.dagStreck, styles.utvaldaStreck]} />
+                        <Text style={styles.dagRubrikText}>⭐ Utvalda</Text>
+                    </View>
+                    {pinnade.map(e => (
+                        <ListRad
+                            key={`utvald:${e.id}`}
+                            event={e}
+                            km={minPos ? distanceKm(minPos.lat, minPos.lng, e.lat, e.lng) : null}
+                            nuMs={nuMs}
+                            visaBild={bildflödesLäge || visaBilder}
+                            boostad
+                            onPress={() => onVälj(e)}
+                        />
+                    ))}
+                </View>
+            ) : null}
             {visade.map((d, i) => (
                 <Fragment key={`${d.ring}:${d.offset}`}>
                     {/* Avdelaren där nästa zoomrings dagar börjar (webbens
@@ -1725,6 +1806,7 @@ function FlerEvent({
                                 nuMs={nuMs}
                                 visaBild={bildflödesLäge || visaBilder}
                                 baraMedBild={bildflödesLäge}
+                                boostad={ärBoostad(e, boostar, nuMs)}
                                 onPress={() => onVälj(e)}
                             />
                         ))}
@@ -2069,6 +2151,8 @@ const styles = StyleSheet.create({
     /** Luft under texten innan svarsradens kantlinje (Josef 29/10: "mer
      *  padding under beskrivningen") - förr stod texten mot linjen. */
     beskrivning: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 18, fontSize: 14, lineHeight: 21, color: '#334155' },
+    /** Klickbar länk i beskrivningen (webbens LinkedText: kartblå, fet, understruken). */
+    länk: { color: BLÅ, fontWeight: '700', textDecorationLine: 'underline' },
     anmälda: { paddingHorizontal: 16, paddingTop: 4, fontSize: 12, fontWeight: '800', color: '#64748b' },
     scrollaPill: {
         alignSelf: 'center',
@@ -2128,6 +2212,9 @@ const styles = StyleSheet.create({
     },
     dagStreck: { width: 4, height: 16, borderRadius: 2, backgroundColor: BLÅ },
     dagRubrikText: { fontSize: 14, fontWeight: '900', color: '#0f172a' },
+    /** Boostade-blocket överst i listan (4/11): dagrubrikens form i guld. */
+    utvaldaRubrik: { backgroundColor: '#fffbeb', borderBottomColor: '#fde68a' },
+    utvaldaStreck: { backgroundColor: BOOST_GULD },
     /** "Visa bilder" (webbens pill: blå när bilderna är på). */
     bildKnapp: { borderRadius: 999, backgroundColor: KANT, paddingHorizontal: 10, paddingVertical: 5 },
     bildKnappPå: { backgroundColor: BLÅ },

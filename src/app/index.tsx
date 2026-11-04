@@ -32,6 +32,7 @@ import { FilterIkon } from '@/components/FilterIkon';
 import { Ikon } from '@/components/Ikon';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
 import { prenumereraStjärnmärkta } from '@/data/stjarnor';
+import { useBoostar } from '@/lib/useBoostar';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
 import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE } from '@/lib/brickor';
 import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
@@ -435,10 +436,13 @@ export default function KartScreen() {
     // prenumeration med eventkortet (EN Firestore-lyssnare i data/stjarnor).
     const [stjärnmärkta, setStjärnmärkta] = useState<ReadonlySet<string>>(new Set());
     useEffect(() => prenumereraStjärnmärkta(setStjärnmärkta), []);
+    // Boostade event (eventBoosts + egna featuredUntil): guldbricka + lyft
+    // som stjärnan (4/11) - samma delade lyssnare som kortet (lib/useBoostar).
+    const boostar = useBoostar();
     const valtId = kort ? kort.event?.id ?? kort.grupp[0]?.id ?? null : null;
     const platser = useMemo(
-        () => byggBrickor(iPeriod, { nowMs: nuMs, valtId, ärSparad, stjärnor: stjärnmärkta }),
-        [iPeriod, nuMs, valtId, ärSparad, stjärnmärkta],
+        () => byggBrickor(iPeriod, { nowMs: nuMs, valtId, ärSparad, stjärnor: stjärnmärkta, boostar }),
+        [iPeriod, nuMs, valtId, ärSparad, stjärnmärkta, boostar],
     );
     // BRICKOR KRING MITTEN, PRICKAR ANNARS (Josef 19/10, lib/kartUrval -
     // webbens reveal-urval): de ~50 platserna närmast kartans mitt är

@@ -13,11 +13,15 @@
  * står ramen kvar tom så inget under hoppar (webbens keepFrame +
  * failedCoverImages, lib/listRad). Webbens viewport-koll (byta till kompakt
  * om raden ligger under kortets kant) har ingen motsvarighet här.
+ *
+ * `boostad` (Josef 4/11): guldstjärnan uppe till vänster - på bilden, eller
+ * på emoji-cirkeln i den kompakta raden (webbens BoostStar i NearbyRow).
  */
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
+import { BoostStjärna } from '@/components/BoostStjarna';
 import { Ikon } from '@/components/Ikon';
 import { ärEgetVadkulEvent, type AppEvent } from '@/lib/appEvent';
 import { formatKm } from '@/lib/flerEvent';
@@ -30,6 +34,7 @@ export function ListRad({
     nuMs,
     visaBild,
     baraMedBild = false,
+    boostad = false,
     onPress,
 }: {
     event: AppFeedEvent;
@@ -39,6 +44,8 @@ export function ListRad({
     visaBild: boolean;
     /** Bildflödet: en rad utan visningsbar bild renderas inte alls. */
     baraMedBild?: boolean;
+    /** Aktivt boostat (lib/boost) - stjärnan uppe till vänster. */
+    boostad?: boolean;
     onPress: () => void;
 }) {
     // Känd trasig länk vid mount → bildlös direkt (webben: 'fallback').
@@ -121,6 +128,7 @@ export function ListRad({
                         <Text style={styles.bildTitel} numberOfLines={1}>{e.title}</Text>
                         {brickor(true)}
                     </View>
+                    {boostad ? <BoostStjärna style={styles.bildStjärna} /> : null}
                 </View>
                 <View style={styles.underBild}>
                     <View style={styles.flex}>{info}</View>
@@ -134,6 +142,7 @@ export function ListRad({
         <Pressable style={({ pressed }) => [styles.rad, styles.kompakt, pressed && styles.tryckt]} onPress={onPress}>
             <View style={[styles.emojiCirkel, vadkul && styles.emojiCirkelVadkul]}>
                 <Text style={styles.emojiText}>{emoji}</Text>
+                {boostad ? <BoostStjärna liten style={styles.cirkelStjärna} /> : null}
             </View>
             <View style={styles.flex}>
                 <View style={styles.titelRad}>
@@ -173,6 +182,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     bildEmoji: { fontSize: 17 },
+    /** Boost-stjärnan uppe till vänster på bilden (webbens top-2 left-2.5). */
+    bildStjärna: { position: 'absolute', top: 8, left: 10 },
+    cirkelStjärna: { position: 'absolute', top: -4, left: -6 },
     bildTitel: {
         flex: 1,
         minWidth: 0,

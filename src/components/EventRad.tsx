@@ -8,10 +8,14 @@
  * `visaPris` (stadssidan, som webbens EventInfoRow): biljettsymbol + pris
  * efter tiden när källan angav ett. Josef 29/10: "på stadssidorna ser man
  * inte ifall eventen kostar något".
+ *
+ * `boostad` (Josef 4/11): guldstjärnan i bildrutans övre vänstra hörn -
+ * webbens BoostStar i väljarlistan (EventCardGroupList) och EventListRow.
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
+import { BoostStjärna } from '@/components/BoostStjarna';
 import { Ikon } from '@/components/Ikon';
 import { formatEventTid } from '@/lib/eventTid';
 import { formatKm } from '@/lib/flerEvent';
@@ -29,6 +33,7 @@ export function EventRad({
     dimmad = false,
     harVarit = false,
     visaPris = false,
+    boostad = false,
     höger,
 }: {
     event: AppFeedEvent;
@@ -43,6 +48,8 @@ export function EventRad({
     harVarit?: boolean;
     /** Priset efter tiden (stadssidans rader). */
     visaPris?: boolean;
+    /** Aktivt boostat (lib/boost) - stjärnan i bildrutans hörn. */
+    boostad?: boolean;
     /** Extra kontroll längst till höger (t.ex. hjärtat i sparade). */
     höger?: React.ReactNode;
 }) {
@@ -62,6 +69,7 @@ export function EventRad({
                     <Text style={bas.bildEmoji}>{emoji}</Text>
                 </View>
             )}
+            {boostad ? <BoostStjärna liten style={bas.stjärna} /> : null}
             <View style={bas.text}>
                 <Text style={s.titel} numberOfLines={2}>
                     {emoji}{' '}
@@ -108,6 +116,8 @@ const bas = StyleSheet.create({
     dimmad: { opacity: 0.5 },
     bild: { width: 56, height: 56, borderRadius: 10 },
     bildEmoji: { fontSize: 24 },
+    /** Boost-stjärnan i bildrutans övre vänstra hörn (raden har padding 8). */
+    stjärna: { position: 'absolute', top: 4, left: 4 },
     text: { flex: 1 },
     metaRad: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
     metaText: { marginTop: 0, flexShrink: 1 },

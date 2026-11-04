@@ -31,6 +31,12 @@ export type AppEvent = AppFeedEvent & {
     /** Skaparens uid - ägarskap (ta bort/redigera). */
     hostUid?: string;
     description?: string;
+    /**
+     * Boostat på webben: lyfts fram t.o.m. denna tid (ISO). Bara egna event
+     * bär fältet själva (linkEvents-dokumentet) - skrapade boostar ligger i
+     * eventBoosts-overlayn (data/boostar), lib/boost slår ihop vägarna.
+     */
+    featuredUntil?: string;
     repeatWeekly?: boolean;
     /** Seriens längd i VECKOR inklusive första. Saknas = tills vidare. */
     repeatWeeks?: number;
