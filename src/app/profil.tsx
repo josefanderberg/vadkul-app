@@ -1,6 +1,5 @@
 /**
- * Profil - webbens ProfilePanel: kontot (inloggning, "Om dig", utloggning och
- * radering - App Store 5.1.1 kräver radering inifrån appen), MINA EVENT
+ * Profil - webbens ProfilePanel: kontot (inloggning, "Om dig"), MINA EVENT
  * (sedan 11/10, webbens Mina event-sektion: en rad per sak man skapat via
  * lib/minaEvent, soptunnan raderar hela raden, pennan öppnar skapa-arket i
  * redigeringsläge), VÄNNER (sedan 11/10, webbens FriendsSection - förfrågningar,
@@ -9,19 +8,22 @@
  * kartan" (Svenska kyrkan/PRO - opt-in-källorna, kart-ui 15/9), din stad och
  * - för inloggade - NOTISER (sedan 8/10, webbens två reglage): påminnelse 1 h
  * före sparade event är per ENHET (FCM-token, data/push) och veckans helgtips
- * är per KONTO (users.weeklyDigest, default på).
+ * är per KONTO (users.weeklyDigest, default på). Längst ner som på webben
+ * (5/11): INSTÄLLNINGAR-mappen (components/Installningar - byt lösenord, min
+ * stad, barn, villkoren och Radera konto, App Store 5.1.1), "Kartan startar
+ * i", Om VADKUL och Logga ut som egen rad.
  *
  * HÅRD REGEL (CLAUDE.md): appen säljer ingenting - ingen boost, inga priser.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useQueryClient } from '@tanstack/react-query';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { glömAnvändarEvent, useAnvändarEvent } from '@/api/useEvent';
 import { EventRad } from '@/components/EventRad';
 import { Ikon } from '@/components/Ikon';
+import { Installningar } from '@/components/Installningar';
 import { VannerSektion } from '@/components/VannerSektion';
 import { ärSerie } from '@/lib/anvandarEvent';
 import { useFilter } from '@/lib/filterContext';
@@ -30,7 +32,6 @@ import { isEventPast } from '@/lib/harVarit';
 import { KÄLLOR } from '@/lib/kartFilter';
 import { begärKartHopp } from '@/lib/kartHopp';
 import { useKonto } from '@/lib/kontoContext';
-import { felText } from '@/lib/kontoFel';
 import { minaEventRader } from '@/lib/minaEvent';
 import { useRegionVal } from '@/lib/regionContext';
 import { skapaFelKod } from '@/lib/skapaEvent';
@@ -164,20 +165,6 @@ export default function ProfilScreen() {
         ]);
     };
 
-    const radera = () => Alert.alert(
-        'Radera kontot?',
-        'Kontot och din profil raderas för gott - även på vadkul.se. Det går inte att ångra.',
-        [
-            { text: 'Avbryt', style: 'cancel' },
-            {
-                text: 'Radera',
-                style: 'destructive',
-                onPress: () => konto.raderaKonto()
-                    .then(() => Alert.alert('Kontot är raderat.'))
-                    .catch(err => Alert.alert('Kunde inte radera kontot', felText(err))),
-            },
-        ],
-    );
     const källa = manuell ? 'vald av dig' : fromGps ? 'via din plats' : 'standard';
     const nu = Date.now();
 
@@ -211,14 +198,6 @@ export default function ProfilScreen() {
                             >
                                 <Text style={styles.knappText}>{konto.behöverProfil ? 'Fyll i din profil' : 'Redigera profil'}</Text>
                             </Pressable>
-                            <View style={styles.kontoRad}>
-                                <Pressable onPress={() => konto.loggaUt()} hitSlop={8}>
-                                    <Text style={styles.länk}>Logga ut</Text>
-                                </Pressable>
-                                <Pressable onPress={radera} hitSlop={8}>
-                                    <Text style={styles.raderaLänk}>Radera konto</Text>
-                                </Pressable>
-                            </View>
                         </View>
                     ) : (
                         <View style={styles.kort}>
@@ -329,29 +308,37 @@ export default function ProfilScreen() {
                     </Text>
                 </View>
 
-                <Text style={styles.sektion}>Din stad</Text>
-                <View style={styles.kort}>
-                    <Text style={styles.kortText}>{city.name} ({källa})</Text>
-                    <Text style={styles.kortHjalp}>Byt stad via sökningen eller stadssidan - kartan och flödet följer med.</Text>
-                </View>
+                {/* INSTÄLLNINGAR - webbens utfällbara mapp (Josef 5/11): byt
+                    lösenord, min stad, barn, villkoren och Radera konto. */}
+                <Text style={styles.sektion}>Inställningar</Text>
+                <Installningar />
+
+                {/* Kartan startar i (webbens startstadsrad) - skild från Min
+                    stad (helgtipset) i Inställningar. */}
+                <Pressable
+                    onPress={() => router.push('/stader')}
+                    style={({ pressed }) => [styles.kort, styles.radKort, pressed && styles.tryckt]}
+                >
+                    <Text style={styles.radKortText}>Kartan startar i</Text>
+                    <Text style={styles.radKortVärde} numberOfLines={1}>{city.name} ({källa})</Text>
+                    <Text style={styles.chevron}>›</Text>
+                </Pressable>
 
                 <Text style={styles.sektion}>Om VADKUL</Text>
                 <View style={styles.kort}>
                     <Text style={styles.kortText}>Eventkartan för Sverige.</Text>
                     <Text style={styles.kortHjalp}>Kartdata © OpenStreetMap-bidragsgivare · © CARTO</Text>
-                    <Pressable
-                        style={({ pressed }) => [styles.knapp, pressed && styles.tryckt]}
-                        onPress={() => WebBrowser.openBrowserAsync('https://vadkul.se/villkor')}
-                    >
-                        <Text style={styles.knappText}>Användarvillkor</Text>
-                    </Pressable>
-                    <Pressable
-                        style={({ pressed }) => [styles.knapp, pressed && styles.tryckt]}
-                        onPress={() => WebBrowser.openBrowserAsync('https://vadkul.se/integritet')}
-                    >
-                        <Text style={styles.knappText}>Integritet</Text>
-                    </Pressable>
                 </View>
+
+                {/* Logga ut - under mappen, egen rad (webben). */}
+                {KONTON_PÅ && konto.användare ? (
+                    <Pressable
+                        onPress={() => void konto.loggaUt()}
+                        style={({ pressed }) => [styles.kort, styles.radKort, styles.loggaUtKort, pressed && styles.tryckt]}
+                    >
+                        <Text style={styles.loggaUtText}>Logga ut</Text>
+                    </Pressable>
+                ) : null}
             </ScrollView>
         </View>
     );
@@ -406,8 +393,12 @@ const styles = StyleSheet.create({
     knapp: { marginTop: 12, borderRadius: 999, backgroundColor: '#0f172a', paddingVertical: 10, alignItems: 'center' },
     tryckt: { opacity: 0.85 },
     knappText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
-    kontoRad: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 },
     länk: { color: '#006aa7', fontSize: 14, fontWeight: '700', marginTop: 12 },
     centrerad: { textAlign: 'center' },
-    raderaLänk: { color: '#b91c1c', fontSize: 14, fontWeight: '700', marginTop: 12 },
+    radKort: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, paddingVertical: 14 },
+    radKortText: { flex: 1, fontSize: 15, fontWeight: '700', color: '#0f172a' },
+    radKortVärde: { maxWidth: '55%', fontSize: 12, fontWeight: '700', color: '#64748b' },
+    chevron: { fontSize: 20, fontWeight: '600', color: '#94a3b8', lineHeight: 22 },
+    loggaUtKort: { marginTop: 22 },
+    loggaUtText: { flex: 1, fontSize: 15, fontWeight: '700', color: '#006aa7' },
 });
