@@ -4,6 +4,7 @@ import { Stack, usePathname, useSegments, type ErrorBoundaryProps } from 'expo-r
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { rapporteraFel, startaKraschrapportering, sättKraschAnvändare } from '@/data/krasch';
 import { spåraSkärm, startaMätning } from '@/data/matning';
+import { fräschaUppToken, lyssnaPåNyToken } from '@/data/push';
 import { FilterProvider } from '@/lib/filterContext';
 import { KontoProvider, useKonto } from '@/lib/kontoContext';
 import { RegionProvider } from '@/lib/regionContext';
@@ -35,6 +36,29 @@ function KraschKonto() {
     useEffect(() => {
         if (svarat) sättKraschAnvändare(uid);
     }, [svarat, uid]);
+    return null;
+}
+
+/**
+ * Enhetens push-token på kontot (data/push): sparas vid inloggning, när appen
+ * kommer fram (tillståndet kan ha slagits på i iOS-inställningarna) och när
+ * FCM byter token. Utan det här fanns tokenen bara om man råkade slå på
+ * reglaget i profilen på just det kontot - och då kom inga notiser fram.
+ */
+function PushKonto() {
+    const { uid } = useKonto();
+    useEffect(() => {
+        if (!uid) return;
+        void fräschaUppToken(uid);
+        const avNy = lyssnaPåNyToken(uid);
+        const sub = AppState.addEventListener('change', s => {
+            if (s === 'active') void fräschaUppToken(uid);
+        });
+        return () => {
+            avNy();
+            sub.remove();
+        };
+    }, [uid]);
     return null;
 }
 
@@ -79,6 +103,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
             <KontoProvider>
                 <KraschKonto />
+                <PushKonto />
                 <MätSkärm />
                 <RegionProvider>
                     <FilterProvider>

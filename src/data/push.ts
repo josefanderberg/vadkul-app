@@ -8,16 +8,25 @@
  *
  * Av/på är PER ENHET som på webben: av = enhetens token raderas ur kontot
  * och hos FCM. Tillståndsfrågan får bara ställas efter ett riktigt tryck.
+ *
+ * TOKENEN HÅLLS VID LIV (5/11 2026: Josefs iPhone hade ingen token på något
+ * konto fast reglaget stod på - det visar bara iOS-tillståndet). Rotlayouten
+ * sparar enhetens token på kontot vid inloggning, när appen kommer fram och
+ * när FCM byter token; utloggning tar bort den från det gamla kontot.
  */
 import { PermissionsAndroid, Platform } from 'react-native';
 import {
     AuthorizationStatus,
     deleteToken,
+    getInitialNotification,
     getMessaging,
     getToken,
     hasPermission,
+    onNotificationOpenedApp,
+    onTokenRefresh,
     requestPermission,
 } from '@react-native-firebase/messaging';
+import { notisMål } from '@/lib/notisMal';
 import { deleteDoc, doc, getFirestore, serverTimestamp, setDoc } from '@react-native-firebase/firestore';
 
 const tokenDoc = (uid: string, token: string) => doc(getFirestore(), 'fcmTokens', uid, 'tokens', token);
@@ -41,7 +50,11 @@ export async function pushTillstånd(): Promise<PushTillstånd> {
     }
 }
 
+/** uid|token som senast skrevs - samma par skrivs inte om vid varje väckning. */
+let senastSparad: string | null = null;
+
 async function sparaToken(uid: string, token: string): Promise<void> {
+    senastSparad = `${uid}|${token}`;
     await setDoc(tokenDoc(uid, token), {
         token,
         platform: Platform.OS,
@@ -75,15 +88,63 @@ export async function slåAvPush(uid: string): Promise<void> {
         const token = await getToken(getMessaging());
         if (token) await deleteDoc(tokenDoc(uid, token)).catch(() => {});
         await deleteToken(getMessaging());
+        senastSparad = null;
     } catch { /* inget att städa */ }
 }
 
-/** Tyst uppfräschning vid inloggning när tillståndet redan finns (webbens
- *  FCMHandler) - tokens roterar, och iOS återkallar dem ibland. */
+/** Tyst uppfräschning när tillståndet redan finns (webbens FCMHandler) -
+ *  tokens roterar, iOS återkallar dem ibland, och en token sparad på ett
+ *  annat konto når aldrig det här. Skriver bara när paret är nytt. */
 export async function fräschaUppToken(uid: string): Promise<void> {
     if ((await pushTillstånd()) !== 'på') return;
     try {
         const token = await getToken(getMessaging());
-        if (token) await sparaToken(uid, token);
-    } catch { /* nästa start försöker igen */ }
+        if (token && senastSparad !== `${uid}|${token}`) await sparaToken(uid, token);
+    } catch {
+        senastSparad = null; // nästa väckning försöker igen
+    }
+}
+
+/** FCM bytte enhetens token: spara den nya på kontot direkt. */
+export function lyssnaPåNyToken(uid: string): () => void {
+    try {
+        return onTokenRefresh(getMessaging(), token => {
+            void (async () => {
+                if ((await pushTillstånd()) !== 'på') return;
+                await sparaToken(uid, token).catch(() => { senastSparad = null; });
+            })();
+        });
+    } catch {
+        return () => {};
+    }
+}
+
+/** Före utloggning/radering: enhetens token bort från kontot (FCM-tokenen
+ *  behålls, nästa konto som loggar in sparar den på sig). */
+export async function släppEnhetensToken(uid: string): Promise<void> {
+    try {
+        const token = await getToken(getMessaging());
+        if (token) await deleteDoc(tokenDoc(uid, token));
+    } catch { /* rules eller nät - kontot städas av functions när tokenen dör */ }
+    senastSparad = null;
+}
+
+/** Tryck på en notis (appen stängd eller i bakgrunden) → rätt skärm
+ *  (lib/notisMal). Returnerar avregistreringen. */
+export function lyssnaPåNotisTryck(öppna: (mål: string) => void): () => void {
+    try {
+        const m = getMessaging();
+        void getInitialNotification(m)
+            .then(msg => {
+                const mål = notisMål(msg?.data);
+                if (mål) öppna(mål);
+            })
+            .catch(() => {});
+        return onNotificationOpenedApp(m, msg => {
+            const mål = notisMål(msg?.data);
+            if (mål) öppna(mål);
+        });
+    } catch {
+        return () => {};
+    }
 }

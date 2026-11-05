@@ -46,6 +46,7 @@ import * as Crypto from 'expo-crypto';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MeProfilIn } from '@vadkul/kontrakt';
 import { hämtaProfil, raderaAnvändarDoc, skapaGrundprofil, sparaProfil, type AppProfil } from '@/data/anvandare';
+import { släppEnhetensToken } from '@/data/push';
 
 /** OAuth-webbklienten i Firebase-projektet - Android behöver den för att få
  *  ett idToken som Firebase godtar (publikt värde, står i google-services.json). */
@@ -225,6 +226,9 @@ export function KontoProvider({ children }: { children: ReactNode }) {
     }, [auth]);
 
     const loggaUt = useCallback(async () => {
+        // Enhetens push-token bort från kontot INNAN rules slutar känna igen oss.
+        const förre = auth.currentUser;
+        if (förre) await släppEnhetensToken(förre.uid);
         await GoogleSignin.signOut().catch(() => {});
         await signOut(auth);
         qc.removeQueries({ queryKey: ['me'] });
@@ -236,6 +240,7 @@ export function KontoProvider({ children }: { children: ReactNode }) {
     const raderaKonto = useCallback(async () => {
         const u = auth.currentUser;
         if (!u || u.isAnonymous) throw new Error('Inte inloggad');
+        await släppEnhetensToken(u.uid);
         await raderaAnvändarDoc(u.uid).catch(() => {});
         await deleteUser(u);
         await GoogleSignin.signOut().catch(() => {});
