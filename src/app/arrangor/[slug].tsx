@@ -6,31 +6,37 @@
  * förr finns inte, och varje arrangör blev "Okänd arrangör". Nås via
  * universella länkar, "Alla event från {namn}" och värdnamnet i eventkortet
  * (de skickar med namn + domän) och stadssidans arrangörschips.
+ *
+ * Ett tryck på ett event öppnar det PÅ KARTAN (lib/kartHopp), som stadssidan:
+ * kortet får Nästa och listan under sig, och ← tar en tillbaka hit till
+ * samma ställe i listan (lib/listRetur, Josef 5/11 2026).
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { CITIES, type AppFeedEvent } from '@vadkul/kontrakt';
 import { REGIONER, useAppFeeds } from '@/api/appFeed';
-import { EventKort } from '@/components/EventKort';
 import { EventRad } from '@/components/EventRad';
 import { arrangörUrFlöde } from '@/lib/arrangorFlode';
+import { begärKartHopp } from '@/lib/kartHopp';
+import { läsListLäge, raderAttRendera, returParametrar } from '@/lib/listRetur';
 import { isEventPast } from '@/lib/harVarit';
 import { useRegionVal } from '@/lib/regionContext';
 import { grupperaPerDag } from '@/lib/stadsUtbud';
+import { useListRetur } from '@/lib/useListRetur';
 
 /** Hur många dagar framåt listan visar - arrangörer har ofta glesa program. */
 const DAGAR = 60;
 
 export default function ArrangörScreen() {
-    const { slug, namn, doman } = useLocalSearchParams<{ slug: string; namn?: string; doman?: string }>();
+    const { slug, namn, doman, y, id } = useLocalSearchParams<{ slug: string; namn?: string; doman?: string; y?: string; id?: string }>();
+    const [returLäge] = useState(() => läsListLäge({ y, id }));
     // Hela Sveriges flöde - samma query-nycklar som kartan, så det som redan
     // landat där delas (inget nytt nätanrop när man kommer från kortet).
     const flöden = useAppFeeds(REGIONER, true);
     const laddar = flöden.some(f => !f);
     const { väljStad } = useRegionVal();
-    const [valt, setValt] = useState<AppFeedEvent | null>(null);
 
     const a = useMemo(
         () => arrangörUrFlöde(slug, flöden.flatMap(f => f?.events ?? []), { namn, domän: doman }),
@@ -41,6 +47,28 @@ export default function ArrangörScreen() {
         return (a?.events ?? []).filter(e => !isEventPast(e, nu));
     }, [a]);
     const sektioner = useMemo(() => grupperaPerDag(kommande, new Date(), DAGAR), [kommande]);
+    const listRef = useRef<SectionList<AppFeedEvent>>(null);
+    const listRetur = useListRetur(listRef, returLäge);
+    const [förstaRader] = useState(() => raderAttRendera(sektioner, returLäge));
+
+    const öppna = (e: AppFeedEvent) => {
+        begärKartHopp({
+            event: e,
+            retur: {
+                etikett: `Tillbaka till ${a?.name ?? 'arrangören'}`,
+                href: {
+                    pathname: '/arrangor/[slug]',
+                    params: {
+                        slug,
+                        ...(namn ? { namn } : {}),
+                        ...(doman ? { doman } : {}),
+                        ...returParametrar(listRetur.nuvarandeLäge(e.id)),
+                    },
+                },
+            },
+        });
+        router.dismissTo('/');
+    };
 
     const hemstad = a?.cities[0] ? CITIES.find(c => c.slug === a.cities[0].slug) ?? null : null;
     const visaPåKartan = () => {
@@ -86,7 +114,13 @@ export default function ArrangörScreen() {
                 <ActivityIndicator style={styles.laddar} color="#006AA7" />
             ) : (
                 <SectionList
+                    ref={listRef}
                     sections={sektioner}
+                    scrollEventThrottle={32}
+                    onScroll={ev => listRetur.följY(ev.nativeEvent.contentOffset.y)}
+                    initialNumToRender={förstaRader}
+                    onContentSizeChange={listRetur.vidStorlek}
+                    onScrollBeginDrag={listRetur.vidDrag}
                     keyExtractor={e => e.id}
                     stickySectionHeadersEnabled
                     ListEmptyComponent={
@@ -95,21 +129,10 @@ export default function ArrangörScreen() {
                         </Text>
                     }
                     renderSectionHeader={({ section }) => <Text style={styles.dagRubrik}>{section.label}</Text>}
-                    renderItem={({ item }) => <EventRad event={item} onPress={() => setValt(item)} />}
+                    renderItem={({ item }) => <EventRad event={item} onPress={() => öppna(item)} />}
                     contentContainerStyle={styles.lista}
                 />
             )}
-            {/* flöde = arrangörens event - kortets arrangörsrad byter event på
-                plats (samma mönster som stadssidan). */}
-            {valt ? (
-                <EventKort
-                    event={valt}
-                    grupp={[valt]}
-                    flöde={kommande}
-                    onVäljIGrupp={e => setValt(e)}
-                    onClose={() => setValt(null)}
-                />
-            ) : null}
         </View>
     );
 }

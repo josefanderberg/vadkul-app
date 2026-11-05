@@ -161,6 +161,9 @@ export interface KortNav {
     /** Föregående event - emojin i bakåtknappen (webbens förhandsvisning). */
     bakåtEvent: AppFeedEvent | null;
     bakåtAntal: number;
+    /** När ← leder ut ur kartan (tillbaka till stadssidan/arrangören/söket):
+     *  knappens tillgänglighetsetikett. */
+    bakåtEtikett?: string;
 }
 
 function navEmoji(e: AppFeedEvent): string {
@@ -467,7 +470,9 @@ export function EventKort({
                                 onPress={nav.onBakåt ? () => stega(nav.onBakåt!) : undefined}
                                 disabled={!nav.onBakåt}
                                 hitSlop={6}
-                                accessibilityLabel={nav.bakåtEvent ? `Tillbaka till ${nav.bakåtEvent.title}` : 'Inget föregående event än'}
+                                accessibilityLabel={nav.bakåtEvent
+                                    ? `Tillbaka till ${nav.bakåtEvent.title}`
+                                    : nav.onBakåt && nav.bakåtEtikett ? nav.bakåtEtikett : 'Inget föregående event än'}
                                 style={({ pressed }) => [styles.glasKnapp, !nav.onBakåt && styles.släckt, pressed && styles.tryckt]}
                             >
                                 {nav.onBakåt && nav.bakåtEvent ? (

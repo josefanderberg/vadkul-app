@@ -30,6 +30,15 @@ import { platsNyckel } from './vy';
 /** Webbens LABEL_MAX_CHARS: en rad under en 40 px-bricka - längre läses inte. */
 export const ETIKETT_MAX_TECKEN = 18;
 
+/** En ram i en växlande multibricka (lib/brickCykel): ett av gruppens
+ *  kommande event, en per synlig bild. */
+export interface BrickRam {
+    ikon: string;
+    emojiBild: string;
+    titel: string;
+    label: string;
+}
+
 export interface BrickProps {
     /** Representantens id - trycket slår upp gruppen via platsNyckel. */
     id: string;
@@ -61,6 +70,9 @@ export interface BrickProps {
     pop: boolean;
     /** Kategorins färg - pricken när platsen inte är bricka. */
     färg: string;
+    /** Multibrickans växling (lib/brickCykel), tom när brickan står still:
+     *  ensam, vald, boostad/stjärnmärkt, passerad eller bara en synlig bild. */
+    ramar?: BrickRam[];
 }
 
 /** Webbens truncateLabel: Array.from så emoji/surrogatpar aldrig klyvs. */
@@ -126,6 +138,25 @@ export function byggBrickor(
         // kyrkan och PRO - har Övrigts bricka).
         const kortets = eventEmoji(rep);
         const brickans = kategoriFor(brickansKategori(tillstånd.category)).emoji;
+        // VÄXLINGEN (webbens cycleRotations, Josef 5/11): de kommande eventen i
+        // tidsordning, EN ram per synlig bild - dubbletterna hoppas över.
+        // Kroppens flaggor (guld/sparad/pop) är gruppens och följer med varje
+        // ram, så brickan inte blinkar mellan kroppar; kategori, egen emoji
+        // och grönt (eget VADKUL-event) är eventets.
+        const ramar: BrickRam[] = [];
+        if (!vald && !stjärna && levande.length > 1) {
+            const sedda = new Set<string>();
+            for (const e of levande) {
+                const t: BrickTillstånd = { ...tillstånd, category: String(e.category), grön: ärEgetVadkulEvent(e) };
+                const ik = brickaIkon(t);
+                const em = emojiBild(ik, eventEmoji(e), kategoriFor(brickansKategori(t.category)).emoji);
+                const synlig = em || ik;
+                if (sedda.has(synlig)) continue;
+                sedda.add(synlig);
+                ramar.push({ ikon: ik, emojiBild: em, titel: kapaEtikett(e.title ?? ''), label: kategoriFor(String(e.category)).kort });
+            }
+            if (ramar.length < 2) ramar.length = 0;
+        }
         features.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [rep.lng, rep.lat] },
@@ -148,6 +179,7 @@ export function byggBrickor(
                 fast,
                 pop: rep.pop === true || guld || stjärna,
                 färg: kategoriFor(String(rep.category)).hex,
+                ...(ramar.length > 1 ? { ramar } : {}),
             },
         });
     }

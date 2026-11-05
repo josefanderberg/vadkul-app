@@ -29,15 +29,16 @@ import { DagValjare } from '@/components/DagValjare';
 import { EventKort, type KortNav } from '@/components/EventKort';
 import { FilterBricka } from '@/components/FilterBricka';
 import { FilterIkon } from '@/components/FilterIkon';
+import { ETIKETT_STIL, KartBrickor } from '@/components/KartBrickor';
 import { Ikon } from '@/components/Ikon';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
+import { lyssnaPåNotisTryck } from '@/data/push';
 import { prenumereraStjärnmärkta } from '@/data/stjarnor';
 import { synligVarjeDag } from '@/lib/boost';
 import { useBoostar } from '@/lib/useBoostar';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
-import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE } from '@/lib/brickor';
+import { BRICKA_ICON_SIZE } from '@/lib/brickor';
 import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
-import { medEmojiBilder } from '@/lib/emojiBricka';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
 import { byggBrickor, byggÖnskningar } from '@/lib/kartlager';
@@ -77,26 +78,8 @@ interface HistorikPost {
     offset: number;
 }
 
-const GRUPP_FILTER: FilterSpecification = ['>', ['get', 'antal'], 1];
-
-/** Passerade grupper får ingen text (en etikett över en släckt bricka svävar). */
-const ETIKETT_FILTER: FilterSpecification = ['all', ['!', ['get', 'past']], ['!', ['get', 'vald']]];
-const VALD_FILTER: FilterSpecification = ['==', ['get', 'vald'], true];
 /** Prickens radie (webbens DOT_RADIUS_EXPR): lite större ju närmare man är. */
 const PRICK_RADIE_UTTRYCK = ['interpolate', ['linear'], ['zoom'], 4, 2.5, 10, 3.5, 14, 4.5] as unknown as Expression;
-const ETIKETT_STIL = {
-    textFont: ['Montserrat Medium', 'Open Sans Bold'],
-    textSize: ['interpolate', ['linear'], ['zoom'], 9, 11, 13, 12.5, 16, 13.5] as unknown as Expression,
-    // Spetsen står på koordinaten → texten börjar strax under den.
-    textAnchor: 'top' as const,
-    textOffset: [0, 0.35],
-    textMaxWidth: 12,
-    // Lägst placeras först och vinner kollisionen.
-    symbolSortKey: ['get', 'etikettPrio'] as unknown as Expression,
-    textColor: '#ffffff',
-    textHaloColor: 'rgba(51,65,85,0.8)',
-    textHaloWidth: 2,
-};
 
 export default function KartScreen() {
     const { city, region, fromGps, manuell, gpsValt, klar, introKlar, väljStad } = useRegionVal();
@@ -240,7 +223,9 @@ export default function KartScreen() {
 
     const väljIGrupp = (e: AppFeedEvent) => {
         if (!ankareRef.current) ankareRef.current = e;
-        setKort(k => ({ event: e, grupp: k?.grupp ?? [e], frånLista: k ? k.event === null || k.frånLista : false }));
+        // Returen (stadssidan/arrangören) följer med inom samma plats, så ←
+        // fortfarande leder tillbaka till listan man kom från.
+        setKort(k => ({ event: e, grupp: k?.grupp ?? [e], frånLista: k ? k.event === null || k.frånLista : false, retur: k?.retur ?? null }));
     };
 
     const stängKort = () => {
@@ -284,6 +269,12 @@ export default function KartScreen() {
     useEffect(() => {
         if (inbjudan && kort?.event?.id !== inbjudan.eventId) setInbjudan(null);
     }, [kort, inbjudan]);
+
+    // Tryck på en push-notis (appen stängd eller i bakgrunden): påminnelsen
+    // går till /e/<slug> (som en delad länk), helgtipset till stadssidan.
+    // Kartan är alltid stackens botten, så navigatorn är redo när den här
+    // effekten körs - därför bor lyssnaren här och inte i rotlayouten.
+    useEffect(() => lyssnaPåNotisTryck(mål => router.push(mål as Parameters<typeof router.push>[0])), []);
 
     // ── Hoppet från söket, profilen och stadssidan (lib/kartHopp, webbens
     // jumpToEvent): skärmen stänger sig och eventet väljs HÄR, på sin dag,
@@ -411,7 +402,13 @@ export default function KartScreen() {
                     setOffset(sista.offset);
                     setKort(sista.kort);
                 }
-                : null,
+                // Kortet kom från stadssidan, arrangörssidan eller söket och
+                // historiken är slut: ← tar en tillbaka dit, till samma
+                // ställe i listan (Josef 5/11, lib/listRetur).
+                : kort?.retur
+                    ? () => router.push(kort.retur!.href)
+                    : null,
+            bakåtEtikett: historik.length === 0 ? kort?.retur?.etikett : undefined,
         }
         : undefined;
 
@@ -474,7 +471,8 @@ export default function KartScreen() {
     const önskadeBilder = useMemo(
         () => [...brickor.features]
             .sort((a, b) => Number(b.properties.vald) - Number(a.properties.vald))
-            .map(f => f.properties.emojiBild)
+            // Multibrickornas ramar (lib/brickCykel) efter brickans egen bild.
+            .flatMap(f => [f.properties.emojiBild, ...(f.properties.ramar ?? []).map(r => r.emojiBild)])
             .filter(Boolean),
         [brickor],
     );
@@ -484,7 +482,6 @@ export default function KartScreen() {
     );
     const emojiBrickor = useEmojiBrickor(önskadeBilder, förladdadeBilder);
     const kartBilder = useMemo(() => ({ ...BRICKA_IMAGES, ...emojiBrickor.bilder }), [emojiBrickor.bilder]);
-    const visadeBrickor = useMemo(() => medEmojiBilder(brickor, emojiBrickor.klara), [brickor, emojiBrickor.klara]);
     const dolda = useMemo(() => prickFilter([...brickIds]) as unknown as FilterSpecification, [brickIds]);
 
     // ── Önskningarna (webbens drömska wish-brickor) ───────────────────────
@@ -714,75 +711,11 @@ export default function KartScreen() {
                             }}
                         />
                     </GeoJSONSource>
-                    <GeoJSONSource id="events" data={visadeBrickor}>
-                        {/* Etiketterna (webbens LABEL_LAYER_IDS): TITEL FÖRE
-                            KATEGORI NÄR DEN FÅR PLATS, annars kategorin, annars
-                            inget. Båda ligger UNDER brickorna (en etikett får
-                            aldrig skymma en bricka). MapLibre placerar
-                            uppifrån och ner - titellagret tar plats först, och
-                            kategorin för SAMMA bricka krockar med sin egen
-                            titel och syns bara när titeln inte fick plats.
-                            Inom lagret går de populäraste först (etikettPrio).
-                            INGEN zoomgräns, till skillnad från webbens
-                            LABEL_CAT_MIN_ZOOM 9 (Josef 9/10: "så man alltid
-                            ser något på avstånd iallafall") - kollisionen
-                            gallrar, och bara urvalet kring mitten är brickor
-                            (resten är prickar utan etikett). */}
-                        <Layer
-                            type="symbol"
-                            id="etikett-kategori"
-                            filter={ETIKETT_FILTER}
-                            style={{ ...ETIKETT_STIL, textField: ['get', 'label'] as unknown as Expression }}
-                        />
-                        <Layer
-                            type="symbol"
-                            id="etikett-titel"
-                            filter={ETIKETT_FILTER}
-                            style={{ ...ETIKETT_STIL, textField: ['get', 'titel'] as unknown as Expression }}
-                        />
-                        <Layer
-                            type="symbol"
-                            id="event-brickor"
-                            style={{
-                                iconImage: ['get', 'ikon'] as unknown as Expression,
-                                iconSize: BRICKA_ICON_SIZE,
-                                iconAnchor: 'bottom',
-                                iconAllowOverlap: true,
-                                iconIgnorePlacement: true,
-                                iconOpacity: ['case', ['get', 'past'], 0.45, 1] as unknown as Expression,
-                                symbolSortKey: ['get', 'sort'] as unknown as Expression,
-                            }}
-                        />
-                        {/* "+N" på grupper: vit pill + siffra som EN bakad bild
-                            (antal-N), så en grannbadges siffra aldrig ritas
-                            ovanpå en annan badges cirkel. Det gamla cirkel- +
-                            textlagret ritade alla siffror sist, i hög. */}
-                        <Layer
-                            type="symbol"
-                            id="event-antal"
-                            filter={GRUPP_FILTER}
-                            style={{
-                                iconImage: ['get', 'antalIkon'] as unknown as Expression,
-                                iconSize: BRICKA_ICON_SIZE,
-                                iconTranslate: [BADGE_X, -BADGE_Y],
-                                iconAllowOverlap: true,
-                                iconIgnorePlacement: true,
-                                iconOpacity: ['case', ['get', 'past'], 0.6, 1] as unknown as Expression,
-                                symbolSortKey: ['get', 'sort'] as unknown as Expression,
-                            }}
-                        />
-                        {/* Den valda brickans titel - överst och alltid synlig. */}
-                        <Layer
-                            type="symbol"
-                            id="etikett-vald"
-                            filter={VALD_FILTER}
-                            style={{
-                                ...ETIKETT_STIL,
-                                textField: ['get', 'titel'] as unknown as Expression,
-                                textAllowOverlap: true,
-                            }}
-                        />
-                    </GeoJSONSource>
+                    {/* Event-brickorna med etiketter och "+N" - egen komponent
+                        som tickar: multibrickorna växlar bild och
+                        överlappande brickor turas om att ligga överst
+                        (lib/brickCykel, Josef 5/11). */}
+                    <KartBrickor brickor={brickor} zoom={zoom ?? 11} klara={emojiBrickor.klara} />
                     {/* Önskningarna som eget drömskt lager (webbens wish-
                         brickor): kategoribrickan halvt genomskinlig med
                         "Önskas · {titel}" under. Egen källa - aldrig i
@@ -920,7 +853,7 @@ export default function KartScreen() {
                     grupp={kort.grupp}
                     onVäljIGrupp={väljIGrupp}
                     onTillbakaTillLista={kort.frånLista && kort.grupp.length > 1
-                        ? () => setKort({ event: null, grupp: kort.grupp, frånLista: false })
+                        ? () => setKort({ event: null, grupp: kort.grupp, frånLista: false, retur: kort.retur ?? null })
                         : kort.retur && kort.event?.id === kort.retur.eventId
                             ? () => router.push(kort.retur!.href)
                             : null}

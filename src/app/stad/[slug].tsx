@@ -26,6 +26,7 @@
  */
 import { useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { CITIES, type AppFeedEvent } from '@vadkul/kontrakt';
@@ -42,6 +43,7 @@ import { useFilter } from '@/lib/filterContext';
 import { isEventPast } from '@/lib/harVarit';
 import { matcharFilter } from '@/lib/kartFilter';
 import { begärKartHopp } from '@/lib/kartHopp';
+import { läsListLäge, läsPeriod, raderAttRendera, returParametrar } from '@/lib/listRetur';
 import { önskningarNära, type Önskan } from '@/lib/onskningar';
 import { useRegionVal } from '@/lib/regionContext';
 import { normalizeSearchQuery } from '@/lib/sok';
@@ -59,6 +61,7 @@ import {
     toppArrangörer,
     utanStoraKällor,
 } from '@/lib/stadsUtbud';
+import { useListRetur } from '@/lib/useListRetur';
 import { useNu } from '@/lib/useNu';
 
 const BLÅ = '#006AA7';
@@ -68,7 +71,9 @@ const BAKGRUND = '#f8fafc';
 const CHIPS_H = 50;
 
 export default function StadScreen() {
-    const { slug, q } = useLocalSearchParams<{ slug: string; q?: string }>();
+    const { slug, q, y, id, period: periodParam } = useLocalSearchParams<{ slug: string; q?: string; y?: string; id?: string; period?: string }>();
+    // Öppnad som retur från kartans eventkort (lib/listRetur): där man var.
+    const [returLäge] = useState(() => läsListLäge({ y, id }));
     const stad = CITIES.find(c => c.slug === slug);
     const { väljStad } = useRegionVal();
     const filter = useFilter();
@@ -78,7 +83,7 @@ export default function StadScreen() {
     const önskningar = useQuery({ queryKey: ['onskningar'], queryFn: hämtaÖnskningar, staleTime: 10 * 60_000 });
     const nuMs = useNu();
 
-    const [period, setPeriod] = useState<Period>('alla');
+    const [period, setPeriod] = useState<Period>(() => läsPeriod(periodParam));
     // ?q= följer med från länkar (webbens kortsök → stadssidan) och tillbaka från kortet.
     const [sök, setSök] = useState(typeof q === 'string' ? q : '');
     const qNorm = normalizeSearchQuery(sök);
@@ -129,6 +134,9 @@ export default function StadScreen() {
     const [scrollY] = useState(() => new Animated.Value(0));
     const [chipsY, setChipsY] = useState<number | null>(null);
     const listRef = useRef<SectionList<AppFeedEvent, DagSektion>>(null);
+    const listRetur = useListRetur(listRef, returLäge);
+    // Returen renderar listan förbi eventet man tryckte på (en gång, vid öppningen).
+    const [förstaRader] = useState(() => raderAttRendera(sektioner, returLäge));
     // Fokus i sökfältet: rulla så kategoriraden klistrar och fältet står
     // direkt under den - tangentbordet ska inte täcka det man skriver i.
     const visaSökfältet = () => {
@@ -147,10 +155,19 @@ export default function StadScreen() {
         begärKartHopp({
             event: e,
             stadSlug: stad.slug,
-            // Sökningen följer med tillbaka från kortet.
+            // Sökningen, perioden och var man stod i listan följer med
+            // tillbaka från kortet (lib/listRetur, Josef 5/11).
             retur: {
                 etikett: 'Tillbaka till stadssidan',
-                href: { pathname: '/stad/[slug]', params: { slug: stad.slug, ...(sök ? { q: sök } : {}) } },
+                href: {
+                    pathname: '/stad/[slug]',
+                    params: {
+                        slug: stad.slug,
+                        ...(sök ? { q: sök } : {}),
+                        ...(period !== 'alla' ? { period } : {}),
+                        ...returParametrar(listRetur.nuvarandeLäge(e.id)),
+                    },
+                },
             },
         });
         router.dismissTo('/');
@@ -293,7 +310,13 @@ export default function StadScreen() {
                     keyboardDismissMode="on-drag"
                     automaticallyAdjustKeyboardInsets
                     scrollEventThrottle={16}
-                    onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+                    onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+                        useNativeDriver: true,
+                        listener: (ev: NativeSyntheticEvent<NativeScrollEvent>) => listRetur.följY(ev.nativeEvent.contentOffset.y),
+                    })}
+                    initialNumToRender={förstaRader}
+                    onContentSizeChange={listRetur.vidStorlek}
+                    onScrollBeginDrag={listRetur.vidDrag}
                     ListHeaderComponent={topp}
                     ListEmptyComponent={
                         feed.isLoading ? null : (
