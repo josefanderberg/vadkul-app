@@ -33,10 +33,12 @@ import type { BrickProps, BrickRam } from './kartlager';
 
 /** Webbens CYCLE_STEP_MS: en bricka byter ram var halvsekund, i tur och ordning. */
 export const CYKEL_STEG_MS = 500;
-/** Varje ram står kvar minst så här länge. Webbens rytm (en bricka per
- *  halvsekund) delas av många brickor i bild; med en eller två växlande
- *  brickor hade varje bricka annars fladdrat var halvsekund. */
-export const RAM_MINST_MS = 2000;
+/** Varje ram står kvar minst så här länge. På webben byter en bricka var
+ *  halvsekund i tur och ordning bland de växlande brickorna i bild, så varje
+ *  bricka byter var 0,5 s × antalet - med 6-16 i bild 3-8 s (Josef 6/11:
+ *  "på webben är det kanske 3-8 sekunder ... gör i samma takt på apparna").
+ *  Med få växlande brickor i bild hade appen annars bytt mycket oftare. */
+export const RAM_MINST_MS = 4000;
 /** Webbens FADE_MS: den gamla ramen tonas bort så nästa syns bakom. */
 export const CYKEL_TON_MS = 200;
 /** Webbens Z_CYCLE_STEP_MS: en hög byter överst var 1,6 s - ett större hopp. */

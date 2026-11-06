@@ -13,8 +13,8 @@
  *    tonlagret - MapLibre tonar själv (iconOpacityTransition), ingen omritning.
  *
  * Takten är webbens: en multibricka i taget byter ram var 0,5 s (tona 0,2 s),
- * men varje ram står minst 2 s, och en hög av överlappande brickor får en ny
- * överst var 1,6 s (tona 0,22 s).
+ * men varje ram står minst 4 s (webbens 3-8 s per bricka), och en hög av
+ * överlappande brickor får en ny överst var 1,6 s (tona 0,22 s).
  * Tickar bara när något kan röra sig, kartan syns (ingen modal över) och
  * appen är framme.
  */
