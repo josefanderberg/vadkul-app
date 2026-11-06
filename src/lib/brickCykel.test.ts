@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import {
+    basBrickor,
     brickHögar,
-    FRAM_SORT,
+    byggTonlager,
     harRörelse,
-    medCykel,
     mercatorPt,
     nästaFront,
     nästaIRunda,
+    tonOpacitet,
+    TOMT_LÄGE,
     visadBild,
     växlande,
     överlappsHögar,
-    överstIHögarna,
+    type BläddrLäge,
+    type TonPost,
 } from './brickCykel';
 import { byggBrickor } from './kartlager';
 
@@ -27,7 +30,6 @@ const ev = (id: string, h: number, extra: Partial<AppFeedEvent> = {}): AppFeedEv
 });
 const NU = new Date(2026, 8, 29, 15).getTime();
 const INGA = new Set<string>();
-const NOLL = new Map<string, number>();
 
 describe('ramarna i byggBrickor', () => {
     it('en multibricka får en ram per synlig bild - dubbletterna hoppas över', () => {
@@ -85,40 +87,76 @@ describe('turordningen (webbens round-robin)', () => {
     });
 });
 
-describe('medCykel', () => {
+describe('huvudlagret (basBrickor) - rörs aldrig av bläddringen', () => {
     const multi = () => byggBrickor([ev('a', 17), ev('b', 18, { category: 'art' })], { nowMs: NU });
 
-    it('växlande bricka visar ramens bild, titel och kategori - och ramarna skickas inte till kartan', () => {
-        const fc = multi();
-        const p0 = medCykel(fc, NOLL, INGA, INGA).features[0].properties as Record<string, unknown>;
-        expect(p0.ramar).toBeUndefined();
-        expect([p0.ikon, p0.titel, p0.label]).toEqual(['bricka-music', 'a', 'Musik']);
-        const p1 = medCykel(fc, new Map([['a', 1]]), INGA, INGA).features[0].properties;
-        expect([p1.ikon, p1.titel, p1.label]).toEqual(['bricka-art', 'b', 'Konst']);
-        // Indexet varvar runt.
-        expect(medCykel(fc, new Map([['a', 2]]), INGA, INGA).features[0].properties.ikon).toBe('bricka-music');
+    it('visar ram 0 med representantens titel, och ramarna skickas inte till kartan', () => {
+        const p = basBrickor(multi(), INGA).features[0].properties as Record<string, unknown>;
+        expect(p.ramar).toBeUndefined();
+        expect([p.ikon, p.titel, p.label]).toEqual(['bricka-music', 'a', 'Musik']);
     });
 
-    it('ramens emojibild används först när den är inläst', () => {
-        const fc = multi();
-        fc.features[0].properties.ramar![1] = { ikon: 'bricka-art', emojiBild: 'bricka-art~1f3a8', titel: 'b', label: 'Konst' };
-        const ett = new Map([['a', 1]]);
-        expect(visadBild(fc.features[0].properties, ett, INGA)).toBe('bricka-art');
-        expect(visadBild(fc.features[0].properties, ett, new Set(['bricka-art~1f3a8']))).toBe('bricka-art~1f3a8');
-    });
-
-    it('ensam bricka får sin emojibild när den är klar, annars kategorins', () => {
+    it('emojibilden används först när den är inläst', () => {
         const fc = byggBrickor([ev('a', 17)], { nowMs: NU });
         fc.features[0].properties.emojiBild = 'bricka-music~1f3b8';
-        expect(medCykel(fc, NOLL, INGA, INGA).features[0].properties.ikon).toBe('bricka-music');
-        expect(medCykel(fc, NOLL, INGA, new Set(['bricka-music~1f3b8'])).features[0].properties.ikon).toBe('bricka-music~1f3b8');
+        expect(basBrickor(fc, INGA).features[0].properties.ikon).toBe('bricka-music');
+        expect(basBrickor(fc, new Set(['bricka-music~1f3b8'])).features[0].properties.ikon).toBe('bricka-music~1f3b8');
+        const ram = byggBrickor([ev('a', 17), ev('b', 18, { category: 'art' })], { nowMs: NU });
+        ram.features[0].properties.ramar![1] = { ikon: 'bricka-art', emojiBild: 'bricka-art~1f3a8', titel: 'b', label: 'Konst' };
+        expect(visadBild(ram.features[0].properties, new Map([['a', 1]]), new Set(['bricka-art~1f3a8']))).toBe('bricka-art~1f3a8');
     });
 
-    it('lyfta brickor får frontens sort, övriga behåller sin', () => {
-        const fc = byggBrickor([ev('a', 17), ev('b', 18, { lng: 18.0603 })], { nowMs: NU });
-        const ut = medCykel(fc, NOLL, new Set(['b']), INGA).features;
-        expect(ut.find(f => f.properties.id === 'b')!.properties.sort).toBe(FRAM_SORT);
-        expect(ut.find(f => f.properties.id === 'a')!.properties.sort).toBe(1);
+    it('samma brickor ger exakt samma data - en minuttick skickar inget nytt till kartan', () => {
+        expect(JSON.stringify(basBrickor(multi(), INGA))).toBe(JSON.stringify(basBrickor(multi(), INGA)));
+    });
+});
+
+describe('tonlagret', () => {
+    // a+b på samma plats (växlar), c ~17 m bort (överlappar a vid zoom 13).
+    const fc = () => byggBrickor(
+        [ev('a', 17), ev('b', 18, { category: 'art' }), ev('c', 18, { lng: 18.0603, category: 'sport' })],
+        { nowMs: NU },
+    );
+
+    it('ram-kopior för ram 1.. och fram-kopior av alla ramar för brickorna i högar, ram-gruppen underst', () => {
+        const brickor = fc();
+        const { data, poster } = byggTonlager(brickor, brickHögar(brickor, 13), INGA);
+        expect(poster.map(p => p.k)).toEqual(['ram|a|1', 'fram|a|0', 'fram|a|1', 'fram|c|0']);
+        expect(data.features.map(f => f.properties.ikon)).toEqual(['bricka-art', 'bricka-music', 'bricka-art', 'bricka-sport']);
+        // Utan högar: bara ram-kopian.
+        expect(byggTonlager(brickor, [], INGA).poster.map(p => p.k)).toEqual(['ram|a|1']);
+    });
+
+    const post = (k: string): TonPost => {
+        const [grupp, id, j] = k.split('|');
+        return { k, grupp: grupp as TonPost['grupp'], id, j: Number(j) };
+    };
+    const läge = (l: Partial<BläddrLäge>): BläddrLäge => ({ ...TOMT_LÄGE, ...l });
+
+    it('ram 0 = huvudlagret: inga kopior syns i vila', () => {
+        expect(tonOpacitet(post('ram|a|1'), TOMT_LÄGE, 2)).toBe(0);
+        expect(tonOpacitet(post('fram|a|0'), TOMT_LÄGE, 2)).toBe(0);
+    });
+
+    it('bytet i två steg: nya ramen syns medan den gamla hålls, sedan bara den nya', () => {
+        const steg1 = läge({ ramIndex: new Map([['a', 0]]), ramHåll: new Map([['a', 1]]) });
+        // Varvet runt 1 → 0: kopian för ram 1 hålls kvar och tonas sedan bort.
+        expect(tonOpacitet(post('ram|a|1'), steg1, 2)).toBe(1);
+        const steg2 = läge({ ramIndex: new Map([['a', 0]]) });
+        expect(tonOpacitet(post('ram|a|1'), steg2, 2)).toBe(0);
+        // 0 → 1: kopian tonas in.
+        expect(tonOpacitet(post('ram|a|1'), läge({ ramIndex: new Map([['a', 1]]), ramHåll: new Map([['a', 0]]) }), 2)).toBe(1);
+    });
+
+    it('fram-kopian syns bara för den som har turen (eller hålls under sin uttoning), i dess aktuella ram', () => {
+        const front = läge({ fronter: new Map([['a|c', 'c']]) });
+        expect(tonOpacitet(post('fram|c|0'), front, 1)).toBe(1);
+        expect(tonOpacitet(post('fram|a|0'), front, 2)).toBe(0);
+        const aFram = läge({ fronter: new Map([['a|c', 'a']]), ramIndex: new Map([['a', 1]]) });
+        expect(tonOpacitet(post('fram|a|1'), aFram, 2)).toBe(1);
+        expect(tonOpacitet(post('fram|a|0'), aFram, 2)).toBe(0);
+        const håll = läge({ frontHåll: new Set(['c']) });
+        expect(tonOpacitet(post('fram|c|0'), håll, 1)).toBe(1);
     });
 });
 
@@ -165,7 +203,7 @@ describe('z-växlingen', () => {
         let front: string | null = null;
         for (let i = 0; i < hög.members.length + 1; i++) {
             front = nästaFront(hög, front);
-            överst.add([...överstIHögarna([hög], new Map([[hög.id, front]]))][0]);
+            överst.add(front);
         }
         expect(överst).toEqual(new Set(['a', 'b']));
     });

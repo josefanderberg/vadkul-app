@@ -1,34 +1,42 @@
 /**
- * Brickorna som BLÄDDRAR - webbens rytm och övertoning (Josef 5/11 2026:
- * "om det är multieventmarkör på kartan så ska de bytas ... skippa
- * dubbletterna ... bläddra så att alla hamnar överst"; 6/11: "inte så smooth
- * på apparna som på webben. De går för snabbt ... webben har mycket bättre
- * övergång"). Två rörelser, båda med webbens takt (V2Map):
+ * Brickorna som BLÄDDRAR - webbens rytm och övertoning, UTAN att kartan
+ * ritar om (Josef 5/11 2026: "skippa dubbletterna ... bläddra så att alla
+ * hamnar överst"; 6/11: "inte så smooth som på webben. De går för snabbt",
+ * och sedan "vid varje byte blinkar ALLA eventbrickor till").
+ *
+ * VARFÖR DET SER UT SÅ HÄR: varje gång en GeoJSON-källa får ny data lägger
+ * appens MapLibre ut alla dess symboler på nytt och tonar in dem - alla
+ * brickor blinkar. Bläddringen får därför ALDRIG skicka om brickkällan.
+ * I stället ligger de bilder som kan visas som färdiga kopior i ett eget,
+ * stillastående tonlager - ett kartlager per kopia - och ett byte är bara
+ * att ett lagers opacitet tonas (lagernivåns iconOpacity med
+ * iconOpacityTransition): ingen omritning, och MapLibre sköter toningen.
  *
  *  1. EMOJIVÄXLINGEN (webbens cycleRotations, CYCLE_STEP_MS 500 / FADE_MS
- *     200): EN bricka i taget byter ram, i tur och ordning bland de växlande
- *     brickorna - aldrig flera samtidigt - och den gamla bilden tonas bort
- *     ovanpå den nya. Ramarna byggs i lib/kartlager (BrickProps.ramar): en per
- *     SYNLIG BILD, dubbletterna hoppas över. Passerade, stjärnmärkta/boostade
- *     och den valda står still.
- *  2. Z-VÄXLINGEN (webbens utils/overlapCycle, Z_CYCLE_STEP_MS 1600 /
- *     Z_FADE_MS 220): EN hög i taget får en ny bricka överst, och den tonas
- *     in. Appen lyfter brickans `sort` (lagrets symbolSortKey) när tonen är
- *     klar. Boostade/stjärnmärkta (sort 3) och den valda (4) är inte med och
- *     ligger alltid överst (Josef 4/11); lyftet (2.5) går aldrig förbi dem.
+ *     200): EN bricka i taget byter ram var halvsekund, i tur och ordning.
+ *     Ram 0 är brickan själv i huvudlagret; ram 1.. är "ram"-kopior ovanpå.
+ *  2. Z-VÄXLINGEN (webbens overlapCycle, Z_CYCLE_STEP_MS 1600 / Z_FADE_MS
+ *     220): EN hög i taget får en ny överst. "fram"-kopiorna ligger över
+ *     alla ram-kopior; den som har turen visar sin aktuella ram där.
+ *     Boostade/stjärnmärkta och den valda är inte med - de ligger alltid
+ *     överst (Josef 4/11).
  *
- * Tonerna ritas av components/KartBrickor i ett eget tunt lager (en kopia av
- * brickan med sjunkande/stigande opacitet) - MapLibre i appen kan inte blanda
- * bildpunkter i en bild som webbens updateImage. Här bor den rena delen:
- * turordningen, högarna och hur brickorna ser ut just nu. Testad.
+ * Bytet sker i TVÅ STEG så grundbilden aldrig skymtar mitt i tonen: den nya
+ * kopian tonas in medan den gamla HÅLLS kvar, sedan släpps den gamla. Ligger
+ * den nya under den gamla (ett varv runt) syns i stället den gamlas uttoning.
  *
- * Skärmavståndet räknas utan kartan: Web Mercator-pt vid kartans zoom
- * (MapLibres världsbredd 512·2^zoom pt).
+ * Ramarna byggs i lib/kartlager (BrickProps.ramar): en per SYNLIG BILD,
+ * dubbletterna hoppas över. Ren modul, testad. Skärmavståndet räknas utan
+ * kartan: Web Mercator-pt vid kartans zoom (världen 512·2^zoom pt).
  */
 import type { BrickProps, BrickRam } from './kartlager';
 
 /** Webbens CYCLE_STEP_MS: en bricka byter ram var halvsekund, i tur och ordning. */
 export const CYKEL_STEG_MS = 500;
+/** Varje ram står kvar minst så här länge. Webbens rytm (en bricka per
+ *  halvsekund) delas av många brickor i bild; med en eller två växlande
+ *  brickor hade varje bricka annars fladdrat var halvsekund. */
+export const RAM_MINST_MS = 2000;
 /** Webbens FADE_MS: den gamla ramen tonas bort så nästa syns bakom. */
 export const CYKEL_TON_MS = 200;
 /** Webbens Z_CYCLE_STEP_MS: en hög byter överst var 1,6 s - ett större hopp. */
@@ -38,8 +46,6 @@ export const Z_TON_MS = 220;
 /** Ankarpunkter närmare än så (pt) räknas som på varandra - webbens
  *  OVERLAP_RADIUS_PX, ungefär en brickbredd (40 pt) med lite marginal inåt. */
 export const ÖVERLAPP_RADIE_PT = 30;
-/** Sort för den framroterade - över guld/grön/pop (2), under boostade (3). */
-export const FRAM_SORT = 2.5;
 
 type Brickor = GeoJSON.FeatureCollection<GeoJSON.Point, BrickProps>;
 
@@ -105,7 +111,7 @@ export function överlappsHögar(punkter: readonly ÖverlappsPunkt[], radie: num
 /**
  * Vems tur det är att ligga överst (webbens nextFront): rotationen går i
  * stapelordning och varvar runt genom ALLA, även den naturliga toppen (det
- * steget = inget lyft). Okänd front (ny hög) = toppen syns, turen till nummer två.
+ * steget = ingen kopia överst). Okänd front (ny hög) = toppen syns, turen till nummer två.
  */
 export function nästaFront(hög: ÖverlappsHög, nuvarande: string | null | undefined): string {
     const i = nuvarande != null ? hög.members.indexOf(nuvarande) : -1;
@@ -161,37 +167,83 @@ export function visadBild(p: BrickProps, ramIndex: ReadonlyMap<string, number>, 
     return p.emojiBild && klara.has(p.emojiBild) ? p.emojiBild : p.ikon;
 }
 
-/** Brickorna som syns överst i sina högar just nu (lyft eller naturlig topp). */
-export function överstIHögarna(högar: readonly ÖverlappsHög[], fronter: ReadonlyMap<string, string>): Set<string> {
-    return new Set(högar.map(h => fronter.get(h.id) ?? h.topKey));
-}
-
-/**
- * Brickorna som de ska se ut nu: växlande brickor visar sin ram (bild,
- * titel och kategori byter i samma takt som på webben), och de lyfta ligger
- * överst i sin hög. Ensamma brickor får sin emojibild när den är klar (som
- * lib/emojiBricka medEmojiBilder). `ramar` skickas inte vidare till kartan.
- */
-export function medCykel(
+/** Huvudlagrets brickor: ram 0 (representanten) med emojibilden när den är
+ *  inläst. Ändras bara med brickorna själva - aldrig av bläddringen.
+ *  `ramar` skickas inte till kartan. */
+export function basBrickor(
     fc: Brickor,
-    ramIndex: ReadonlyMap<string, number>,
-    lyfta: ReadonlySet<string>,
     klara: ReadonlySet<string>,
 ): GeoJSON.FeatureCollection<GeoJSON.Point, Omit<BrickProps, 'ramar'>> {
     return {
         type: 'FeatureCollection',
         features: fc.features.map(f => {
             const { ramar: _ramar, ...p } = f.properties;
-            const r = aktuellRam(f.properties, ramIndex);
-            const ut = {
-                ...p,
-                ikon: visadBild(f.properties, ramIndex, klara),
-                ...(r ? { titel: r.titel, label: r.label } : {}),
-                ...(lyfta.has(p.id) ? { sort: FRAM_SORT } : {}),
-            };
-            return { ...f, properties: ut };
+            const ram0 = f.properties.ramar?.[0];
+            return { ...f, properties: { ...p, ikon: ram0 ? ramBild(ram0, klara) : visadBild(f.properties, new Map(), klara) } };
         }),
     };
+}
+
+/** Ett lager i tonlagret: kopian av brickan `id` i ram `j`. */
+export interface TonPost {
+    /** Lagrets och kopians nyckel. */
+    k: string;
+    grupp: 'ram' | 'fram';
+    id: string;
+    j: number;
+}
+
+/**
+ * Tonlagrets kopior och lager, i ritordning (nedifrån). RAM-kopior för de
+ * växlande brickornas ram 1.. och FRAM-kopior av alla ramar för brickorna i
+ * högarna - fram-gruppen ligger överst. Byggs om bara när brickorna, högarna
+ * eller de inlästa bilderna ändras.
+ */
+export function byggTonlager(
+    fc: Brickor,
+    högar: readonly ÖverlappsHög[],
+    klara: ReadonlySet<string>,
+): { data: GeoJSON.FeatureCollection<GeoJSON.Point, { k: string; ikon: string }>; poster: TonPost[] } {
+    const iHög = new Set(högar.flatMap(h => h.members));
+    const ram: { post: TonPost; f: GeoJSON.Feature<GeoJSON.Point, { k: string; ikon: string }> }[] = [];
+    const fram: typeof ram = [];
+    for (const f of fc.features) {
+        const p = f.properties;
+        const bilder = p.ramar && p.ramar.length > 1
+            ? p.ramar.map(r => ramBild(r, klara))
+            : [visadBild(p, new Map(), klara)];
+        const lägg = (grupp: TonPost['grupp'], j: number, ut: typeof ram) => {
+            const k = `${grupp}|${p.id}|${j}`;
+            ut.push({ post: { k, grupp, id: p.id, j }, f: { type: 'Feature', geometry: f.geometry, properties: { k, ikon: bilder[j] } } });
+        };
+        for (let j = 1; j < bilder.length; j++) lägg('ram', j, ram);
+        if (iHög.has(p.id)) for (let j = 0; j < bilder.length; j++) lägg('fram', j, fram);
+    }
+    const alla = [...ram, ...fram];
+    return { data: { type: 'FeatureCollection', features: alla.map(x => x.f) }, poster: alla.map(x => x.post) };
+}
+
+/** Bläddringens läge: vilken ram varje bricka står på (och vilken som hålls
+ *  kvar under tonen), vem som ligger överst i varje hög och vilka förra
+ *  fronter som hålls kvar under sin uttoning. */
+export interface BläddrLäge {
+    ramIndex: ReadonlyMap<string, number>;
+    ramHåll: ReadonlyMap<string, number>;
+    fronter: ReadonlyMap<string, string>;
+    frontHåll: ReadonlySet<string>;
+}
+
+export const TOMT_LÄGE: BläddrLäge = { ramIndex: new Map(), ramHåll: new Map(), fronter: new Map(), frontHåll: new Set() };
+
+/** Opaciteten (0/1) för ett lager i tonlagret - MapLibre tonar mellan dem. */
+export function tonOpacitet(post: TonPost, läge: BläddrLäge, antalRamar: number): 0 | 1 {
+    const n = Math.max(1, antalRamar);
+    const nu = (läge.ramIndex.get(post.id) ?? 0) % n;
+    const håll = läge.ramHåll.get(post.id);
+    const visar = post.j === nu || (håll != null && post.j === håll % n);
+    if (post.grupp === 'ram') return visar ? 1 : 0;
+    const överst = [...läge.fronter.values()].includes(post.id) || läge.frontHåll.has(post.id);
+    return överst && visar ? 1 : 0;
 }
 
 /** Finns det något att bläddra? Annars behöver kartan inte ticka alls. */
