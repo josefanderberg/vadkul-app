@@ -120,21 +120,28 @@ export function byggBrickor(
         const levande = grupp.filter(e => !isEventPast(e, opts.nowMs));
         const vald = opts.valtId ? grupp.find(e => e.id === opts.valtId) : undefined;
         const stjärnmärkt = opts.stjärnor ? levande.find(e => opts.stjärnor!.has(e.id)) : undefined;
-        const rep = vald ?? stjärnmärkt ?? levande.find(boostad) ?? levande[0] ?? grupp[0];
+        const boostadRep = levande.find(boostad);
+        const rep = vald ?? stjärnmärkt ?? boostadRep ?? levande[0] ?? grupp[0];
         const past = levande.length === 0;
-        // Guldkropp MED ⭐ (webbens starred): boostade (aktiv boost, eventet
-        // inte passerat) och stjärnmärkta. Ticketmaster = guld UTAN ⭐ (kart-
-        // ui 1/9: stjärnan är boostens/stjärngåvans kvitto).
-        const stjärna = (!past && boostad(rep)) || !!(opts.stjärnor && opts.stjärnor.has(rep.id));
-        const guld = isTicketmasterEvent(rep);
+        // KROPPENS FLAGGOR SITTER PÅ GRUPPEN, som på webben (deriveGroupBrick:
+        // drawStar/drawGold/drawPop, och den valda DOM-markörens isGoldStar):
+        // guldet och ⭐ följer platsen även när man valt ett annat event där
+        // (Josef 11/11, VADKUL#189 - annars stack platsens ⭐ ut under den
+        // valda brickan). Guldkropp MED ⭐ (webbens starred): ett kommande
+        // stjärnmärkt eller boostat event. Ticketmaster = guld UTAN ⭐ (kart-
+        // ui 1/9: stjärnan är boostens/stjärngåvans kvitto). Passerade räknas
+        // inte - en förbrukad stjärna eller boost lyser inte.
+        const stjärna = !!stjärnmärkt || !!boostadRep;
+        const guld = levande.some(isTicketmasterEvent);
+        const pop = levande.some(e => e.pop === true);
         const sparad = !!opts.ärSparad && grupp.some(e => opts.ärSparad!(e.id));
         const grön = ärEgetVadkulEvent(rep);
-        const nivå = rep.pop || guld || stjärna ? 0 : grön ? 1 : 2;
+        const nivå = pop || guld || stjärna ? 0 : grön ? 1 : 2;
         // Webbens sticky (kart-ui): boostar/stjärnor (⭐), TM (guld), gillade
         // (sparad) och användarskapade - de senare så fort NÅGOT kommande i
         // gruppen är det.
         const fast = stjärna || guld || sparad || grön || levande.some(e => e.userCreated === true);
-        const tillstånd: BrickTillstånd = { category: String(rep.category), pop: rep.pop === true, stjärna, guld, sparad, grön };
+        const tillstånd: BrickTillstånd = { category: String(rep.category), pop, stjärna, guld, sparad, grön };
         const ikon = brickaIkon({ ...tillstånd, vald: !!vald });
         // Kortets emoji mot den som är bakad i brickan (okänd kategori - även
         // kyrkan och PRO - har Övrigts bricka).
@@ -176,10 +183,10 @@ export function byggBrickor(
                 // Ritordning: vald överst, sedan BOOSTADE/stjärnmärkta (Josef
                 // 4/11: "den ska alltid ha högst z-index"), guld/grön/pop,
                 // vanliga, har varit sist.
-                sort: vald ? 4 : past ? 0 : stjärna ? 3 : guld || grön || rep.pop ? 2 : 1,
+                sort: vald ? 4 : past ? 0 : stjärna ? 3 : guld || grön || pop ? 2 : 1,
                 etikettPrio: nivå * 1000 - Math.min(grupp.length, 999),
                 fast,
-                pop: rep.pop === true || guld || stjärna,
+                pop: pop || guld || stjärna,
                 färg: kategoriFor(String(rep.category)).hex,
                 ...(ramar.length > 1 ? { ramar } : {}),
             },

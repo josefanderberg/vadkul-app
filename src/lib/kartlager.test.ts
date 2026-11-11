@@ -152,6 +152,31 @@ describe('valdPlats (VADKUL#187: valet rör aldrig brickkällan)', () => {
         const v = valdPlats([ev('x', 17)], 'x', { nowMs: NU, stjärnor: new Set(['x']) })!;
         expect(v.bricka.properties.ikon).toBe('bricka-music-stjarna-vald');
     });
+    it('VADKUL#189: guldet och ⭐ sitter på PLATSEN, även när ett annat event där är valt (webbens isGoldStar)', () => {
+        const slut = new Date(2026, 8, 30).getTime();
+        const händer = [ev('tidig', 17, { category: 'art' }), ev('stjärnan', 19)];
+        const stjärnmärkt = valdPlats(händer, 'tidig', { nowMs: NU, stjärnor: new Set(['stjärnan']) })!;
+        expect(stjärnmärkt.bricka.properties).toMatchObject({ id: 'tidig', ikon: 'bricka-art-stjarna-vald', label: 'Konst' });
+        expect(stjärnmärkt.basId).toBe('stjärnan');
+        const boostad = valdPlats(händer, 'tidig', { nowMs: NU, boostar: new Map([['stjärnan', slut]]) })!;
+        expect(boostad.bricka.properties.ikon).toBe('bricka-art-stjarna-vald');
+    });
+});
+
+describe('kroppens flaggor är gruppens (webbens deriveGroupBrick)', () => {
+    it('Ticketmaster och 🔥 någonstans bland de kommande ger platsens kropp, även när representanten är ett annat event', () => {
+        const tm = byggBrickor([ev('tidig', 17), ev('https://www.ticketmaster.se/event/1', 19, { category: 'stage' })], { nowMs: NU });
+        expect(tm.features[0].properties).toMatchObject({ id: 'tidig', ikon: 'bricka-music-guld', sort: 2 });
+        const pop = byggBrickor([ev('tidig', 17), ev('het', 19, { pop: true })], { nowMs: NU });
+        expect(pop.features[0].properties).toMatchObject({ id: 'tidig', ikon: 'bricka-music-pop', pop: true, sort: 2 });
+    });
+    it('passerade räknas inte: en förbrukad stjärna, boost, Ticketmaster eller 🔥 lyser inte', () => {
+        const fc = byggBrickor(
+            [ev('tidig', 17), ev('gammal', 10, { pop: true }), ev('https://www.ticketmaster.se/event/2', 9)],
+            { nowMs: NU, stjärnor: new Set(['gammal']) },
+        );
+        expect(fc.features[0].properties).toMatchObject({ id: 'tidig', ikon: 'bricka-music', pop: false, sort: 1 });
+    });
 });
 
 describe('kapaEtikett', () => {
