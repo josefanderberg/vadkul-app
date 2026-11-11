@@ -87,21 +87,23 @@ export function antalIkon(antal: number): string {
     return antal > 99 ? 'antal-99plus' : `antal-${antal}`;
 }
 
+export interface BrickVal {
+    nowMs: number;
+    valtId?: string | null;
+    ärSparad?: (id: string) => boolean;
+    /** Stjärnmärkta event-id:n (eventStars) - guldbricka, och stjärnan
+     *  LYFTER representanten i en grupp (kart-ui: "sortKey-lyftningen är
+     *  stjärnans/boostens privilegium"). */
+    stjärnor?: ReadonlySet<string>;
+    /** Aktiva boostar (data/boostar; egna event bär featuredUntil själva)
+     *  - samma guldbricka + lyftning som stjärnan (webbens boostedRep,
+     *  Josef 4/11: "så de syns ännu längre"). */
+    boostar?: Boostar;
+}
+
 export function byggBrickor(
     events: readonly AppEvent[],
-    opts: {
-        nowMs: number;
-        valtId?: string | null;
-        ärSparad?: (id: string) => boolean;
-        /** Stjärnmärkta event-id:n (eventStars) - guldbricka, och stjärnan
-         *  LYFTER representanten i en grupp (kart-ui: "sortKey-lyftningen är
-         *  stjärnans/boostens privilegium"). */
-        stjärnor?: ReadonlySet<string>;
-        /** Aktiva boostar (data/boostar; egna event bär featuredUntil själva)
-         *  - samma guldbricka + lyftning som stjärnan (webbens boostedRep,
-         *  Josef 4/11: "så de syns ännu längre"). */
-        boostar?: Boostar;
-    },
+    opts: BrickVal,
 ): GeoJSON.FeatureCollection<GeoJSON.Point, BrickProps> {
     const boostar = opts.boostar ?? INGA_BOOSTAR;
     const boostad = (e: AppEvent) => ärBoostad(e, boostar, opts.nowMs);
@@ -184,6 +186,44 @@ export function byggBrickor(
         });
     }
     return { type: 'FeatureCollection', features };
+}
+
+/** Den valda platsen: brickan som ritas överst och platsens id i brickkällan. */
+export interface ValdPlats {
+    /** Platsens bricka som VALD (vald-varianten, valda eventet som
+     *  representant, sort 4, inga ramar). */
+    bricka: GeoJSON.Feature<GeoJSON.Point, BrickProps>;
+    /** Samma plats id i brickkällan och prickarna - representanten UTAN
+     *  valet. Pricken under den valda göms med det. */
+    basId: string;
+}
+
+/**
+ * DEN VALDA PLATSEN SOM EGEN BRICKA (Josef 11/11 2026, VADKUL#187: "varje gång
+ * jag byter eventbricka då blinkar massa till", och multibrickorna "börjar
+ * alltid om vid första bilden"). Brickkällan byggs UTAN valet: ny data i
+ * den får appens MapLibre att lägga ut och tona in ALLA brickor, och den
+ * valda brickans ramar och högar byggde om hela tonlagret (lib/brickCykel),
+ * så varje multibricka hoppade till ram 0. Kartan ritar i stället den valda
+ * i en egen liten källa överst (components/KartBrickor), ovanpå platsens
+ * vanliga bricka - vald-varianten har tjockast kant och samma ruta, så den
+ * täcker den helt. Ett byte skickar då bara om den lilla källan.
+ * null = inget valt, eller det valda finns inte bland eventen (ingen bricka
+ * blev vald förr heller).
+ */
+export function valdPlats(
+    events: readonly AppEvent[],
+    valtId: string | null | undefined,
+    opts: Omit<BrickVal, 'valtId'>,
+): ValdPlats | null {
+    if (!valtId) return null;
+    const valt = events.find(e => e.id === valtId);
+    if (!valt) return null;
+    const k = platsNyckel(valt);
+    const grupp = events.filter(e => platsNyckel(e) === k);
+    const bricka = byggBrickor(grupp, { ...opts, valtId }).features[0];
+    const bas = byggBrickor(grupp, opts).features[0];
+    return { bricka, basId: bas.properties.id };
 }
 
 export interface ÖnskeProps {

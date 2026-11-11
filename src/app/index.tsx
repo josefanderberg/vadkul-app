@@ -41,7 +41,7 @@ import { BRICKA_ICON_SIZE } from '@/lib/brickor';
 import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
-import { byggBrickor, byggÖnskningar } from '@/lib/kartlager';
+import { byggBrickor, byggÖnskningar, valdPlats } from '@/lib/kartlager';
 import { byggPrickar, prickFilter, prickNyckel, väljBrickor } from '@/lib/kartUrval';
 import { useKonto } from '@/lib/kontoContext';
 import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
@@ -443,9 +443,17 @@ export default function KartScreen() {
     const [stjärnmärkta, setStjärnmärkta] = useState<ReadonlySet<string>>(new Set());
     useEffect(() => prenumereraStjärnmärkta(setStjärnmärkta), []);
     const valtId = kort ? kort.event?.id ?? kort.grupp[0]?.id ?? null : null;
+    // Platserna byggs UTAN valet (Josef 11/11, VADKUL#187): ett byte av event
+    // fick annars hela brickkällan att ritas om (alla brickor blinkade) och
+    // multibrickorna att börja om på första bilden. Den valda platsen är en
+    // egen bricka som kartan ritar överst (lib/kartlager.valdPlats).
     const platser = useMemo(
-        () => byggBrickor(iPeriod, { nowMs: nuMs, valtId, ärSparad, stjärnor: stjärnmärkta, boostar }),
-        [iPeriod, nuMs, valtId, ärSparad, stjärnmärkta, boostar],
+        () => byggBrickor(iPeriod, { nowMs: nuMs, ärSparad, stjärnor: stjärnmärkta, boostar }),
+        [iPeriod, nuMs, ärSparad, stjärnmärkta, boostar],
+    );
+    const vald = useMemo(
+        () => valdPlats(iPeriod, valtId, { nowMs: nuMs, ärSparad, stjärnor: stjärnmärkta, boostar }),
+        [iPeriod, valtId, nuMs, ärSparad, stjärnmärkta, boostar],
     );
     // BRICKOR KRING MITTEN, PRICKAR ANNARS (Josef 19/10, lib/kartUrval -
     // webbens reveal-urval): de ~50 platserna närmast kartans mitt är
@@ -463,18 +471,26 @@ export default function KartScreen() {
     const prickNyckeln = useMemo(() => prickNyckel(platser), [platser]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const prickar = useMemo(() => byggPrickar(platser), [prickNyckeln]);
-    const brickIds = useMemo(() => new Set(brickor.features.map(f => f.properties.id)), [brickor]);
+    // Den valda platsen kan ligga utanför urvalet (en prick): pricken göms då
+    // under den valda brickan. Bara DET id:t följer valet, så ett byte inom
+    // urvalet rör inte prickfiltret.
+    const valdUtanför = vald && !brickor.features.some(f => f.properties.id === vald.basId) ? vald.basId : null;
+    const brickIds = useMemo(() => {
+        const ids = new Set(brickor.features.map(f => f.properties.id));
+        if (valdUtanför) ids.add(valdUtanför);
+        return ids;
+    }, [brickor, valdUtanför]);
     // EVENTETS EGEN EMOJI på brickan (lib/emojiBricka, Josef 1/11): bilderna
     // sätts ihop i bakgrunden - den valda först, sedan resten i bild, sist de
     // valda varianterna så ett tryck inte visar kategorins emoji en stund.
     // Tills en bild är klar står kategorins bricka kvar.
     const önskadeBilder = useMemo(
-        () => [...brickor.features]
-            .sort((a, b) => Number(b.properties.vald) - Number(a.properties.vald))
+        () => [
+            vald?.bricka.properties.emojiBild ?? '',
             // Multibrickornas ramar (lib/brickCykel) efter brickans egen bild.
-            .flatMap(f => [f.properties.emojiBild, ...(f.properties.ramar ?? []).map(r => r.emojiBild)])
-            .filter(Boolean),
-        [brickor],
+            ...brickor.features.flatMap(f => [f.properties.emojiBild, ...(f.properties.ramar ?? []).map(r => r.emojiBild)]),
+        ].filter(Boolean),
+        [brickor, vald],
     );
     const förladdadeBilder = useMemo(
         () => brickor.features.map(f => f.properties.valdEmojiBild).filter(Boolean),
@@ -541,7 +557,8 @@ export default function KartScreen() {
         // Prickarna efter brickorna (en bricka ovanpå en prick vinner). Ett
         // tryck på en prick öppnar platsen - den blir vald och därmed bricka.
         // Förfiltret med marginal för lutad karta, som brickornas.
-        const id = träffadBricka(await kandidater(brickor.features), tx, ty)
+        // Den valda brickan (sort 4) ritas överst och vinner trycket.
+        const id = träffadBricka(await kandidater(vald ? [...brickor.features, vald.bricka] : brickor.features), tx, ty)
             ?? träffadPrick(await kandidater(prickar.features.filter(f => !brickIds.has(f.properties.id)), PRICK_RADIE * 2), tx, ty);
         if (id) trycktBricka(id);
         else setStängNonce(n => n + 1);
@@ -715,7 +732,7 @@ export default function KartScreen() {
                         som tickar: multibrickorna växlar bild och
                         överlappande brickor turas om att ligga överst
                         (lib/brickCykel, Josef 5/11). */}
-                    <KartBrickor brickor={brickor} zoom={zoom ?? 11} klara={emojiBrickor.klara} />
+                    <KartBrickor brickor={brickor} vald={vald?.bricka ?? null} zoom={zoom ?? 11} klara={emojiBrickor.klara} />
                     {/* Önskningarna som eget drömskt lager (webbens wish-
                         brickor): kategoribrickan halvt genomskinlig med
                         "Önskas · {titel}" under. Egen källa - aldrig i

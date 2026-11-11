@@ -12,6 +12,16 @@
  *  - bläddringen bor i <Bläddring>, som bara ändrar LAGERNIVÅNS opacitet i
  *    tonlagret - MapLibre tonar själv (iconOpacityTransition), ingen omritning.
  *
+ * VALET RÖR INTE BRICKKÄLLAN HELLER (Josef 11/11, VADKUL#187: "varje gång jag
+ * byter eventbricka då blinkar massa till", multibrickorna "börjar alltid om
+ * vid första bilden"): brickorna och tonlagret byggs utan valet, och den
+ * valda brickan (lib/kartlager.valdPlats) ritas i en egen liten källa
+ * ÖVERST, ovanpå platsens vanliga bricka - vald-varianten har tjockast kant
+ * och samma ruta, så den täcker den helt. Ett byte av event skickar bara om
+ * den källan. Den valda titeln tar platsen i kollisionen, så platsens vanliga
+ * etikett under den faller bort utan att något filter byts (ett nytt filter
+ * eller uttryck på ett symbollager lägger också ut hela lagret igen).
+ *
  * Takten är webbens: en multibricka i taget byter ram var 0,5 s (tona 0,2 s),
  * men varje ram står minst 4 s (webbens 3-8 s per bricka), och en hög av
  * överlappande brickor får en ny överst var 1,6 s (tona 0,22 s).
@@ -46,8 +56,7 @@ import type { BrickProps } from '@/lib/kartlager';
 
 const GRUPP_FILTER: FilterSpecification = ['>', ['get', 'antal'], 1];
 /** Passerade grupper får ingen text (en etikett över en släckt bricka svävar). */
-const ETIKETT_FILTER: FilterSpecification = ['all', ['!', ['get', 'past']], ['!', ['get', 'vald']]];
-const VALD_FILTER: FilterSpecification = ['==', ['get', 'vald'], true];
+const ETIKETT_FILTER: FilterSpecification = ['!', ['get', 'past']];
 
 export const ETIKETT_STIL = {
     textFont: ['Montserrat Medium', 'Open Sans Bold'],
@@ -84,7 +93,26 @@ const ANTAL_STIL: SymbolLayerStyle = {
     iconOpacity: ['case', ['get', 'past'], 0.6, 1] as unknown as Expression,
     symbolSortKey: ['get', 'sort'] as unknown as Expression,
 };
+// Den valda: FULL opacitet även när eventet varit - en dimmad vald bricka
+// ovanpå platsens dimmade bricka hade blandat två kroppar.
+const VALD_BRICK_STIL: SymbolLayerStyle = {
+    iconImage: ['get', 'ikon'] as unknown as Expression,
+    iconSize: BRICKA_ICON_SIZE,
+    iconAnchor: 'bottom',
+    iconAllowOverlap: true,
+    iconIgnorePlacement: true,
+};
+const VALD_ANTAL_STIL: SymbolLayerStyle = {
+    iconImage: ['get', 'antalIkon'] as unknown as Expression,
+    iconSize: BRICKA_ICON_SIZE,
+    iconTranslate: [BADGE_X, -BADGE_Y],
+    iconAllowOverlap: true,
+    iconIgnorePlacement: true,
+};
+// textAllowOverlap utan textIgnorePlacement: titeln syns alltid OCH tar sin
+// plats i kollisionen - platsens vanliga etikett på samma ställe faller bort.
 const VALD_TITEL_STIL = { ...ETIKETT_STIL, textField: ['get', 'titel'] as unknown as Expression, textAllowOverlap: true };
+const INGEN_VALD = { type: 'FeatureCollection', features: [] } as Brickor;
 
 function useAppFramme(): boolean {
     const [framme, setFramme] = useState(AppState.currentState === 'active');
@@ -106,10 +134,14 @@ type Brickor = GeoJSON.FeatureCollection<GeoJSON.Point, BrickProps>;
 
 export function KartBrickor({
     brickor,
+    vald,
     zoom,
     klara,
 }: {
+    /** Brickorna UTAN valet - ett byte av event får aldrig ändra dem. */
     brickor: Brickor;
+    /** Den valda platsens bricka (lib/kartlager.valdPlats), ritas överst. */
+    vald: GeoJSON.Feature<GeoJSON.Point, BrickProps> | null;
     zoom: number;
     /** Sammansatta emojibilder som MapLibre har läst in (lib/useEmojiBrickor). */
     klara: ReadonlySet<string>;
@@ -118,6 +150,10 @@ export function KartBrickor({
     // (React jämför strängar på värde - en minuttick med samma brickor når
     // aldrig MapLibre).
     const data = useMemo(() => JSON.stringify(basBrickor(brickor, klara)), [brickor, klara]);
+    const valdData = useMemo(
+        () => JSON.stringify(basBrickor(vald ? { type: 'FeatureCollection', features: [vald] } : INGEN_VALD, klara)),
+        [vald, klara],
+    );
     const högar = useMemo(() => brickHögar(brickor, zoom), [brickor, zoom]);
 
     return (
@@ -143,10 +179,17 @@ export function KartBrickor({
                     (antal-N), så en grannbadges siffra aldrig ritas
                     ovanpå en annan badges cirkel. */}
                 <Layer type="symbol" id="event-antal" filter={GRUPP_FILTER} style={ANTAL_STIL} />
-                {/* Den valda brickans titel - överst och alltid synlig. */}
-                <Layer type="symbol" id="etikett-vald" filter={VALD_FILTER} style={VALD_TITEL_STIL} />
             </GeoJSONSource>
             <Bläddring brickor={brickor} högar={högar} klara={klara} />
+            {/* DEN VALDA överst (VADKUL#187): alltid monterad - tom när inget
+                är valt - så lagren ligger kvar ovanför brickorna, tonlagret
+                (som läggs under "+N") och badgarna. Brickan, dess "+N" och
+                titeln, som alltid syns. */}
+            <GeoJSONSource id="events-vald" data={valdData}>
+                <Layer type="symbol" id="vald-bricka" style={VALD_BRICK_STIL} />
+                <Layer type="symbol" id="vald-antal" filter={GRUPP_FILTER} style={VALD_ANTAL_STIL} />
+                <Layer type="symbol" id="etikett-vald" style={VALD_TITEL_STIL} />
+            </GeoJSONSource>
         </>
     );
 }

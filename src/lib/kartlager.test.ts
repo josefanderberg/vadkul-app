@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import type { Önskan } from './onskningar';
-import { antalIkon, byggBrickor, byggÖnskningar, kapaEtikett } from './kartlager';
+import { antalIkon, byggBrickor, byggÖnskningar, kapaEtikett, valdPlats } from './kartlager';
 
 const ev = (id: string, h: number, extra: Partial<AppFeedEvent> = {}): AppFeedEvent => ({
     id,
@@ -119,6 +119,38 @@ describe('byggBrickor', () => {
         const prio = (id: string) => fc.features.find(f => f.properties.id === id)!.properties.etikettPrio;
         expect(prio('pop')).toBeLessThan(prio('g1'));
         expect(prio('g1')).toBeLessThan(prio('ensam'));
+    });
+});
+
+describe('valdPlats (VADKUL#187: valet rör aldrig brickkällan)', () => {
+    const plats = [ev('tidig', 17), ev('mitten', 18, { category: 'art' }), ev('sen', 19, { category: 'sports' }), ev('annan', 18, { lat: 59.4 })];
+    it('inget valt eller okänt id → ingen vald bricka', () => {
+        expect(valdPlats(plats, null, { nowMs: NU })).toBeNull();
+        expect(valdPlats(plats, 'finns-inte', { nowMs: NU })).toBeNull();
+    });
+    it('valt event i en grupp: vald-brickan med eventet som representant, basId = platsens vanliga representant', () => {
+        const v = valdPlats(plats, 'mitten', { nowMs: NU })!;
+        expect(v.bricka.properties).toMatchObject({ id: 'mitten', vald: true, sort: 4, ikon: 'bricka-art-vald', antal: 3, antalIkon: 'antal-3' });
+        expect(v.bricka.properties.ramar).toBeUndefined();
+        expect(v.basId).toBe('tidig');
+        expect(v.bricka.geometry.coordinates).toEqual([18.06, 59.33]);
+    });
+    it('basId är samma id som platsen har i brickkällan, och där bläddrar multibrickan vidare', () => {
+        const källan = byggBrickor(plats, { nowMs: NU });
+        const v = valdPlats(plats, 'sen', { nowMs: NU })!;
+        const bas = källan.features.find(f => f.properties.id === v.basId)!;
+        expect(bas.properties.vald).toBe(false);
+        expect(bas.properties.ramar?.length).toBe(3);
+        expect(källan.features.some(f => f.properties.vald)).toBe(false);
+    });
+    it('ensamt event: basId och den valda brickan har samma id', () => {
+        const v = valdPlats(plats, 'annan', { nowMs: NU })!;
+        expect(v.basId).toBe('annan');
+        expect(v.bricka.properties).toMatchObject({ id: 'annan', ikon: 'bricka-music-vald', antal: 1, antalIkon: '' });
+    });
+    it('stjärnan och boosten följer med till den valda brickan', () => {
+        const v = valdPlats([ev('x', 17)], 'x', { nowMs: NU, stjärnor: new Set(['x']) })!;
+        expect(v.bricka.properties.ikon).toBe('bricka-music-stjarna-vald');
     });
 });
 
