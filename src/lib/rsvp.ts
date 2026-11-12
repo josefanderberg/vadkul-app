@@ -95,3 +95,16 @@ export function anmälKnappensVerkan(anmäld: boolean, mitt: RsvpStatus | null):
     if (!anmäld) return mitt !== 'going' ? 'svara' : 'växla';
     return mitt === 'going' ? 'svara' : 'växla';
 }
+
+/**
+ * ANMÄL/BOKA-LÄNKEN PÅ SKRAPADE EVENT OCH TIPS (ägarbeslut 7/11, Josef:
+ * "när man klickar på anmäl på ett skrapat event, då ska det ju bli att man
+ * är anmäld och kommer ... det ska bli så direkt") - port av webbens
+ * outlinkRsvpPress (utils/rsvpTransition.ts): trycket på utlänken sätter
+ * Kommer på köpet. Svarar med knappen som ska TRYCKAS (välj togglar): null
+ * när Kommer redan är på, så ett andra tryck aldrig stänger av svaret.
+ * Intresserad byts till Kommer.
+ */
+export function svarVidUtlänk(mitt: RsvpStatus | null): 'going' | null {
+    return mitt === 'going' ? null : 'going';
+}

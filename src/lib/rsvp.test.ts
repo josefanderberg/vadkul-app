@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { eventShareSlug } from '@vadkul/kontrakt';
-import { inbjudningsUrl, minRsvp, nextRsvp, RSVP_MAX, rsvpDeltan, rsvpShareId, TOM_RSVP, växlaRsvp, anmälanVidSvar, anmälKnappensVerkan } from './rsvp';
+import { inbjudningsUrl, minRsvp, nextRsvp, RSVP_MAX, rsvpDeltan, rsvpShareId, TOM_RSVP, växlaRsvp, anmälanVidSvar, anmälKnappensVerkan, svarVidUtlänk } from './rsvp';
 
 describe('nextRsvp (webbens övergångar)', () => {
     it('samma knapp togglar av', () => {
@@ -109,5 +109,15 @@ describe('anmälKnappensVerkan', () => {
     it('anmäld: släpper Kommer när svaret är Kommer, annars bara avanmälan', () => {
         expect(anmälKnappensVerkan(true, 'going')).toBe('svara');
         expect(anmälKnappensVerkan(true, null)).toBe('växla');
+    });
+});
+
+describe('svarVidUtlänk (ANMÄL på skrapade event sätter Kommer, 7/11 - webbens outlinkRsvpPress)', () => {
+    it('inget svar eller Intresserad → tryck Kommer', () => {
+        expect(svarVidUtlänk(null)).toBe('going');
+        expect(svarVidUtlänk('interested')).toBe('going');
+    });
+    it('redan Kommer → inget tryck (trycket får aldrig stänga av svaret)', () => {
+        expect(svarVidUtlänk('going')).toBeNull();
     });
 });

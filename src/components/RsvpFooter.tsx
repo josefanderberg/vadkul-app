@@ -46,7 +46,7 @@ import { getAuth } from '@react-native-firebase/auth';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useRsvp } from '@/lib/rsvpContext';
 import { useKonto } from '@/lib/kontoContext';
-import { anmälKnappensVerkan, anmälanVidSvar, inbjudningsUrl, nextRsvp, rsvpShareId, type RsvpStatus } from '@/lib/rsvp';
+import { anmälKnappensVerkan, anmälanVidSvar, inbjudningsUrl, nextRsvp, rsvpShareId, svarVidUtlänk, type RsvpStatus } from '@/lib/rsvp';
 import { hämtaEngagemang, räknaKlick, type Engagemang } from '@/data/eventStats';
 import { hämtaAnsikten, type RsvpAnsikte } from '@/data/rsvp';
 import type { Anmälan } from '@/lib/useAnmalan';
@@ -155,12 +155,18 @@ function SvarsKnappar({ svar }: { svar: Svarsläge }) {
     );
 }
 
-/** ANMÄL/BOKA-pillret - guld för Ticketmaster (1/9), klicket räknas. */
-function CtaKnapp({ event, cta }: { event: AppFeedEvent & { hostName?: string }; cta: RsvpCta }) {
+/** ANMÄL/BOKA-pillret - guld för Ticketmaster (1/9), klicket räknas.
+ *  TRYCKET SÄTTER KOMMER (ägarbeslut 7/11, Josef: "det ska bli så direkt"),
+ *  som webbens RsvpRow/CtaPill (components/v2/EventRsvpFooter.tsx): svaret
+ *  trycks till Kommer om det inte redan är det (svarVidUtlänk), innan
+ *  länken öppnas i appens webbläsare. */
+function CtaKnapp({ event, cta, svar }: { event: AppFeedEvent & { hostName?: string }; cta: RsvpCta; svar: Svarsläge }) {
     return (
         <Pressable
             onPress={() => {
                 räknaKlick({ id: event.id, url: cta.url, title: event.title, hostName: event.hostName });
+                const tryck = svarVidUtlänk(svar.mitt);
+                if (tryck) svar.välj(tryck);
                 void WebBrowser.openBrowserAsync(cta.url);
             }}
             style={({ pressed }) => [styles.cta, cta.guld ? styles.ctaGuld : styles.ctaBlå, pressed && styles.tryckt]}
@@ -222,7 +228,7 @@ function SvarsRad({ svar, event, cta, anmälan }: {
         <View style={styles.platta}>
             <SvarsKnappar svar={svar} />
             <View style={styles.fyll} />
-            {cta ? <CtaKnapp event={event} cta={cta} /> : anmälan ? <AnmälKnapp anmälan={anmälan} svar={svar} /> : null}
+            {cta ? <CtaKnapp event={event} cta={cta} svar={svar} /> : anmälan ? <AnmälKnapp anmälan={anmälan} svar={svar} /> : null}
         </View>
     );
 }
