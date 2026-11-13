@@ -41,7 +41,7 @@ import { BRICKA_ICON_SIZE } from '@/lib/brickor';
 import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
-import { byggBrickor, byggÖnskningar, valdPlats } from '@/lib/kartlager';
+import { bläddraTill, byggBrickor, byggÖnskningar, INGEN_BLÄDDRING, valdPlats, type Bläddring } from '@/lib/kartlager';
 import { byggPrickar, prickFilter, prickNyckel, väljBrickor } from '@/lib/kartUrval';
 import { useKonto } from '@/lib/kontoContext';
 import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
@@ -451,9 +451,18 @@ export default function KartScreen() {
         () => byggBrickor(iPeriod, { nowMs: nuMs, ärSparad, stjärnor: stjärnmärkta, boostar }),
         [iPeriod, nuMs, ärSparad, stjärnmärkta, boostar],
     );
+    // +N RÄKNAR NER (VADKUL#190, webbens visitedOrderRef): ordningen man valt
+    // eventen på den valda platsen. Härleds ur valet under renderingen
+    // (Reacts "justera state när indata ändras"; bläddraTill ger samma objekt
+    // när inget ändrats), så pagern, listan, Bakåt och djuplänken räknas lika.
+    // Bara den valda platsens egen lilla källa får ny siffra - brickkällan
+    // rörs inte (#187).
+    const [bläddring, setBläddring] = useState<Bläddring>(INGEN_BLÄDDRING);
+    const nyBläddring = bläddraTill(bläddring, aktuellt);
+    if (nyBläddring !== bläddring) setBläddring(nyBläddring);
     const vald = useMemo(
-        () => valdPlats(iPeriod, valtId, { nowMs: nuMs, ärSparad, stjärnor: stjärnmärkta, boostar }),
-        [iPeriod, valtId, nuMs, ärSparad, stjärnmärkta, boostar],
+        () => valdPlats(iPeriod, valtId, { nowMs: nuMs, ärSparad, stjärnor: stjärnmärkta, boostar }, bläddring.ordning),
+        [iPeriod, valtId, nuMs, ärSparad, stjärnmärkta, boostar, bläddring.ordning],
     );
     // BRICKOR KRING MITTEN, PRICKAR ANNARS (Josef 19/10, lib/kartUrval -
     // webbens reveal-urval): de ~50 platserna närmast kartans mitt är

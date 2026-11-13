@@ -10,7 +10,8 @@
  * starred - Josef 4/11: "på appen ser jag inte guldstjärna på
  * eventmarkören"), stjarna+vald.
  *
- * "+N"-badgen bakas som EGNA bilder (antal-2 … antal-99, antal-99plus): vit
+ * "+N"-badgen bakas som EGNA bilder (antal-1 … antal-99, antal-99plus, och
+ * antal-1-bred … antal-9-bred för den valda brickans nedräkning): vit
  * pill + siffra i EN bild, med webbens mått (COUNT_BADGE_D, 900 13px). Webben
  * bakar in siffran i brick-bilden; här skulle det bli kategori × variant ×
  * antal (tusentals PNG:er). Med cirkel och siffra i samma bild kan en
@@ -132,12 +133,23 @@ try {
         const { COUNT_BADGE_D } = window.__baka;
         const DPR = 2.5;
         const pad = 3; // luft för skuggan
-        for (let n = 2; n <= 100; n++) {
-            const label = n > 99 ? '99+' : String(n);
-            const mät = document.createElement('canvas').getContext('2d');
-            mät.font = '900 13px system-ui,-apple-system,"Segoe UI",sans-serif';
-            const D = COUNT_BADGE_D;
-            const pillW = Math.max(D, mät.measureText(label).width + 8);
+        const D = COUNT_BADGE_D;
+        const FONT = '900 13px system-ui,-apple-system,"Segoe UI",sans-serif';
+        const mät = document.createElement('canvas').getContext('2d');
+        mät.font = FONT;
+        const bredd = label => Math.max(D, mät.measureText(label).width + 8);
+        // antal-1 (VADKUL#190): den valda brickans +N räknar ner till 1 som
+        // på webben. antal-1-bred … antal-9-bred: samma siffror i en pill med
+        // den bredaste tvåsiffriga bredden. Den valda badgen ligger ovanpå
+        // platsens badge (som visar totalen) och måste täcka den när totalen
+        // är tvåsiffrig (lib/kartlager.kvarIkon).
+        let tvåsiffrig = 0;
+        for (let n = 10; n <= 99; n++) tvåsiffrig = Math.max(tvåsiffrig, bredd(String(n)));
+        const piller = [];
+        for (let n = 1; n <= 100; n++) piller.push([n > 99 ? 'antal-99plus' : `antal-${n}`, n > 99 ? '99+' : String(n), null]);
+        for (let n = 1; n <= 9; n++) piller.push([`antal-${n}-bred`, String(n), tvåsiffrig]);
+        for (const [nyckel, label, fastBredd] of piller) {
+            const pillW = fastBredd ?? bredd(label);
             const c = document.createElement('canvas');
             c.width = Math.ceil((pillW + pad * 2) * DPR);
             c.height = Math.ceil((D + pad * 2) * DPR);
@@ -153,12 +165,12 @@ try {
             ctx.shadowOffsetY = 1;
             ctx.fill();
             ctx.shadowColor = 'transparent';
-            ctx.font = '900 13px system-ui,-apple-system,"Segoe UI",sans-serif';
+            ctx.font = FONT;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#0f172a';
             ctx.fillText(label, cx, cy);
-            ut[n > 99 ? 'antal-99plus' : `antal-${n}`] = c.toDataURL('image/png');
+            ut[nyckel] = c.toDataURL('image/png');
         }
         return ut;
     }, VARIANTER);

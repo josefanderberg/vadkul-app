@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import type { Önskan } from './onskningar';
-import { antalIkon, byggBrickor, byggÖnskningar, kapaEtikett, valdPlats } from './kartlager';
+import {
+    antalIkon, bläddraTill, byggBrickor, byggÖnskningar, INGEN_BLÄDDRING, kapaEtikett, kvarAttBläddra, kvarIkon, valdPlats,
+    type Bläddring,
+} from './kartlager';
 
 const ev = (id: string, h: number, extra: Partial<AppFeedEvent> = {}): AppFeedEvent => ({
     id,
@@ -185,5 +188,59 @@ describe('kapaEtikett', () => {
         expect(kapaEtikett('Ölprovning på puben 🍺🍺')).toBe('Ölprovning på pube…');
         expect(kapaEtikett('Fest med 🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉🎉 hela')).toBe('Fest med 🎉🎉🎉🎉🎉🎉🎉🎉🎉…');
         expect(kapaEtikett('Sjutton tecken ab  mer')).toBe('Sjutton tecken ab…');
+    });
+});
+
+describe('+N räknar ner på den valda platsen (VADKUL#190, webbens visitedOrderRef)', () => {
+    const plats = [ev('a', 17), ev('b', 18), ev('c', 19), ev('d', 20), ev('annan', 18, { lat: 59.4 })];
+    const välj = (b: Bläddring, id: string | null) => bläddraTill(b, id ? plats.find(e => e.id === id)! : null);
+    const följd = (...ids: (string | null)[]) => ids.reduce<Bläddring>(välj, INGEN_BLÄDDRING);
+
+    it('ordningen följer valen på samma plats och börjar om på en ny plats', () => {
+        expect(följd('a', 'b', 'c').ordning).toEqual(['a', 'b', 'c']);
+        expect(följd('a', 'b', 'annan').ordning).toEqual(['annan']);
+        expect(följd('a', 'b', 'annan', 'c').ordning).toEqual(['c']);
+    });
+    it('ett event man går tillbaka till står kvar på sin plats i ordningen', () => {
+        expect(följd('a', 'b', 'c', 'b').ordning).toEqual(['a', 'b', 'c']);
+    });
+    it('inget valt tömmer ordningen', () => {
+        expect(följd('a', 'b', null)).toEqual(INGEN_BLÄDDRING);
+    });
+    it('samma objekt tillbaka när inget ändrats (kartskärmen härleder den under renderingen)', () => {
+        const b = följd('a', 'b');
+        expect(bläddraTill(b, plats[1])).toBe(b);
+        expect(bläddraTill(b, plats[0])).toBe(b);
+        expect(bläddraTill(INGEN_BLÄDDRING, null)).toBe(INGEN_BLÄDDRING);
+    });
+    it('kvar = antal minus läget i ordningen, mellan 1 och antal (webbens remaining)', () => {
+        const ordning = ['a', 'b', 'c', 'd'];
+        expect(ordning.map(id => kvarAttBläddra(4, ordning, id))).toEqual([4, 3, 2, 1]);
+        expect(kvarAttBläddra(4, ordning, 'okänd')).toBe(4);
+        expect(kvarAttBläddra(4, [], 'a')).toBe(4);
+        expect(kvarAttBläddra(2, ['x', 'y', 'z', 'a'], 'a')).toBe(1);
+    });
+    it('Nästa räknar ner, Bakåt räknar upp igen', () => {
+        const ikon = (b: Bläddring, id: string) => valdPlats(plats, id, { nowMs: NU }, b.ordning)!.bricka.properties.antalIkon;
+        const b = följd('a', 'b', 'c', 'd');
+        expect(['a', 'b', 'c', 'd'].map(id => ikon(b, id))).toEqual(['antal-4', 'antal-3', 'antal-2', 'antal-1']);
+        expect(ikon(välj(b, 'b'), 'b')).toBe('antal-3');
+    });
+    it('utan ordning visar den valda brickan totalen som förut, och ett ensamt event har ingen badge', () => {
+        expect(valdPlats(plats, 'c', { nowMs: NU })!.bricka.properties.antalIkon).toBe('antal-4');
+        expect(valdPlats(plats, 'annan', { nowMs: NU }, ['annan'])!.bricka.properties.antalIkon).toBe('');
+    });
+    it('brickkällan påverkas inte av bläddringen (#187)', () => {
+        const före = JSON.stringify(byggBrickor(plats, { nowMs: NU }));
+        valdPlats(plats, 'd', { nowMs: NU }, ['a', 'b', 'c', 'd']);
+        expect(JSON.stringify(byggBrickor(plats, { nowMs: NU }))).toBe(före);
+    });
+    it('kvarIkon: 1 visas, ensiffrigt kvar av en tvåsiffrig total får den breda pillen', () => {
+        expect(kvarIkon(1, 4)).toBe('antal-1');
+        expect(kvarIkon(3, 9)).toBe('antal-3');
+        expect(kvarIkon(9, 12)).toBe('antal-9-bred');
+        expect(kvarIkon(10, 12)).toBe('antal-10');
+        expect(kvarIkon(100, 140)).toBe('antal-99plus');
+        expect(kvarIkon(0, 4)).toBe('');
     });
 });

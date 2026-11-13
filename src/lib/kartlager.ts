@@ -222,15 +222,70 @@ export function valdPlats(
     events: readonly AppEvent[],
     valtId: string | null | undefined,
     opts: Omit<BrickVal, 'valtId'>,
+    /** Bläddringsordningen på platsen (Bläddring.ordning) - +N räknar ner
+     *  med den (VADKUL#190). Tom = totalen, som förut. */
+    ordning: readonly string[] = [],
 ): ValdPlats | null {
     if (!valtId) return null;
     const valt = events.find(e => e.id === valtId);
     if (!valt) return null;
     const k = platsNyckel(valt);
     const grupp = events.filter(e => platsNyckel(e) === k);
-    const bricka = byggBrickor(grupp, { ...opts, valtId }).features[0];
+    const byggd = byggBrickor(grupp, { ...opts, valtId }).features[0];
     const bas = byggBrickor(grupp, opts).features[0];
+    const { antal } = byggd.properties;
+    const bricka = antal > 1
+        ? { ...byggd, properties: { ...byggd.properties, antalIkon: kvarIkon(kvarAttBläddra(antal, ordning, valtId), antal) } }
+        : byggd;
     return { bricka, basId: bas.properties.id };
+}
+
+/**
+ * BLÄDDRINGEN PÅ DEN VALDA PLATSEN (VADKUL#190, webbens visitedOrderRef i
+ * V2Map): i vilken ordning man valt eventen där - med pagern, ur listan, med
+ * Bakåt eller en djuplänk. Den valda brickans +N visar hur många som är kvar
+ * att bläddra till, som på webben. Ordningen börjar om när valet byter plats
+ * och töms när inget är valt. Ett event man går tillbaka till står kvar på
+ * sin plats i ordningen, så siffran följer det valda (Bakåt → större).
+ */
+export interface Bläddring {
+    plats: string | null;
+    ordning: readonly string[];
+}
+
+export const INGEN_BLÄDDRING: Bläddring = { plats: null, ordning: [] };
+
+/** Nästa bläddringsläge när `valt` är valt. Samma objekt tillbaka när inget
+ *  ändrats, så kartskärmen kan härleda den under renderingen utan loop. */
+export function bläddraTill(b: Bläddring, valt: Pick<AppFeedEvent, 'id' | 'lat' | 'lng'> | null): Bläddring {
+    if (!valt) return b.plats === null && b.ordning.length === 0 ? b : INGEN_BLÄDDRING;
+    const plats = platsNyckel(valt);
+    if (plats !== b.plats) return { plats, ordning: [valt.id] };
+    if (b.ordning.includes(valt.id)) return b;
+    return { plats, ordning: [...b.ordning, valt.id] };
+}
+
+/** Webbens remaining: antal minus det valdas läge i ordningen, aldrig under
+ *  1 och aldrig över antal. Ett val som inte finns i ordningen = läge 0. */
+export function kvarAttBläddra(antal: number, ordning: readonly string[], valtId: string): number {
+    const läge = ordning.indexOf(valtId);
+    return Math.min(antal, Math.max(1, antal - (läge >= 0 ? läge : 0)));
+}
+
+/**
+ * Den valda brickans +N-bild för `kvar` av platsens `antal`. Till skillnad från
+ * antalIkon visas även 1 (webben visar "1" på sista eventet). Den valda badgen
+ * ligger OVANPÅ platsens vanliga badge i brickkällan, som alltid visar totalen
+ * (källan rörs inte vid ett val, #187). Är totalen tvåsiffrig och det som är
+ * kvar ensiffrigt är den undre pillen bredare och skulle sticka ut på sidorna,
+ * så då används den breda varianten (antal-N-bred, bakad med tvåsiffrig
+ * bredd). Totaler över 99 (99+) med kvar under 100 täcks inte helt - så stora
+ * platser finns i praktiken inte.
+ */
+export function kvarIkon(kvar: number, antal: number): string {
+    if (kvar < 1) return '';
+    if (kvar > 99) return 'antal-99plus';
+    return kvar < 10 && antal >= 10 ? `antal-${kvar}-bred` : `antal-${kvar}`;
 }
 
 export interface ÖnskeProps {
