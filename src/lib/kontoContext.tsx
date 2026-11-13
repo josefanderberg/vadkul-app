@@ -47,12 +47,21 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MeProfilIn } from '@vadkul/kontrakt';
 import { hämtaProfil, raderaAnvändarDoc, skapaGrundprofil, sparaProfil, type AppProfil } from '@/data/anvandare';
 import { släppEnhetensToken } from '@/data/push';
+import { deladIdentitet } from '@/lib/identitet';
 
 /** OAuth-webbklienten i Firebase-projektet - Android behöver den för att få
  *  ett idToken som Firebase godtar (publikt värde, står i google-services.json). */
 const GOOGLE_WEBB_KLIENT = '888495806926-uj2bn4r5cpth2f2vfl561mi9equ7rcce.apps.googleusercontent.com';
 
 GoogleSignin.configure({ webClientId: GOOGLE_WEBB_KLIENT });
+
+/** Modulglobal: den pågående anonyma inloggningen delas av ALLA anrop, även
+ *  mellan komponenter och omrenderingar (josefanderberg/VADKUL#164). getAuth()
+ *  hämtas först vid anropet, inte vid import. */
+const anonymIdentitet = deladIdentitet({
+    nuvarandeUid: () => getAuth().currentUser?.uid ?? null,
+    loggaInAnonymt: async () => (await signInAnonymously(getAuth())).user.uid,
+});
 
 export interface Användare {
     uid: string;
@@ -110,10 +119,9 @@ export function KontoProvider({ children }: { children: ReactNode }) {
         return namnSpegel && !a.displayName ? { ...a, displayName: namnSpegel } : a;
     }, [råAnvändare, namnSpegel]);
 
-    const säkerställIdentitet = useCallback(async () => {
-        if (auth.currentUser) return auth.currentUser.uid;
-        return (await signInAnonymously(auth)).user.uid;
-    }, [auth]);
+    // Delad mellan samtidiga anrop (Bjud med + svara), så två tryck aldrig
+    // skapar två anonyma konton (josefanderberg/VADKUL#164, se lib/identitet).
+    const säkerställIdentitet = useCallback(() => anonymIdentitet(), []);
 
     const profilQuery = useQuery({
         queryKey: ['me', användare?.uid ?? null],
