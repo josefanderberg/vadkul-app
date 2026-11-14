@@ -15,6 +15,10 @@
  *  - hela Sverige laddas (api/useEvent); bara ~50 platser kring kartans mitt
  *    är brickor, resten prickar - urvalet följer med när man panorerar
  *    (lib/kartUrval, webbens reveal). Passerade platser är dämpade prickar.
+ *  - MOLNEN (VADKUL#233): vita moln över det som är glest, klart väder där
+ *    eventen finns - webbens molnlager med samma kod (components/KartMoln).
+ *    Ett tryck skingrar molnen där och tänder de tre närmaste brickorna
+ *    (molnhålet); det valda eventet håller molnen undan.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -22,7 +26,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
 import type { CameraRef, Expression, FilterSpecification, LngLat, MapRef, StyleSpecification } from '@maplibre/maplibre-react-native';
-import type { AppFeedEvent } from '@vadkul/kontrakt';
+import type { AppFeedEvent, CloudPoint } from '@vadkul/kontrakt';
 import { hittaAnvändarEvent, useEvent } from '@/api/useEvent';
 import { fetchEventSomFlöde } from '@/api/eventDetalj';
 import { DagValjare } from '@/components/DagValjare';
@@ -30,6 +34,7 @@ import { EventKort, type KortNav } from '@/components/EventKort';
 import { FilterBricka } from '@/components/FilterBricka';
 import { FilterIkon } from '@/components/FilterIkon';
 import { ETIKETT_STIL, KartBrickor } from '@/components/KartBrickor';
+import { KartMoln, type KartMolnRef } from '@/components/KartMoln';
 import { Ikon } from '@/components/Ikon';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
 import { lyssnaPåNotisTryck } from '@/data/push';
@@ -42,7 +47,7 @@ import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/d
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
 import { bläddraTill, byggBrickor, byggÖnskningar, INGEN_BLÄDDRING, valdPlats, type Bläddring } from '@/lib/kartlager';
-import { byggPrickar, prickFilter, prickNyckel, väljBrickor } from '@/lib/kartUrval';
+import { byggPrickar, prickFilter, prickNyckel, väljBrickor, väljHål } from '@/lib/kartUrval';
 import { useKonto } from '@/lib/kontoContext';
 import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
 import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kartBanner';
@@ -195,11 +200,27 @@ export default function KartScreen() {
     }, [city.slug, city.lat, city.lng, ruta, feed.data, offset, hemmadag]);
 
     const [zoom, setZoom] = useState<number | null>(null);
-    const läsRuta = useCallback(() => {
-        mapRef.current?.getViewState()
-            .then(v => { setRuta(v.bounds); setZoom(v.zoom); })
+    // Molnlagret (components/KartMoln) följer kartans kamera: första vyn här,
+    // sedan kartans rörelsehändelser.
+    const molnRef = useRef<KartMolnRef>(null);
+    // Kamerans mitt på skärmen mäts med kartans egen projektion när kartan
+    // står still: iOS lägger mitten mellan statusraden och hemstrecket, inte
+    // mitt i vyn, och molnen ska stå där kartan står (lib/molnMotor.sättMitt).
+    const mätMolnMitt = useCallback((mitt: LngLat) => {
+        mapRef.current?.project(mitt)
+            .then(([x, y]) => molnRef.current?.mitt(x, y))
             .catch(() => { /* kartan inte klar */ });
     }, []);
+    const läsRuta = useCallback(() => {
+        mapRef.current?.getViewState()
+            .then(v => {
+                setRuta(v.bounds);
+                setZoom(v.zoom);
+                molnRef.current?.stannat(v);
+                mätMolnMitt(v.center);
+            })
+            .catch(() => { /* kartan inte klar */ });
+    }, [mätMolnMitt]);
 
     // ── Kortet: val, väljarlista, Nästa/Bakåt ─────────────────────────────
     const [kort, setKort] = useState<Kort | null>(null);
@@ -475,6 +496,15 @@ export default function KartScreen() {
         () => väljBrickor(platser, urvalsMitt, zoom ?? 11),
         [platser, urvalsMitt, zoom],
     );
+    // MOLNHÅLET (VADKUL#233, webbens #195): ett tryck på kartan skingrar
+    // molnen där och tänder de tre platserna närmast trycket - ovanpå urvalet
+    // kring mitten, i en egen liten källa så brickkällan inte rörs av trycket.
+    // Hålet ligger kvar tills nästa tryck och finns på alla zoomar.
+    const [tryckPunkt, setTryckPunkt] = useState<CloudPoint | null>(null);
+    const hål = useMemo(
+        () => väljHål(platser, tryckPunkt, zoom ?? 11, new Set(brickor.features.map(f => f.properties.id))),
+        [platser, tryckPunkt, zoom, brickor],
+    );
     // Platserna byggs om varje minut (nuMs) - prickarna bara när något
     // synligt ändrats (lib/kartUrval.prickNyckel).
     const prickNyckeln = useMemo(() => prickNyckel(platser), [platser]);
@@ -486,9 +516,24 @@ export default function KartScreen() {
     const valdUtanför = vald && !brickor.features.some(f => f.properties.id === vald.basId) ? vald.basId : null;
     const brickIds = useMemo(() => {
         const ids = new Set(brickor.features.map(f => f.properties.id));
+        for (const f of hål.features) ids.add(f.properties.id);
         if (valdUtanför) ids.add(valdUtanför);
         return ids;
-    }, [brickor, valdUtanför]);
+    }, [brickor, hål, valdUtanför]);
+    // Molnen tunnas ut över de tända brickorna (lib/moln): på webben ligger
+    // brickorna ovanpå molnen, här ligger molnlagret ovanpå kartans brickor.
+    const molnFria = useMemo(
+        () => [...brickor.features, ...hål.features].map(f => ({ lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] })),
+        [brickor, hål],
+    );
+    // Det valda eventet håller molnen undan (webbens setFocus).
+    const fokusEvent = kort ? kort.event ?? kort.grupp[0] ?? null : null;
+    const fokusLat = fokusEvent?.lat;
+    const fokusLng = fokusEvent?.lng;
+    const molnFokus = useMemo(
+        () => (fokusLat && fokusLng ? { lat: fokusLat, lng: fokusLng } : null),
+        [fokusLat, fokusLng],
+    );
     // EVENTETS EGEN EMOJI på brickan (lib/emojiBricka, Josef 1/11): bilderna
     // sätts ihop i bakgrunden - den valda först, sedan resten i bild, sist de
     // valda varianterna så ett tryck inte visar kategorins emoji en stund.
@@ -498,8 +543,9 @@ export default function KartScreen() {
             vald?.bricka.properties.emojiBild ?? '',
             // Multibrickornas ramar (lib/brickCykel) efter brickans egen bild.
             ...brickor.features.flatMap(f => [f.properties.emojiBild, ...(f.properties.ramar ?? []).map(r => r.emojiBild)]),
+            ...hål.features.map(f => f.properties.emojiBild),
         ].filter(Boolean),
-        [brickor, vald],
+        [brickor, hål, vald],
     );
     const förladdadeBilder = useMemo(
         () => brickor.features.map(f => f.properties.valdEmojiBild).filter(Boolean),
@@ -534,6 +580,10 @@ export default function KartScreen() {
         if (banner) stängBanner();
         const [lng, lat] = ev.nativeEvent.lngLat;
         const [tx, ty] = ev.nativeEvent.point;
+        // Molnhålet flyttar dit man trycker (webbens onTap) - även när trycket
+        // träffar en bricka eller stänger kortet.
+        setTryckPunkt({ lng, lat });
+        molnRef.current?.tryck({ lng, lat });
         void träffPåKartan({ lng, lat }, tx, ty);
     };
     const träffPåKartan = async (tryck: { lng: number; lat: number }, tx: number, ty: number) => {
@@ -567,7 +617,8 @@ export default function KartScreen() {
         // tryck på en prick öppnar platsen - den blir vald och därmed bricka.
         // Förfiltret med marginal för lutad karta, som brickornas.
         // Den valda brickan (sort 4) ritas överst och vinner trycket.
-        const id = träffadBricka(await kandidater(vald ? [...brickor.features, vald.bricka] : brickor.features), tx, ty)
+        const tända = [...brickor.features, ...hål.features];
+        const id = träffadBricka(await kandidater(vald ? [...tända, vald.bricka] : tända), tx, ty)
             ?? träffadPrick(await kandidater(prickar.features.filter(f => !brickIds.has(f.properties.id)), PRICK_RADIE * 2), tx, ty);
         if (id) trycktBricka(id);
         else setStängNonce(n => n + 1);
@@ -708,10 +759,13 @@ export default function KartScreen() {
                     style={styles.map}
                     mapStyle={mapStyle as StyleSpecification | string}
                     onDidFinishLoadingMap={läsRuta}
+                    onRegionIsChanging={ev => molnRef.current?.rörelse(ev.nativeEvent)}
                     onRegionDidChange={ev => {
                         setRuta(ev.nativeEvent.bounds);
                         setZoom(ev.nativeEvent.zoom);
                         setHoppNamn(null);
+                        molnRef.current?.stannat(ev.nativeEvent);
+                        mätMolnMitt(ev.nativeEvent.center);
                     }}
                     onPress={karttryck}
                 >
@@ -741,7 +795,7 @@ export default function KartScreen() {
                         som tickar: multibrickorna växlar bild och
                         överlappande brickor turas om att ligga överst
                         (lib/brickCykel, Josef 5/11). */}
-                    <KartBrickor brickor={brickor} vald={vald?.bricka ?? null} zoom={zoom ?? 11} klara={emojiBrickor.klara} />
+                    <KartBrickor brickor={brickor} hål={hål} vald={vald?.bricka ?? null} zoom={zoom ?? 11} klara={emojiBrickor.klara} />
                     {/* Önskningarna som eget drömskt lager (webbens wish-
                         brickor): kategoribrickan halvt genomskinlig med
                         "Önskas · {titel}" under. Egen källa - aldrig i
@@ -775,6 +829,10 @@ export default function KartScreen() {
             ) : (
                 <View style={styles.bootstrap} />
             )}
+
+            {/* MOLNEN (VADKUL#233): webbens molnlager, ovanpå kartan och under
+                allt krom. Tar aldrig emot tryck. */}
+            {klar ? <KartMoln ref={molnRef} punkter={iPeriod} fokus={molnFokus} fria={molnFria} /> : null}
 
             {/* Toppkromet (ägarbeslut 7/10 kväll): profil till vänster,
                 dagplattan i mitten, FILTERKNAPPEN till höger. Sökknappen och

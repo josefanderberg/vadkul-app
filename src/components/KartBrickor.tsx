@@ -22,6 +22,10 @@
  * etikett under den faller bort utan att något filter byts (ett nytt filter
  * eller uttryck på ett symbollager lägger också ut hela lagret igen).
  *
+ * MOLNHÅLET RÖR INTE BRICKKÄLLAN HELLER (VADKUL#233): de upp till tre
+ * brickorna som ett tryck tänder (lib/kartUrval.väljHål) ligger i en egen
+ * liten källa mellan brickorna och den valda. Ett tryck skickar bara om den.
+ *
  * Takten är webbens: en multibricka i taget byter ram var 0,5 s (tona 0,2 s),
  * men varje ram står minst 4 s (webbens 3-8 s per bricka), och en hög av
  * överlappande brickor får en ny överst var 1,6 s (tona 0,22 s).
@@ -134,12 +138,15 @@ type Brickor = GeoJSON.FeatureCollection<GeoJSON.Point, BrickProps>;
 
 export function KartBrickor({
     brickor,
+    hål,
     vald,
     zoom,
     klara,
 }: {
     /** Brickorna UTAN valet - ett byte av event får aldrig ändra dem. */
     brickor: Brickor;
+    /** Molnhålets brickor: det trycket tänder utöver urvalet (lib/kartUrval.väljHål). */
+    hål: Brickor;
     /** Den valda platsens bricka (lib/kartlager.valdPlats), ritas överst. */
     vald: GeoJSON.Feature<GeoJSON.Point, BrickProps> | null;
     zoom: number;
@@ -154,6 +161,7 @@ export function KartBrickor({
         () => JSON.stringify(basBrickor(vald ? { type: 'FeatureCollection', features: [vald] } : INGEN_VALD, klara)),
         [vald, klara],
     );
+    const hålData = useMemo(() => JSON.stringify(basBrickor(hål, klara)), [hål, klara]);
     const högar = useMemo(() => brickHögar(brickor, zoom), [brickor, zoom]);
 
     return (
@@ -181,6 +189,14 @@ export function KartBrickor({
                 <Layer type="symbol" id="event-antal" filter={GRUPP_FILTER} style={ANTAL_STIL} />
             </GeoJSONSource>
             <Bläddring brickor={brickor} högar={högar} klara={klara} />
+            {/* MOLNHÅLET (VADKUL#233, webbens #195): brickorna trycket tänder
+                där molnen skingras. Alltid monterad - tom utan tryck - så
+                lagren ligger kvar ovanför brickorna och under den valda. */}
+            <GeoJSONSource id="events-hal" data={hålData}>
+                <Layer type="symbol" id="etikett-hal" filter={ETIKETT_FILTER} style={TITEL_STIL} />
+                <Layer type="symbol" id="hal-brickor" style={BRICK_STIL} />
+                <Layer type="symbol" id="hal-antal" filter={GRUPP_FILTER} style={ANTAL_STIL} />
+            </GeoJSONSource>
             {/* DEN VALDA överst (VADKUL#187): alltid monterad - tom när inget
                 är valt - så lagren ligger kvar ovanför brickorna, tonlagret
                 (som läggs under "+N") och badgarna. Brickan, dess "+N" och

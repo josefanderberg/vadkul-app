@@ -8,6 +8,7 @@ import {
     URVAL_MIN,
     urvalsTak,
     väljBrickor,
+    väljHål,
     väljTända,
     type UrvalsPunkt,
 } from './kartUrval';
@@ -148,5 +149,51 @@ describe('prickNyckel', () => {
         const bas = prickNyckel(samling([plats('a', MITT.lng)]));
         expect(prickNyckel(samling([plats('a', MITT.lng, { past: true })]))).not.toBe(bas);
         expect(prickNyckel(samling([plats('a', MITT.lng, { antal: 2 })]))).not.toBe(bas);
+    });
+});
+
+describe('molnhålet', () => {
+    // Zoom 8: världen är 512·256 pt bred, så 0,01° österut är ~3,6 pt.
+    const ZOOM = 8;
+    const TRYCK = { lat: MITT.lat, lng: MITT.lng };
+
+    it('utan tryck tänds ingenting', () => {
+        expect(väljHål(samling([plats('a', MITT.lng)]), null, ZOOM).features).toHaveLength(0);
+    });
+
+    it('tänder de tre närmaste trycket, närmast oavsett popularitet', () => {
+        const fc = samling([
+            plats('fjärde', MITT.lng + 0.04, { pop: true }),
+            plats('andra', MITT.lng + 0.02),
+            plats('första', MITT.lng + 0.01),
+            plats('tredje', MITT.lng + 0.03),
+        ]);
+        expect(väljHål(fc, TRYCK, ZOOM).features.map(f => f.properties.id).sort()).toEqual(['andra', 'första', 'tredje']);
+    });
+
+    it('ett tryck i havet tänder aldrig de närmaste långt bort', () => {
+        // 1° österut är ~364 pt vid zoom 8 - långt utanför hålets 110 pt.
+        expect(väljHål(samling([plats('långt', MITT.lng + 1)]), TRYCK, ZOOM).features).toHaveLength(0);
+    });
+
+    it('passerade platser tänds inte', () => {
+        const fc = samling([plats('varit', MITT.lng + 0.01, { past: true }), plats('kommer', MITT.lng + 0.02)]);
+        expect(väljHål(fc, TRYCK, ZOOM).features.map(f => f.properties.id)).toEqual(['kommer']);
+    });
+
+    it('det som redan är bricka tar sin plats bland de tre men ritas inte igen', () => {
+        const fc = samling([
+            plats('a', MITT.lng + 0.01),
+            plats('b', MITT.lng + 0.02),
+            plats('c', MITT.lng + 0.03),
+            plats('d', MITT.lng + 0.04),
+        ]);
+        expect(väljHål(fc, TRYCK, ZOOM, new Set(['a'])).features.map(f => f.properties.id).sort()).toEqual(['b', 'c']);
+    });
+
+    it('hålet är samma mått i pt på alla zoomar: inzoomat ryms färre grader', () => {
+        const fc = samling([plats('nära', MITT.lng + 0.01), plats('bit', MITT.lng + 0.2)]);
+        expect(väljHål(fc, TRYCK, 8).features).toHaveLength(2);
+        expect(väljHål(fc, TRYCK, 12).features.map(f => f.properties.id)).toEqual(['nära']);
     });
 });

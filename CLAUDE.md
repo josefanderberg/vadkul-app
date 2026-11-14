@@ -76,6 +76,21 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
   krymper aldrig) - kör det då och då, en obakad emoji visar kategorins
   bricka. Lägg aldrig till ett npm-script för det: `scripts` i package.json
   ingår i OTA-avtrycket.
+- **Molnen är webbens molnlager** (josefanderberg/VADKUL#233, ägarbeslut 14/11
+  2026, Josef: "ta hela moln designen. alltså den för webb. alltså exakt så
+  likt som möjligt"). Var molnen står, zoomkurvan, knuffen och skuggan räknas
+  av kontraktets `eventClouds` - SAMMA kod som webben, så en molnkonstant
+  ändras i huvudrepot och hämtas med `npm run kontrakt:sync`, aldrig här.
+  `src/lib/moln.ts` + `src/lib/molnMotor.ts` + `src/components/KartMoln.tsx`
+  är en port av webbens ritlager (`apps/web/src/components/v2/v2MapClouds.ts`)
+  - ändras det ska kopian följa. Molnbilderna bakas med webbens ritkod:
+  `node scripts/baka-moln.mjs` skriver assets/moln/ + src/lib/moln*.generated.ts
+  (redigera aldrig de genererade filerna, och inget npm-script - se brickorna).
+  Lagret ligger OVANPÅ kartan, alltså även ovanpå brickorna (på webben ligger
+  de emellan): därför tunnas molnen ut över tända brickor (`brickTunning`).
+  Ta inte bort det, då hamnar brickorna i dimma. Besluten om molnen (glesa,
+  sidomoln i majoritet, mjuk knuff, solen i mitten) står i huvudrepots
+  `.claude/skills/kart-ui/`.
 - **EAS dev build, aldrig Expo Go** — kartan/push är native-moduler.
 - Inga tokens i AsyncStorage (lib/lagring är bara för inställningar) — RN
   Firebase håller sessionen i nyckelringen/Keystore själv.

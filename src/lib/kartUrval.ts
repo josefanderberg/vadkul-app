@@ -15,8 +15,14 @@
  *   brickor) är alltid brickor. Passerade platser är alltid prickar (dämpade),
  *   utom den valda.
  *
+ * - MOLNHÅLET (webbens #195, josefanderberg/VADKUL#233): ett tryck på kartan
+ *   tänder de tre platserna närmast trycket, inom hålet där molnen skingras.
+ *   De läggs OVANPÅ urvalet kring mitten, i en egen liten samling (väljHål) -
+ *   brickkällan rörs inte av ett tryck.
+ *
  * Ren logik så den kan testas utan karta.
  */
+import { CLOUD_REVEAL_MAX, CLOUD_REVEAL_RADIUS_PX, pickCloudRevealKeys } from '@vadkul/kontrakt';
 import type { BrickProps } from './kartlager';
 
 export const URVAL_KANDIDATER = 50;
@@ -109,6 +115,41 @@ export function väljBrickor(platser: Brickor, mitt: { lng: number; lat: number 
             const p = f.properties;
             return p.vald || (p.fast && !p.past) || tända.has(p.id);
         }),
+    };
+}
+
+/**
+ * MOLNHÅLETS brickor (webbens cloudHoverKeys + pickCloudRevealKeys, Josef
+ * 13/11: "där man hovrar ... ska också visas de ... event som är över där
+ * ... bara där molnen skingrar sig", och "även mobil"): de CLOUD_REVEAL_MAX
+ * (3) platserna NÄRMAST trycket inom hålets radie vid den här zoomen. Bara
+ * avståndet räknas, aldrig populära först, och ligger hålet i havet tänds
+ * ingenting - de närmaste långt bort tänds aldrig. Passerade platser är
+ * prickar som på webben. Hålet finns på alla zoomar, med eller utan moln.
+ *
+ * `redan` = platserna som redan är brickor (urvalet kring mitten): de tar
+ * sin plats bland de tre men ritas inte en gång till, så svaret är bara det
+ * hålet LÄGGER TILL. Kartan ritar dem i en egen källa - ett tryck får aldrig
+ * skicka om brickkällan (då tonar alla brickor in på nytt).
+ */
+export function väljHål(
+    platser: Brickor,
+    tryck: { lng: number; lat: number } | null,
+    zoom: number,
+    redan: ReadonlySet<string> = new Set(),
+): Brickor {
+    if (!tryck) return { type: 'FeatureCollection', features: [] };
+    const levande = platser.features.filter(f => !f.properties.past);
+    const nycklar = new Set(pickCloudRevealKeys(
+        levande.map(f => ({ key: f.properties.id, lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], pop: f.properties.pop })),
+        tryck,
+        zoom,
+        CLOUD_REVEAL_RADIUS_PX,
+        CLOUD_REVEAL_MAX,
+    ));
+    return {
+        type: 'FeatureCollection',
+        features: levande.filter(f => nycklar.has(f.properties.id) && !redan.has(f.properties.id)),
     };
 }
 
