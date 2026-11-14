@@ -91,6 +91,22 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
   Ta inte bort det, då hamnar brickorna i dimma. Besluten om molnen (glesa,
   sidomoln i majoritet, mjuk knuff, solen i mitten) står i huvudrepots
   `.claude/skills/kart-ui/`.
+- **Platsskyltarna och marktäcket är webbens** (josefanderberg/VADKUL#234,
+  14/11 2026, Josef: apparna ska bli som webben, "med moln och skyltar för
+  badplats osv"). Skyltarna (vilka som finns, zoomstegen, lagren i stilen,
+  vilken skylt ett tryck träffar) räknas av kontraktets `poiSigns` - SAMMA kod
+  som webben, så en ändring görs i huvudrepot och hämtas med
+  `npm run kontrakt:sync`, aldrig här. `src/lib/kartSkyltar.ts` lägger lagren i
+  stilen och `src/components/SkyltRuta.tsx` är rutan vid tryck. Skyltbilderna
+  bakas med webbens ritkod: `node scripts/baka-skyltar.mjs` skriver
+  assets/skyltar/ + src/lib/skylt*.generated.ts (redigera aldrig de genererade
+  filerna, och inget npm-script - se brickorna). `src/lib/kartMarktacke.ts`
+  (skog och öppna fält utzoomat) är en PORT av webbens
+  `apps/web/src/utils/mapLandcover.ts` - ändras webben ska kopian följa.
+  Webbens djupare kakel (utils/deepTiles) finns inte här: appens MapLibre har
+  inget eget kakelprotokoll. Bara huvudkartan ber om skyltarna
+  (`fetchThemeParkStyle({ skyltar: true })`) - en karta som inte laddar
+  SKYLT_BILDER i Images ska inte göra det, då står bara namnen kvar.
 - **EAS dev build, aldrig Expo Go** — kartan/push är native-moduler.
 - Inga tokens i AsyncStorage (lib/lagring är bara för inställningar) — RN
   Firebase håller sessionen i nyckelringen/Keystore själv.

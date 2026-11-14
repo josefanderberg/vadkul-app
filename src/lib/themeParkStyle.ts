@@ -9,11 +9,18 @@
  * en redan hämtad style-JSON. Typerna är strukturella minimum av stil-spec:en
  * — paketet ska inte dra in maplibre-gl här.
  *
+ * Sedan VADKUL#234 (14/11 2026) lägger transformen också till det webben
+ * lägger till: marktäcket utzoomat (lib/kartMarktacke, skog och öppna fält i
+ * Sverige-vyn) och, när kartan ber om det, platsskyltarna (lib/kartSkyltar).
+ *
  * VOYAGER-LICENSEN (samma block som webben): koden (style.json) är BSD 3-Clause,
  * Copyright (c) 2018, CartoDB Inc. All rights reserved — notisen ska följa med
  * i källkod. Designen är CC-BY 4.0 och kräver synlig kredit till "CARTO" och
  * "OpenMapTiles.org" i kartvyn (bors i Om-vyn när den byggs).
  */
+
+import { läggTillMarktäcke } from './kartMarktacke';
+import { läggTillSkyltar } from './kartSkyltar';
 
 export const STREETS_STYLE_URL = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
 
@@ -52,10 +59,24 @@ export const BOOTSTRAP_STYLE: StyleJson = {
     ],
 };
 
+/** Väglager som nöjesfältsstilen gör vita, i Voyagers gamla och nya schema (webbens isThemeParkRoadLayer). */
+export function ärVägLager(id: string, sourceLayer: unknown): boolean {
+    return (sourceLayer === 'transportation' || sourceLayer === 'roads') && !id.startsWith('aeroway');
+}
+
+export interface StilVal {
+    /**
+     * Platsskyltarna (lib/kartSkyltar). Bara kartan som också laddar
+     * skyltbilderna (Images med SKYLT_BILDER) ska be om dem - utan bilderna
+     * står bara namnen kvar.
+     */
+    skyltar?: boolean;
+}
+
 /** Måla om Voyager-stilen i nöjesfältspaletten. Muterar inte input. */
-export function transformThemeParkStyle(style: StyleJson): StyleJson {
+export function transformThemeParkStyle(style: StyleJson, val: StilVal = {}): StyleJson {
     if (!style.layers) return style;
-    return {
+    const ny: StyleJson = {
         ...style,
         layers: style.layers.map(layer => {
             // Hav-/ocean-namnen etiketteras på ~10 språk i källdatan — göms,
@@ -63,7 +84,8 @@ export function transformThemeParkStyle(style: StyleJson): StyleJson {
             if (layer.id === 'watername_ocean' || layer.id === 'watername_sea') {
                 return { ...layer, layout: { ...(layer.layout ?? {}), visibility: 'none' } };
             }
-            if (!layer.paint) return layer;
+            // Alltid en egen kopia: tilläggen nedan får ändra i lagren.
+            if (!layer.paint) return { ...layer };
             const paint: Record<string, unknown> = { ...layer.paint };
             const sourceLayer = layer['source-layer'];
 
@@ -105,8 +127,13 @@ export function transformThemeParkStyle(style: StyleJson): StyleJson {
             else if (layer.id.includes('building')) {
                 if (paint['fill-color']) paint['fill-color'] = '#d6d2c0';
             }
-            // Vägar: vita banor, sandfärgad casing-kant.
-            else if (sourceLayer === 'transportation') {
+            // Vägar: vita banor, sandfärgad casing-kant. Voyager hade dem i
+            // source-layer `transportation` (OpenMapTiles) och har dem sedan
+            // oktober 2026 i `roads` (Protomaps) med samma lager-id. Matchades
+            // bara det gamla namnet slutade vägarna vara vita när stilen
+            // bytte (VADKUL#208 på webben, hit i #234). I `roads` ligger också
+            // flygfältens banor (aeroway-*), som aldrig gjordes vita.
+            else if (ärVägLager(layer.id, sourceLayer)) {
                 if (paint['line-color']) {
                     paint['line-color'] = layer.id.includes('casing') ? '#c9c3b2' : '#ffffff';
                 }
@@ -115,11 +142,16 @@ export function transformThemeParkStyle(style: StyleJson): StyleJson {
             return { ...layer, paint };
         }),
     };
+    // Samma ordning som webben: marktäcket först (skogens konturer läser den
+    // ommålade grönskans färg), sedan skyltarna.
+    läggTillMarktäcke(ny);
+    if (val.skyltar) läggTillSkyltar(ny);
+    return ny;
 }
 
 /** Hämta Voyager + transformera. Kastar vid nätfel — anroparen faller tillbaka på STREETS_STYLE_URL. */
-export async function fetchThemeParkStyle(): Promise<StyleJson> {
+export async function fetchThemeParkStyle(val: StilVal = {}): Promise<StyleJson> {
     const res = await fetch(STREETS_STYLE_URL);
     if (!res.ok) throw new Error(`Voyager-stilen: HTTP ${res.status}`);
-    return transformThemeParkStyle((await res.json()) as StyleJson);
+    return transformThemeParkStyle((await res.json()) as StyleJson, val);
 }

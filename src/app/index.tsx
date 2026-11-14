@@ -19,6 +19,9 @@
  *    eventen finns - webbens molnlager med samma kod (components/KartMoln).
  *    Ett tryck skingrar molnen där och tänder de tre närmaste brickorna
  *    (molnhålet); det valda eventet håller molnen undan.
+ *  - Platsskyltarna (VADKUL#234): webbens vägmärken för bad, museer,
+ *    naturreservat m.m. när man zoomat in nära (lib/kartSkyltar). Ett tryck
+ *    på en skylt visar vad den är (components/SkyltRuta).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -26,6 +29,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
 import type { CameraRef, Expression, FilterSpecification, LngLat, MapRef, StyleSpecification } from '@maplibre/maplibre-react-native';
+import { pickPoiSignHit, POI_SIGN_LAYER_IDS, POI_SIGN_MIN_ZOOM } from '@vadkul/kontrakt';
 import type { AppFeedEvent, CloudPoint } from '@vadkul/kontrakt';
 import { hittaAnvändarEvent, useEvent } from '@/api/useEvent';
 import { fetchEventSomFlöde } from '@/api/eventDetalj';
@@ -36,6 +40,7 @@ import { FilterIkon } from '@/components/FilterIkon';
 import { ETIKETT_STIL, KartBrickor } from '@/components/KartBrickor';
 import { KartMoln, type KartMolnRef } from '@/components/KartMoln';
 import { Ikon } from '@/components/Ikon';
+import { SkyltRuta, type SkyltRutaRef } from '@/components/SkyltRuta';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
 import { lyssnaPåNotisTryck } from '@/data/push';
 import { prenumereraStjärnmärkta } from '@/data/stjarnor';
@@ -53,6 +58,7 @@ import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
 import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kartBanner';
 import { hoppDag, hoppPanorering, hoppStad, prenumereraKartHopp, taKartHopp, type HoppRetur, type KartHopp } from '@/lib/kartHopp';
 import { kartPrompt, type PromptÅtgärd } from '@/lib/kartPrompt';
+import { harSkyltar, skyltFrågeruta, skyltKandidater } from '@/lib/kartSkyltar';
 import { kategoriFor } from '@/lib/kategorier';
 import { närmastUtanför, utzoomning, ZOOM_UT_GOLV } from '@/lib/listZoom';
 import { useRegionVal } from '@/lib/regionContext';
@@ -60,6 +66,7 @@ import { kartansOrt, rutansMitt } from '@/lib/kartOrt';
 import { avståndPt, FÖRFILTER_PT, PRICK_RADIE, träffadBricka, träffadPrick, type Kandidat } from '@/lib/kartTryck';
 import { nearestCityPoint } from '@/lib/orter';
 import { distanceKm, nearestCity } from '@/lib/regionVal';
+import { SKYLT_BILDER } from '@/lib/skyltBilder.generated';
 import { useSparade } from '@/lib/sparadeContext';
 import { stadsbyteFlyger, type KartStadsläge } from '@/lib/startstad';
 import { useEmojiBrickor } from '@/lib/useEmojiBrickor';
@@ -136,10 +143,12 @@ export default function KartScreen() {
     const hemmadag = shouldAutoBumpDay(idagIRutan, imorgonIRutan, nuMs) ? 1 : 0;
 
     // ── Stilen: bootstrap-plattan tills nöjesfältet hämtats, Voyager vid fel.
+    // Den här kartan laddar skyltbilderna (kartBilder nedan) och ber därför
+    // om platsskyltarna i stilen.
     const [mapStyle, setMapStyle] = useState<StyleJson | string>(BOOTSTRAP_STYLE);
     useEffect(() => {
         let aktiv = true;
-        fetchThemeParkStyle()
+        fetchThemeParkStyle({ skyltar: true })
             .then(s => { if (aktiv) setMapStyle(s); })
             .catch(() => { if (aktiv) setMapStyle(STREETS_STYLE_URL); });
         return () => { aktiv = false; };
@@ -203,6 +212,8 @@ export default function KartScreen() {
     // Molnlagret (components/KartMoln) följer kartans kamera: första vyn här,
     // sedan kartans rörelsehändelser.
     const molnRef = useRef<KartMolnRef>(null);
+    // Rutan som visar vad en tryckt platsskylt är (components/SkyltRuta).
+    const skyltRef = useRef<SkyltRutaRef>(null);
     // Kamerans mitt på skärmen mäts med kartans egen projektion när kartan
     // står still: iOS lägger mitten mellan statusraden och hemstrecket, inte
     // mitt i vyn, och molnen ska stå där kartan står (lib/molnMotor.sättMitt).
@@ -552,7 +563,7 @@ export default function KartScreen() {
         [brickor],
     );
     const emojiBrickor = useEmojiBrickor(önskadeBilder, förladdadeBilder);
-    const kartBilder = useMemo(() => ({ ...BRICKA_IMAGES, ...emojiBrickor.bilder }), [emojiBrickor.bilder]);
+    const kartBilder = useMemo(() => ({ ...BRICKA_IMAGES, ...SKYLT_BILDER, ...emojiBrickor.bilder }), [emojiBrickor.bilder]);
     const dolda = useMemo(() => prickFilter([...brickIds]) as unknown as FilterSpecification, [brickIds]);
 
     // ── Önskningarna (webbens drömska wish-brickor) ───────────────────────
@@ -584,7 +595,34 @@ export default function KartScreen() {
         // träffar en bricka eller stänger kortet.
         setTryckPunkt({ lng, lat });
         molnRef.current?.tryck({ lng, lat });
+        // Varje karttryck stänger skyltrutan; träffar trycket en skylt öppnas
+        // den igen nedan (webbens handleClick).
+        skyltRef.current?.stäng();
         void träffPåKartan({ lng, lat }, tx, ty);
+    };
+    // PLATSSKYLT UNDER TRYCKET (VADKUL#225, hit i #234): visa vad den är.
+    // Kartan frågas bara om skyltlagren, och svaret används aldrig rakt av:
+    // varje träff räknas om från sin egen koordinat och måste ligga under
+    // trycket (kontraktets pickPoiSignHit) - samma läxa som brickorna.
+    const skyltarIStilen = harSkyltar(mapStyle);
+    const visaTräffadSkylt = async (tx: number, ty: number) => {
+        const karta = mapRef.current;
+        // Under startzoomen finns inga skyltar att träffa (lite marginal:
+        // zoomen här är den senast rapporterade).
+        if (!karta || !skyltarIStilen || (zoom ?? 0) < POI_SIGN_MIN_ZOOM - 0.5) return;
+        try {
+            const träffar = await karta.queryRenderedFeatures(skyltFrågeruta(tx, ty), { layers: [...POI_SIGN_LAYER_IDS] });
+            const kandidater = skyltKandidater(träffar);
+            if (kandidater.length === 0) return;
+            const fötter = await Promise.all(kandidater.map(async k => {
+                const [x, y] = await karta.project(k.lngLat);
+                return { x, y };
+            }));
+            const i = pickPoiSignHit(fötter, { x: tx, y: ty });
+            if (i !== null) skyltRef.current?.visa(kandidater[i], fötter[i]);
+        } catch {
+            // Kartan kunde inte svara - då visas ingen ruta.
+        }
     };
     const träffPåKartan = async (tryck: { lng: number; lat: number }, tx: number, ty: number) => {
         const karta = mapRef.current;
@@ -620,8 +658,14 @@ export default function KartScreen() {
         const tända = [...brickor.features, ...hål.features];
         const id = träffadBricka(await kandidater(vald ? [...tända, vald.bricka] : tända), tx, ty)
             ?? träffadPrick(await kandidater(prickar.features.filter(f => !brickIds.has(f.properties.id)), PRICK_RADIE * 2), tx, ty);
-        if (id) trycktBricka(id);
-        else setStängNonce(n => n + 1);
+        if (id) {
+            trycktBricka(id);
+            return;
+        }
+        // Resten av tomt-tryckets beteende (stäng kortet) gäller som vanligt
+        // även när trycket tog en skylt, som på webben.
+        setStängNonce(n => n + 1);
+        void visaTräffadSkylt(tx, ty);
     };
     const trycktÖnskan = (id: string) => {
         const w = (önskningar.data ?? []).find(x => x.id === id);
@@ -759,13 +803,17 @@ export default function KartScreen() {
                     style={styles.map}
                     mapStyle={mapStyle as StyleSpecification | string}
                     onDidFinishLoadingMap={läsRuta}
-                    onRegionIsChanging={ev => molnRef.current?.rörelse(ev.nativeEvent)}
+                    onRegionIsChanging={ev => {
+                        molnRef.current?.rörelse(ev.nativeEvent);
+                        skyltRef.current?.följ();
+                    }}
                     onRegionDidChange={ev => {
                         setRuta(ev.nativeEvent.bounds);
                         setZoom(ev.nativeEvent.zoom);
                         setHoppNamn(null);
                         molnRef.current?.stannat(ev.nativeEvent);
                         mätMolnMitt(ev.nativeEvent.center);
+                        skyltRef.current?.följ();
                     }}
                     onPress={karttryck}
                 >
@@ -833,6 +881,10 @@ export default function KartScreen() {
             {/* MOLNEN (VADKUL#233): webbens molnlager, ovanpå kartan och under
                 allt krom. Tar aldrig emot tryck. */}
             {klar ? <KartMoln ref={molnRef} punkter={iPeriod} fokus={molnFokus} fria={molnFria} /> : null}
+
+            {/* SKYLTRUTAN (VADKUL#234): vad en tryckt platsskylt är. Ovanpå
+                kartan och molnen, under allt krom. Tar aldrig emot tryck. */}
+            {klar ? <SkyltRuta ref={skyltRef} kartaRef={mapRef} /> : null}
 
             {/* Toppkromet (ägarbeslut 7/10 kväll): profil till vänster,
                 dagplattan i mitten, FILTERKNAPPEN till höger. Sökknappen och
