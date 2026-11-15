@@ -86,6 +86,34 @@ describe('projektionen', () => {
         }
     });
 
+    it('avprojicera är projiceras omvändning även på en lutad karta', () => {
+        for (const lutning of [20, 45, 60]) {
+            const k = { ...HAV, bäring: 35, lutning };
+            for (const [lng, lat] of [[4.2, 60.9], [1.1, 62.8], [2, 62]]) {
+                const p = projicera(k, lng, lat)!;
+                const tillbaka = avprojicera(k, p.x, p.y);
+                expect(tillbaka.lng).toBeCloseTo(lng, 7);
+                expect(tillbaka.lat).toBeCloseTo(lat, 7);
+            }
+        }
+    });
+
+    it('ovanför horisonten finns ingen plats', () => {
+        const p = avprojicera({ ...HAV, lutning: 60 }, 195, -2000);
+        expect(Number.isNaN(p.lng)).toBe(true);
+        expect(Number.isNaN(p.lat)).toBe(true);
+    });
+
+    it('kraftigt lutad karta: vyn blir för stor och inga moln byggs, som på webben', () => {
+        const värld = nyVärld();
+        byggOm(värld, [], { ...HAV, zoom: 8.2, lutning: 60 });
+        expect(värld.satser[0].lägen.length).toBe(0);
+        // Måttligt lutad: molnen finns kvar.
+        const måttlig = nyVärld();
+        byggOm(måttlig, [], { ...HAV, zoom: 8.2, lutning: 40 });
+        expect(måttlig.satser[0].lägen.length).toBeGreaterThan(0);
+    });
+
     it('lutad karta: det som ligger norrut krymper, det söderut växer', () => {
         const k = { ...HAV, lutning: 45 };
         expect(projicera(k, HAV.lng, HAV.lat)!.skala).toBeCloseTo(1, 6);
@@ -368,6 +396,28 @@ describe('platserna', () => {
         expect(ut).toEqual([-1, 0]);
     });
 
+    // Uppmätt mot webben 15/11: under en utzoomning kom nya moln in i skärmens
+    // kant när vyerna var slut, och det var de som blev utan.
+    it('för få vyer: en ny tät stämpel tar vyn från en tunn som redan hade en', () => {
+        const platser = nyaPlatser(2);
+        const ut: number[] = [];
+        fördela(platser, [st('tunn', 0, 0.1), st('tät', 0, 0.9)], ut);
+        expect(ut.every(i => i >= 0)).toBe(true);
+        fördela(platser, [st('tunn', 0, 0.1), st('tät', 0, 0.9), st('ny', 0, 0.8)], ut);
+        expect(ut[0]).toBe(-1);
+        expect(ut[1]).toBeGreaterThanOrEqual(0);
+        expect(ut[2]).toBeGreaterThanOrEqual(0);
+        expect(ut[1]).not.toBe(ut[2]);
+    });
+
+    it('för få vyer: en nykomling som bara syns lite mer tar inte vyn (inget fladder)', () => {
+        const platser = nyaPlatser(1);
+        const ut: number[] = [];
+        fördela(platser, [st('gammal', 0, 0.5)], ut);
+        fördela(platser, [st('gammal', 0, 0.5), st('ny', 0, 0.6)], ut);
+        expect(ut).toEqual([0, -1]);
+    });
+
     it('en vy som släppts kan tas av en ny stämpel', () => {
         const platser = nyaPlatser(16);
         const ut: number[] = [];
@@ -385,6 +435,37 @@ describe('platserna', () => {
         const { ram } = intonad({ ...HAV, zoom: 5.42 }, { rand: 48 });
         expect(ram.moln.length).toBeLessThanOrEqual(behov.moln);
         expect(ram.skuggor.length).toBeLessThanOrEqual(behov.skuggor);
+    });
+
+    it('två uppsättningar som tonar över vid en utzoomning ryms också', () => {
+        const behov = platsBehov(HAV.bredd, HAV.höjd);
+        // Nivå 6 hålls kvar ner till zoom 5,38 - där är dess rutor som minst.
+        const { värld, ram } = intonad(HAV, { rand: 48 });
+        for (let i = 0; i < 40; i++) bildruta(värld, { ...HAV, zoom: 5.39 }, ind({ rand: 48 }), ram);
+        expect(värld.satser.length).toBe(1);
+        const ensam = ram.moln.length;
+        // Förbi nivåbytet: den gamla uppsättningen tonar ut medan nästa tonar in.
+        for (let i = 0; i < 6; i++) bildruta(värld, { ...HAV, zoom: 5.37 }, ind({ rand: 48 }), ram);
+        expect(värld.satser.length).toBe(2);
+        expect(ram.moln.length).toBeGreaterThan(ensam);
+        expect(ram.moln.length).toBeLessThanOrEqual(behov.moln);
+        expect(ram.skuggor.length).toBeLessThanOrEqual(behov.skuggor);
+    });
+
+    it('lutad karta: molnen är lika stora nära som långt bort, som på webben', () => {
+        const lutad = { ...HAV, lutning: 45 };
+        const { ram } = intonad(lutad);
+        const { ram: rak } = intonad(HAV);
+        const storlekar = (r: MolnRam) => new Map(r.moln.filter(s => !s.nyckel.includes('+')).map(s => [s.nyckel, s.skala]));
+        const a = storlekar(ram);
+        const b = storlekar(rak);
+        let gemensamma = 0;
+        for (const [nyckel, skala] of a) {
+            if (!b.has(nyckel)) continue;
+            gemensamma++;
+            expect(skala).toBeCloseTo(b.get(nyckel)!, 9);
+        }
+        expect(gemensamma).toBeGreaterThan(3);
     });
 });
 

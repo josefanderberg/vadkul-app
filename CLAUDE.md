@@ -86,6 +86,13 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
   - ändras det ska kopian följa. Molnbilderna bakas med webbens ritkod:
   `node scripts/baka-moln.mjs` skriver assets/moln/ + src/lib/moln*.generated.ts
   (redigera aldrig de genererade filerna, och inget npm-script - se brickorna).
+  **Ändras molnlagret här eller på webben: kör `node scripts/jamfor-moln.mjs`**
+  (15/11 2026, Josef: "molnen ska ut på apparna och se och fungera likadant").
+  Det kör webbens riktiga ritlager på en MapLibre-karta och appens motor
+  bredvid varandra i headless Chrome, på samma klocka, och jämför bild för
+  bild: start, tryck, valt event, zoom, panorering, vriden och lutad karta.
+  Det är sättet att SE molnen utan simulator. Det mäter inte hur fort
+  telefonen hinner med eller hur långt molnen släpar efter kartan.
   Lagret ligger OVANPÅ kartan, alltså även ovanpå brickorna (på webben ligger
   de emellan): därför tunnas molnen ut över tända brickor (`brickTunning`).
   Ta inte bort det, då hamnar brickorna i dimma. Besluten om molnen (glesa,

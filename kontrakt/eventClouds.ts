@@ -231,6 +231,29 @@ export interface CloudView {
 }
 
 /**
+ * Området som rymmer alla `corners` - skärmens fyra hörn (plus marginal) som
+ * platser på kartan. ALLA FYRA behövs (#239): på en vriden karta är skärmens
+ * övre vänstra hörn inte längre nordväst. Med bara två hörn blev rutan för
+ * smal eller ut och in, och då byggdes inga moln alls - på en telefonskärm
+ * försvann de helt vid drygt 30 graders vridning. Ogiltiga hörn hoppas över;
+ * utan ett enda giltigt blir området oändligt och buildClouds bygger inget.
+ */
+export function cloudViewOf(corners: readonly CloudPoint[]): CloudView {
+    let west = Infinity;
+    let east = -Infinity;
+    let south = Infinity;
+    let north = -Infinity;
+    for (const c of corners) {
+        if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) continue;
+        west = Math.min(west, c.lng);
+        east = Math.max(east, c.lng);
+        south = Math.min(south, c.lat);
+        north = Math.max(north, c.lat);
+    }
+    return { west, south, east, north };
+}
+
+/**
  * Molnen för vyn: rutnätet på molnens nivå läggs över `view`, och varje ruta
  * får ett moln efter hur GLEST det är där. Tätheten är rutans event plus
  * halva grannarnas och en fjärdedel av hörnens, så en stad blir klar även i
@@ -409,9 +432,16 @@ export function glideStep(
     vy *= brake;
     // Under GLIDE_STOP_SPEED återstår bara ett par pixlar av glidningen -
     // stanna, så ritlagret kan gå tillbaka till vilotakten.
-    // Bara när ingen knuffar: med den mjuka starten (#220) är farten låg de
-    // första bildrutorna, och då får den inte nollas medan den byggs upp.
-    if (ax === 0 && ay === 0 && Math.hypot(vx, vy) < GLIDE_STOP_SPEED) {
+    // Bara när knuffen inte orkar hålla farten uppe: med den mjuka starten
+    // (#220) är farten låg de första bildrutorna, och då får den inte nollas
+    // medan den byggs upp. Måttet är farten knuffen som mest kan ge
+    // (accelerationen gånger bromsens tidskonstant), INTE att ingen knuffar
+    // alls (#238): en knuffare som står kvar - det valda eventet, ett tryck,
+    // en pekare i vila - ger ett moln i räckviddens kant en acceleration nära
+    // noll. Då kröp molnet i all evighet utan att farten någonsin blev exakt
+    // noll, och ritlagret ritade varje bildruta så länge eventkortet var öppet.
+    const reachable = Math.hypot(ax, ay) * (GLIDE_TAU_MS / 1000);
+    if (reachable < GLIDE_STOP_SPEED && Math.hypot(vx, vy) < GLIDE_STOP_SPEED) {
         vx = 0;
         vy = 0;
     }

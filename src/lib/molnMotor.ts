@@ -346,6 +346,7 @@ export class MolnMotor {
         const knuffare: CloudPoint[] = [];
         if (this.fokus) knuffare.push(this.fokus);
         if (this.tryckPunkt && this.tryckVäpnat) knuffare.push(this.tryckPunkt);
+        const nivåFöre = this.värld.nivå;
         this.animerar = bildruta(this.värld, kamera, {
             punkter: this.punkter,
             knuffare,
@@ -355,6 +356,9 @@ export class MolnMotor {
             stilla: this.stilla,
             rand: VY_RAND_PT,
         }, this.ram);
+        // Bildrutan byggde själv om molnen vid ett nivåbyte: som på webben
+        // börjar då väntan till nästa ombygge om från nu.
+        if (this.värld.nivå !== nivåFöre) this.senastBygge = nu;
         fördela(this.skuggPlatser, this.ram.skuggor, this.skuggUt);
         fördela(this.molnPlatser, this.ram.moln, this.molnUt);
         // Ankaret står kvar så länge kartan bara panorerats och zoomats -

@@ -38,6 +38,7 @@ import {
     cloudOpacityForZoom,
     cloudScaleFor,
     cloudShadow,
+    cloudViewOf,
     glideStep,
     pushOffset,
     type Cloud,
@@ -60,8 +61,6 @@ export const BYGG_OM_MS = 200;
 /** Antal molnbilder: varje form finns även spegelvänd (webbens `sprites`). */
 export const MOLN_BILDANTAL = MOLN_FORMER.length * 2;
 const BILD_KVOT = MOLN_BILD.höjd / MOLN_BILD.bredd;
-/** Under den här farten (pt/s) ritas en glidning i vilotakt - den syns ändå inte. */
-const KRYP_FART = 2;
 /** Stämplar helt utanför skärmen (plus den här kanten) får ingen bildvy. */
 const SKÄRM_KANT_PT = 8;
 /**
@@ -202,13 +201,24 @@ export function projicera(k: MolnKamera, lng: number, lat: number): SkärmPunkt 
     return projiceraMerc(projektionFör(k), mercatorX(lng), mercatorY(lat), ut) ? ut : null;
 }
 
-/** Platsen under en skärmpunkt. Lutningen räknas inte med (bara vyns ram behöver den). */
+/**
+ * Platsen under en skärmpunkt (kartans unproject): projiceraMerc baklänges,
+ * även på en vriden och lutad karta. En punkt ovanför horisonten har ingen
+ * plats på kartan - då är svaret NaN.
+ */
 export function avprojicera(k: MolnKamera, x: number, y: number): CloudPoint {
     const p = projektionFör(k);
-    const sx = x - p.cx;
-    const sy = y - p.cy;
-    const dx = sx * p.cos - sy * p.sin;
-    const dy = sx * p.sin + sy * p.cos;
+    let rx = x - p.cx;
+    let ry = y - p.cy;
+    if (p.sinLut !== 0) {
+        // Lutad: räkna tillbaka perspektivet.
+        const nämnare = p.cosLut * p.avstånd + ry * p.sinLut;
+        if (nämnare <= 0) return { lng: NaN, lat: NaN };
+        ry = (ry * p.avstånd) / nämnare;
+        rx = (rx * (p.avstånd - ry * p.sinLut)) / p.avstånd;
+    }
+    const dx = rx * p.cos - ry * p.sin;
+    const dy = rx * p.sin + ry * p.cos;
     return {
         lng: (p.mx + dx / p.värld) * 360 - 180,
         lat: latFrånMercatorY(p.my + dy / p.värld),
@@ -217,28 +227,19 @@ export function avprojicera(k: MolnKamera, x: number, y: number): CloudPoint {
 
 /**
  * Vyn plus marginalen i grader (webbens viewWithMargin): området molnen
- * byggs för. Alla fyra hörnen räknas, så ramen håller även när kartan är
- * vriden; en lutad karta ser längre bort och får en större ram.
+ * byggs för - skärmens fyra hörn plus marginalen, som platser på kartan
+ * (kontraktets cloudViewOf, samma som webben). På en kraftigt lutad karta
+ * ligger de övre hörnen mycket långt bort eller ovanför horisonten: då blir
+ * området för stort och inga moln byggs, precis som på webben.
  */
 export function vyMedMarginal(k: MolnKamera, marginal = GALLRA_PT): CloudView {
-    const l = (Math.min(60, Math.max(0, k.lutning)) * Math.PI) / 180;
-    const f = 1 / Math.cos(l);
-    const hb = (k.bredd / 2 + marginal) * f;
-    const hh = (k.höjd / 2 + marginal) * f;
-    const cx = k.bredd / 2;
-    const cy = k.höjd / 2;
-    let west = Infinity;
-    let east = -Infinity;
-    let south = Infinity;
-    let north = -Infinity;
-    for (const [sx, sy] of [[-hb, -hh], [hb, -hh], [hb, hh], [-hb, hh]]) {
-        const pt = avprojicera(k, cx + sx, cy + sy);
-        west = Math.min(west, pt.lng);
-        east = Math.max(east, pt.lng);
-        south = Math.min(south, pt.lat);
-        north = Math.max(north, pt.lat);
+    const m = marginal;
+    const hörn = [[-m, -m], [k.bredd + m, -m], [k.bredd + m, k.höjd + m], [-m, k.höjd + m]]
+        .map(([x, y]) => avprojicera(k, x, y));
+    if (hörn.some(h => !Number.isFinite(h.lng) || !Number.isFinite(h.lat))) {
+        return { west: -Infinity, south: -Infinity, east: Infinity, north: Infinity };
     }
-    return { west, south, east, north };
+    return cloudViewOf(hörn);
 }
 
 // ── Uppsättningarna ─────────────────────────────────────────────────────────
@@ -486,13 +487,15 @@ export function bildruta(värld: MolnVärld, kamera: MolnKamera, ind: RamIndata,
                 l.ton = 0;
                 continue;
             }
-            const persp = pt.skala;
             const bildIndex = Math.floor(c.seed * MOLN_BILDANTAL) % MOLN_BILDANTAL;
             const form = MOLN_FORMER[bildIndex >> 1];
             // Bara molnen SEDDA UPPIFRÅN växer fortare än kartan (#219) -
             // sidomolnen följer kartan som förut. Platsen följer alltid kartan.
-            const r = c.radius * skala * persp * (form.uppifrån ? närmande : 1);
-            const lägesSkala = skala * persp;
+            // På en lutad karta följer bara PLATSEN perspektivet: webben ritar
+            // alla moln lika stora hur långt bort de än ligger, och det gör
+            // appen också (uppmätt mot webben 15/11, VADKUL#233).
+            const r = c.radius * skala * (form.uppifrån ? närmande : 1);
+            const lägesSkala = skala;
             // Knuffen följer molnet: ett undanknuffat moln ligger kvar
             // förskjutet även när det panoreras ut och in i bild.
             const px = pt.x + l.ox * lägesSkala;
@@ -517,11 +520,9 @@ export function bildruta(värld: MolnVärld, kamera: MolnKamera, ind: RamIndata,
                 l.oy = g.oy;
                 l.vx = g.vx;
                 l.vy = g.vy;
-                // Ett moln precis i räckviddens kant får en knuff nära noll och
-                // kryper i all evighet. Så långsamt räcker vilotakten till -
-                // annars höll ett valt event slingan igång i varje bildruta så
-                // länge kortet var öppet.
-                if (g.vx * g.vx + g.vy * g.vy > KRYP_FART * KRYP_FART) egenRör = true;
+                // Som webben: en glidning med fart är rörelse. Den stannar
+                // själv även när knuffaren står kvar (glideStep, VADKUL#238).
+                if (g.vx !== 0 || g.vy !== 0) egenRör = true;
             }
             // Tätt intill en knuffare tunnas molnet ut (tillfälligt).
             let tf = 0;
@@ -631,20 +632,39 @@ export function nyaPlatser(antal: number, bilder = MOLN_BILDANTAL): MolnPlatser 
     return { bild, nyckel, avNyckel: new Map() };
 }
 
+/** En stämpel som redan har en vy väger så här mycket tyngre när vyerna är
+ *  för få - annars byter två nästan lika synliga plats i varje bildruta. */
+const HÅLL_KVAR = 1.5;
+
 /**
  * Ge varje stämpel en vy: `ut[j]` blir vyns index för stämpel j, eller -1 när
- * vyerna är slut. Då blir de som syns minst utan först (täthet x yta: tunna
- * och små - på en lutad karta de långt bort, vid ett nivåbyte den uppsättning
- * som tonar ut). Svarar true när någon vy fick byta molnbild.
+ * vyerna är slut. Då blir de som syns minst utan (täthet x yta: tunna och
+ * små - vid ett nivåbyte den uppsättning som tonar ut), ÄVEN om de redan hade
+ * en vy: annars var det nykomlingarna som föll bort, och de kommer in i
+ * skärmens kant under en utzoomning - där syntes luckorna (uppmätt mot webben
+ * 15/11, VADKUL#233). Svarar true när någon vy fick byta molnbild.
  */
 export function fördela(platser: MolnPlatser, stämplar: readonly MolnStämpel[], ut: number[]): boolean {
     const antal = platser.bild.length;
     const tagen: boolean[] = new Array(antal).fill(false);
     const nya = new Map<string, number>();
     ut.length = stämplar.length;
+    const vikt = (j: number) => stämplar[j].a * stämplar[j].skala * stämplar[j].skala;
+    // Fler stämplar än vyer: bara de `antal` som syns mest får vara med.
+    let med: Uint8Array | null = null;
+    if (stämplar.length > antal) {
+        const rang = stämplar.map((s, j) => vikt(j) * (platser.avNyckel.has(s.nyckel) ? HÅLL_KVAR : 1));
+        const ordning = stämplar.map((_, j) => j).sort((a, b) => rang[b] - rang[a]);
+        med = new Uint8Array(stämplar.length);
+        for (let i = 0; i < antal; i++) med[ordning[i]] = 1;
+    }
     const utan: number[] = [];
     for (let j = 0; j < stämplar.length; j++) {
         const s = stämplar[j];
+        if (med && med[j] === 0) {
+            ut[j] = -1;
+            continue;
+        }
         const plats = platser.avNyckel.get(s.nyckel);
         if (plats != null && !tagen[plats] && platser.bild[plats] === s.bild) {
             tagen[plats] = true;
@@ -666,8 +686,7 @@ export function fördela(platser: MolnPlatser, stämplar: readonly MolnStämpel[
             else lediga.set(platser.bild[i], [i]);
             ledigaTotalt++;
         }
-        // De som syns mest först - blir vyerna för få är det de tunna och små som faller bort.
-        const vikt = (j: number) => stämplar[j].a * stämplar[j].skala * stämplar[j].skala;
+        // De som syns mest först.
         utan.sort((a, b) => vikt(b) - vikt(a));
         // Först de som hittar en ledig vy med rätt bild...
         const byter: number[] = [];
@@ -709,21 +728,27 @@ export function fördela(platser: MolnPlatser, stämplar: readonly MolnStämpel[
 
 /**
  * Hur många bildvyer lagret behöver för en skärm. Måttet är det molnigaste
- * läget - öppet hav precis före ett nivåbyte, där rutorna är som minst på
- * skärmen - med lite marginal. Räcker vyerna ändå inte (lutad karta, två
- * uppsättningar som tonar över) faller de som syns minst bort (fördela).
+ * läget: öppet hav precis vid ett nivåbyte under en utzoomning, där den gamla
+ * uppsättningens rutor är som minst på skärmen OCH nästa uppsättning redan
+ * tonar in. Uppmätt mot webben 15/11 (VADKUL#233): en snabb utzoomning över
+ * Sverige behövde 225 molnvyer och 93 skuggor på en skärm om 390 x 844 pt -
+ * de 144 och 67 som fanns räckte inte, och småmoln föll bort i skärmens kant.
+ * Räcker vyerna ändå inte (surfplatta, tre uppsättningar på en gång) faller
+ * de som syns minst bort (fördela).
  */
 export function platsBehov(bredd: number, höjd: number): { moln: number; skuggor: number } {
     // Rutans sida vid uppsättningens minsta skala (88 pt · 2^-0,62).
     const ruta = 57;
     const kant = 40 + VY_RAND_PT;
     const rutor = ((bredd + 2 * kant) * (höjd + 2 * kant)) / (ruta * ruta);
-    // 62 % av de tomma rutorna har ett moln, en del med extra puffar; 60 % av molnen har skugga.
-    const moln = Math.ceil(rutor * 0.62 * 1.3);
-    const skuggor = Math.ceil(rutor * 0.62 * 0.6);
+    // 62 % av de tomma rutorna har ett moln, i snitt 0,6 extra puffar per moln;
+    // 60 % av molnen har skugga. Nästa uppsättning (en fjärdedel så många
+    // rutor) tonar in samtidigt, och så lite luft ovanpå.
+    const moln = Math.ceil(rutor * 0.62 * 1.6 * 1.25 * 1.2);
+    const skuggor = Math.ceil(rutor * 0.62 * 0.6 * 1.25 * 1.3);
     return {
-        moln: Math.min(260, Math.max(96, moln)),
-        skuggor: Math.min(110, Math.max(40, skuggor)),
+        moln: Math.min(400, Math.max(140, moln)),
+        skuggor: Math.min(170, Math.max(60, skuggor)),
     };
 }
 
