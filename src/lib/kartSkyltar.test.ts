@@ -5,7 +5,10 @@ import {
     pickPoiSignHit, POI_SIGN_CLOSE_LAYER_ID, POI_SIGN_CLOSE_MIN_ZOOM, POI_SIGN_HIT, POI_SIGN_KEYS, POI_SIGN_LAYER_ID,
     POI_SIGN_LAYER_IDS, POI_SIGN_MIN_ZOOM, POI_SIGN_NAME_ZOOM, POI_SIGN_NEAR_LAYER_ID, POI_SIGN_NEAR_MIN_ZOOM,
 } from '@vadkul/kontrakt';
-import { harSkyltar, läggTillSkyltar, SKYLT_SKALA, skyltFrågeruta, skyltKandidater } from './kartSkyltar';
+import {
+    harSkyltar, läggTillSkyltar, SKYLT_MIN_ZOOM, SKYLT_NAMN_ZOOM, SKYLT_NÄRA_ZOOM, SKYLT_NÄRMAST_ZOOM, SKYLT_SKALA,
+    skyltFrågeruta, skyltKandidater,
+} from './kartSkyltar';
 import { BAKADE_SKYLTAR, SKYLT_BILD } from './skyltMatt.generated';
 import type { StyleJson, StyleLayerJson } from './themeParkStyle';
 
@@ -56,19 +59,31 @@ describe('läggTillSkyltar', () => {
         ]);
         // Webben: 0,8 -> 1 av en bild i 1x. Här samma mått av en bild i 3x.
         expect(lager(s, POI_SIGN_LAYER_ID).layout!['icon-size'])
-            .toEqual(['interpolate', ['linear'], ['zoom'], POI_SIGN_MIN_ZOOM, 0.8 * SKYLT_SKALA, 16, SKYLT_SKALA]);
-        expect(lager(s, POI_SIGN_NEAR_LAYER_ID).minzoom).toBe(POI_SIGN_NEAR_MIN_ZOOM);
-        expect(lager(s, POI_SIGN_CLOSE_LAYER_ID).minzoom).toBe(POI_SIGN_CLOSE_MIN_ZOOM);
+            .toEqual(['interpolate', ['linear'], ['zoom'], SKYLT_MIN_ZOOM, 0.8 * SKYLT_SKALA, 16, SKYLT_SKALA]);
+        expect(lager(s, POI_SIGN_NEAR_LAYER_ID).minzoom).toBe(SKYLT_NÄRA_ZOOM);
+        expect(lager(s, POI_SIGN_CLOSE_LAYER_ID).minzoom).toBe(SKYLT_NÄRMAST_ZOOM);
         // Varje lager kartan frågas om vid ett tryck finns i stilen.
         for (const id of POI_SIGN_LAYER_IDS) expect(s.layers!.some(l => l.id === id)).toBe(true);
     });
 
-    it('ritar ur baskartans egna kakel från zoom 13 med namn från 14,5 (inga djupare kakel i appen)', () => {
+    // #251, Josef 15/11: "skyltarna hade kunnat visas snäppet tidigare på
+    // iphone ... blir bättre så på en mobil".
+    it('tänder varje lager ett zoomsteg tidigare än webben: 12, 14 och 15, namn från 13,5', () => {
+        expect([SKYLT_MIN_ZOOM, SKYLT_NAMN_ZOOM, SKYLT_NÄRA_ZOOM, SKYLT_NÄRMAST_ZOOM]).toEqual([
+            POI_SIGN_MIN_ZOOM - 1, POI_SIGN_NAME_ZOOM - 1, POI_SIGN_NEAR_MIN_ZOOM - 1, POI_SIGN_CLOSE_MIN_ZOOM - 1,
+        ]);
+        expect([SKYLT_MIN_ZOOM, SKYLT_NAMN_ZOOM, SKYLT_NÄRA_ZOOM, SKYLT_NÄRMAST_ZOOM]).toEqual([12, 13.5, 14, 15]);
+        // Ordningen mellan lagren står kvar: resmålen först, matställena sist.
+        expect(SKYLT_MIN_ZOOM).toBeLessThan(SKYLT_NÄRA_ZOOM);
+        expect(SKYLT_NÄRA_ZOOM).toBeLessThan(SKYLT_NÄRMAST_ZOOM);
+    });
+
+    it('ritar ur baskartans egna kakel (inga djupare kakel i appen)', () => {
         const s = voyagerLik();
         läggTillSkyltar(s);
         const far = lager(s, POI_SIGN_LAYER_ID);
-        expect(far).toMatchObject({ source: 'protomaps', 'source-layer': 'pois', minzoom: POI_SIGN_MIN_ZOOM });
-        expect((far.layout!['text-field'] as unknown[])[3]).toBe(POI_SIGN_NAME_ZOOM);
+        expect(far).toMatchObject({ source: 'protomaps', 'source-layer': 'pois', minzoom: SKYLT_MIN_ZOOM });
+        expect((far.layout!['text-field'] as unknown[])[3]).toBe(SKYLT_NAMN_ZOOM);
         expect(far.layout!['text-font']).toEqual(FONT);
         // Voyagers egna parknamn göms - skylten bär namnet.
         expect(lager(s, 'poi_park').layout!.visibility).toBe('none');

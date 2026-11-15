@@ -32,7 +32,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
 import type { CameraRef, Expression, FilterSpecification, LngLat, MapRef, StyleSpecification } from '@maplibre/maplibre-react-native';
-import { pickPoiSignHit, POI_SIGN_LAYER_IDS, POI_SIGN_MIN_ZOOM } from '@vadkul/kontrakt';
+import { pickPoiSignHit, POI_SIGN_LAYER_IDS } from '@vadkul/kontrakt';
 import type { AppFeedEvent, CloudPoint } from '@vadkul/kontrakt';
 import { hittaAnvändarEvent, useEvent } from '@/api/useEvent';
 import { fetchEventSomFlöde } from '@/api/eventDetalj';
@@ -62,7 +62,7 @@ import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
 import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kartBanner';
 import { hoppDag, hoppPanorering, hoppStad, prenumereraKartHopp, taKartHopp, type HoppRetur, type KartHopp } from '@/lib/kartHopp';
 import { kartPrompt, type PromptÅtgärd } from '@/lib/kartPrompt';
-import { harSkyltar, skyltFrågeruta, skyltKandidater } from '@/lib/kartSkyltar';
+import { harSkyltar, SKYLT_MIN_ZOOM, skyltFrågeruta, skyltKandidater } from '@/lib/kartSkyltar';
 import { kategoriFor } from '@/lib/kategorier';
 import { närmastUtanför, utzoomning, ZOOM_UT_GOLV } from '@/lib/listZoom';
 import { useRegionVal } from '@/lib/regionContext';
@@ -616,7 +616,7 @@ export default function KartScreen() {
         const karta = mapRef.current;
         // Under startzoomen finns inga skyltar att träffa (lite marginal:
         // zoomen här är den senast rapporterade).
-        if (!karta || !skyltarIStilen || (zoom ?? 0) < POI_SIGN_MIN_ZOOM - 0.5) return;
+        if (!karta || !skyltarIStilen || (zoom ?? 0) < SKYLT_MIN_ZOOM - 0.5) return;
         try {
             const träffar = await karta.queryRenderedFeatures(skyltFrågeruta(tx, ty), { layers: [...POI_SIGN_LAYER_IDS] });
             const kandidater = skyltKandidater(träffar);

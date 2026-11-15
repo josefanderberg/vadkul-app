@@ -14,26 +14,51 @@
  * TVÅ SKILLNADER MOT WEBBEN, båda påtvingade:
  *  1. Webben hämtar skyltarnas punkter ur kakel ett zoomsteg djupare (#222)
  *     bakom ett eget kakelprotokoll som appens MapLibre saknar. Här ritas de
- *     ur baskartans egna kakel: resmålen (bad, naturreservat, golf, museum,
- *     bibliotek, bio, teater, arena) från zoom 13 (webben 12), namn från 14,5;
- *     idrottsanläggning, lekplats, idrottsplan och park från 15 och restaurang
- *     och kafé från 16, som på webben. Kaklen bär bio och teater först på
- *     z15, så i appen tänds de där.
+ *     ur baskartans egna kakel.
  *  2. Rutan vid tryck är en egen vy (components/SkyltRuta) i stället för
  *     MapLibres popup.
  *
+ * ETT ZOOMSTEG TIDIGARE ÄN WEBBEN (#251, ägarbeslut 15/11, Josef: "skyltarna
+ * hade kunnat visas snäppet tidigare på iphone. jag måste zooma in så mycket
+ * annars för att de ska dyka upp. blir bättre så på en mobil"): en telefon
+ * visar mycket mindre yta på samma zoom. Resmålen (bad, naturreservat, golf,
+ * museum, bibliotek, bio, teater, arena) tänds från zoom 12 med namn från
+ * 13,5, kvarterets skyltar (idrott, lekplats, plan, park) från 14 och
+ * restaurang och kafé från 15. Kaklen sätter golvet: mätt 15/11 i centrala
+ * Växjö och Göteborg bär CARTO-kaklen bio, teater, lekplats, restaurang och
+ * kafé först på z15, och z14 bara några museer, bibliotek, parker,
+ * idrottsanläggningar och restauranger. Under sin kakelzoom syns en skylt
+ * alltså inte hur lågt lagret än börjar.
+ *
  * Ren, React-fri modul (testas i vitest utan nät).
  */
-import { addPoiSignLayers, POI_SIGN_HIT, POI_SIGN_LAYER_ID, poiSignInfo, type PoiSignInfo, type PoiSignStyle } from '@vadkul/kontrakt';
+import {
+    addPoiSignLayers, POI_SIGN_CLOSE_MIN_ZOOM, POI_SIGN_HIT, POI_SIGN_LAYER_ID, POI_SIGN_MIN_ZOOM, POI_SIGN_NAME_ZOOM,
+    POI_SIGN_NEAR_MIN_ZOOM, poiSignInfo, type PoiSignInfo, type PoiSignStyle,
+} from '@vadkul/kontrakt';
 import { SKYLT_BILD } from './skyltMatt.generated';
 import type { StyleJson } from './themeParkStyle';
 
 /** Bilden är bakad i SKYLT_BILD.täthet gånger webbens mått - lagret skalar ner lika mycket. */
 export const SKYLT_SKALA = 1 / SKYLT_BILD.täthet;
 
+/** Hur många zoomsteg tidigare än webben skyltarna tänds i appen (#251). */
+export const SKYLT_TIDIGARE = 1;
+/** Resmålens startzoom i appen - under den finns inga skyltar att trycka på. */
+export const SKYLT_MIN_ZOOM = POI_SIGN_MIN_ZOOM - SKYLT_TIDIGARE;
+export const SKYLT_NAMN_ZOOM = POI_SIGN_NAME_ZOOM - SKYLT_TIDIGARE;
+export const SKYLT_NÄRA_ZOOM = POI_SIGN_NEAR_MIN_ZOOM - SKYLT_TIDIGARE;
+export const SKYLT_NÄRMAST_ZOOM = POI_SIGN_CLOSE_MIN_ZOOM - SKYLT_TIDIGARE;
+
 /** Lägg skyltlagren i stilen (muterar den - anropas på transformens egen kopia). */
 export function läggTillSkyltar(style: StyleJson): boolean {
-    return addPoiSignLayers(style as unknown as PoiSignStyle, { iconScale: SKYLT_SKALA });
+    return addPoiSignLayers(style as unknown as PoiSignStyle, {
+        iconScale: SKYLT_SKALA,
+        minZoom: SKYLT_MIN_ZOOM,
+        nameZoom: SKYLT_NAMN_ZOOM,
+        nearMinZoom: SKYLT_NÄRA_ZOOM,
+        closeMinZoom: SKYLT_NÄRMAST_ZOOM,
+    });
 }
 
 /** Har stilen skyltlagren? Reservstilen (ren Voyager vid nätfel) har dem inte. */
