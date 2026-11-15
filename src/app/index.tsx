@@ -22,6 +22,9 @@
  *  - Platsskyltarna (VADKUL#234): webbens vägmärken för bad, museer,
  *    naturreservat m.m. när man zoomat in nära (lib/kartSkyltar). Ett tryck
  *    på en skylt visar vad den är (components/SkyltRuta).
+ *  - VÄDRET I PLATTAN (VADKUL#237): SMHI-vädret för plattans ort i dagchipet,
+ *    som webben (#202). Medan en ny ort laddas står förra ortens väder kvar
+ *    nedtonat - dagchipet byter aldrig bredd under laddningen (#221).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -39,6 +42,7 @@ import { FilterBricka } from '@/components/FilterBricka';
 import { FilterIkon } from '@/components/FilterIkon';
 import { ETIKETT_STIL, KartBrickor } from '@/components/KartBrickor';
 import { KartMoln, type KartMolnRef } from '@/components/KartMoln';
+import { PlattVader } from '@/components/PlattVader';
 import { Ikon } from '@/components/Ikon';
 import { SkyltRuta, type SkyltRutaRef } from '@/components/SkyltRuta';
 import { hämtaÖnskningar, taBortÖnskan } from '@/data/onskningar';
@@ -67,10 +71,12 @@ import { avståndPt, FÖRFILTER_PT, PRICK_RADIE, träffadBricka, träffadPrick, 
 import { nearestCityPoint } from '@/lib/orter';
 import { distanceKm, nearestCity } from '@/lib/regionVal';
 import { SKYLT_BILDER } from '@/lib/skyltBilder.generated';
+import { plattansLästext, plattansVäderOrt, type Punkt } from '@/lib/stadsVader';
 import { useSparade } from '@/lib/sparadeContext';
 import { stadsbyteFlyger, type KartStadsläge } from '@/lib/startstad';
 import { useEmojiBrickor } from '@/lib/useEmojiBrickor';
 import { useNu } from '@/lib/useNu';
+import { useStadsVader } from '@/lib/useStadsVader';
 import { BOOTSTRAP_STYLE, fetchThemeParkStyle, STREETS_STYLE_URL, type StyleJson } from '@/lib/themeParkStyle';
 import { dagOffset, iBild, KORT_TÄCKER, nästaIBild, nästaPeriodMedEvent, sammaPlats, type Ruta } from '@/lib/vy';
 
@@ -165,9 +171,10 @@ export default function KartScreen() {
      *  EVENTET i stället för stadens mitt. */
     const stadsHoppRef = useRef<AppFeedEvent | null>(null);
     /** Mitt i ett stadshopp är MÅLET sanningen för plattans ortsnamn
-     *  (webbens liveCityName) - kartans mitt beskriver ännu förra stället.
+     *  (webbens liveCityName) och för vädret i dagchipet (webbens
+     *  plattaWeatherPoint) - kartans mitt beskriver ännu förra stället.
      *  Släpps när kartan stannat. */
-    const [hoppNamn, setHoppNamn] = useState<string | null>(null);
+    const [hoppMål, setHoppMål] = useState<(Punkt & { name: string }) | null>(null);
     /** Stadsläget vid förra körningen - GPS-svaret jämförs mot det. "Återgå
      *  till min plats" (gpsValt) är ett eget val: då flyger kameran även när
      *  GPS:en landar i staden som redan visas (startvalet 31/10). */
@@ -186,7 +193,7 @@ export default function KartScreen() {
             // Dagen är eventets - inget auto-hopp till Imorgon vid landningen.
             stadsHoppRef.current = null;
             landningRef.current = null;
-            setHoppNamn(nearestCityPoint(hopp.lat, hopp.lng).name);
+            setHoppMål(nearestCityPoint(hopp.lat, hopp.lng));
             cameraRef.current?.flyTo({ center: [hopp.lng, hopp.lat], zoom: 11, duration: 1500 });
             return;
         }
@@ -195,7 +202,7 @@ export default function KartScreen() {
         // (PR #1:s kamerafix, 31/10, lib/startstad).
         if (!stadsbyteFlyger(förra, ny)) return;
         landningRef.current = city.slug;
-        setHoppNamn(city.name);
+        setHoppMål({ name: city.name, lat: city.lat, lng: city.lng });
         cameraRef.current?.flyTo({ center: [city.lng, city.lat], zoom: 11, duration: 1500 });
     }, [klar, city.slug, city.name, city.lng, city.lat, fromGps, manuell, gpsValt]);
 
@@ -753,8 +760,21 @@ export default function KartScreen() {
     // (närmaste stad i kontraktets lista), i Sverige-läget till startstadens.
     const kartMitt = ruta ? rutansMitt(ruta) : null;
     const kartOrt = kartMitt && zoom !== null ? kartansOrt(kartMitt, zoom) : null;
-    const plattNamn = hoppNamn ?? (kartMitt && zoom !== null ? kartOrt?.name ?? 'Sverige' : city.name);
-    const plattStad = !hoppNamn && kartOrt && kartMitt ? nearestCity(kartMitt.lat, kartMitt.lng).slug : city.slug;
+    const kartKlar = kartMitt !== null && zoom !== null;
+    const plattNamn = hoppMål?.name ?? (kartKlar ? kartOrt?.name ?? 'Sverige' : city.name);
+    const plattStad = !hoppMål && kartOrt && kartMitt ? nearestCity(kartMitt.lat, kartMitt.lng).slug : city.slug;
+    // VÄDRET I PLATTAN (VADKUL#237, webbens #202): SMHI:s prognos för ORTEN i
+    // plattan (samma ort som namnet - aldrig användarens position), i
+    // dagchipet: "IDAG · ⛅ 3°". Bara när plattan visar en ort och en enskild
+    // dag - inte "Sverige" eller veckan. Medan en ny ort laddas står förra
+    // ortens väder kvar nedtonat (#221, components/PlattVader).
+    const plattDag = periodLabel(offset, längd);
+    const plattVäder = useStadsVader(
+        plattansVäderOrt({ hopp: hoppMål, kartKlar, kartOrt, start: city }),
+        offset,
+        längd === 1,
+        nuMs,
+    );
     const bannerTryck = (b: KartBanner) => {
         if (b.typ === 'populärVecka') {
             setLängd(7);
@@ -810,7 +830,7 @@ export default function KartScreen() {
                     onRegionDidChange={ev => {
                         setRuta(ev.nativeEvent.bounds);
                         setZoom(ev.nativeEvent.zoom);
-                        setHoppNamn(null);
+                        setHoppMål(null);
                         molnRef.current?.stannat(ev.nativeEvent);
                         mätMolnMitt(ev.nativeEvent.center);
                         skyltRef.current?.följ();
@@ -902,12 +922,17 @@ export default function KartScreen() {
                     </Pressable>
                 </View>
                 <View style={styles.mittKolumn} pointerEvents="box-none">
-                    <Pressable style={styles.periodPlatta} onPress={() => router.push(`/stad/${plattStad}`)}>
+                    <Pressable
+                        style={styles.periodPlatta}
+                        onPress={() => router.push(`/stad/${plattStad}`)}
+                        accessibilityLabel={plattansLästext(plattNamn, plattDag, plattVäder)}
+                    >
                         <View style={styles.stadRad}>
                             <Text style={styles.stadText} numberOfLines={1}>{plattNamn}</Text>
                         </View>
                         <View style={styles.dagChip}>
-                            <Text style={styles.dagText}>{periodLabel(offset, längd).toUpperCase()}</Text>
+                            <Text style={[styles.dagText, styles.dagNamn]} numberOfLines={1}>{plattDag.toUpperCase()}</Text>
+                            {plattVäder ? <PlattVader väder={plattVäder} stil={styles.dagText} /> : null}
                         </View>
                     </Pressable>
                     <FilterBricka />
@@ -1064,16 +1089,24 @@ const styles = StyleSheet.create({
     /** Stadsraden är 44 px - i lod med profilknappen. */
     stadRad: { height: 44, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14 },
     stadText: { fontSize: 22, fontWeight: '800', color: '#ffffff' },
-    /** Dagchipet: ljusare yta, rundat BARA nedtill (22 - insatsen 6 = 16). */
+    /** Dagchipet: ljusare yta, rundat BARA nedtill (22 - insatsen 6 = 16).
+     *  Dagen och vädret står på EN rad, mitt i chipet (VADKUL#237). */
     dagChip: {
         alignSelf: 'stretch',
         backgroundColor: 'rgba(255,255,255,0.1)',
         borderBottomLeftRadius: 16,
         borderBottomRightRadius: 16,
-        paddingVertical: 4,
+        paddingVertical: 3,
+        paddingHorizontal: 10,
+        flexDirection: 'row',
+        justifyContent: 'center',
         alignItems: 'center',
     },
-    dagText: { fontSize: 12, fontWeight: '800', color: '#e2e8f0', letterSpacing: 1.4 },
+    /** Fast radhöjd: väderemojin är högre än bokstäverna, och chipet ska vara
+     *  lika högt med och utan väder (16 + 2 x 3 = 22, som förut). */
+    dagText: { fontSize: 12, lineHeight: 16, fontWeight: '800', color: '#e2e8f0', letterSpacing: 1.4 },
+    /** Blir raden för lång är det dagen som kapas, aldrig vädret. */
+    dagNamn: { flexShrink: 1 },
     laddPill: {
         flexDirection: 'row',
         alignItems: 'center',

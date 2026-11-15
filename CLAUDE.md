@@ -107,6 +107,21 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
   inget eget kakelprotokoll. Bara huvudkartan ber om skyltarna
   (`fetchThemeParkStyle({ skyltar: true })`) - en karta som inte laddar
   SKYLT_BILDER i Images ska inte göra det, då står bara namnen kvar.
+- **Vädret i stadsplattan är webbens** (josefanderberg/VADKUL#237, 15/11 2026;
+  webbens #202 och #221). Dagchipet visar SMHI-vädret för ORTEN i plattan
+  ("IDAG · ⛅ 3°") - aldrig användarens position, och inte i "Sverige" eller
+  veckovyn. Tolkningen av prognosen, valet av timme, vad som visas medan en ny
+  ort laddas och minnet kring hämtningen räknas av kontraktets `smhiWeather` -
+  SAMMA kod som webben, så en ändring görs i huvudrepot och hämtas med
+  `npm run kontrakt:sync`, aldrig här. `src/api/smhi.ts` hämtar,
+  `src/lib/useStadsVader.ts` är hooken (port av webbens
+  `apps/web/src/hooks/useCityWeather.ts`), `src/lib/stadsVader.ts` väljer orten
+  och `src/components/PlattVader.tsx` ritar. **Vädret håller sin plats vid
+  ortsbyte** (Josef 13/11: "kan du inte ha en placeholder"): medan den nya
+  ortens prognos hämtas står förra ortens väder kvar nedtonat, och före första
+  svaret ritas en osynlig utfyllnad - dagchipet får aldrig byta bredd under
+  laddningen. Töm aldrig vädret medan en ny ort laddas. SMHI:s data är CC BY
+  4.0: krediten "Väder SMHI" i profilens Om-ruta ska stå kvar.
 - **EAS dev build, aldrig Expo Go** — kartan/push är native-moduler.
 - Inga tokens i AsyncStorage (lib/lagring är bara för inställningar) — RN
   Firebase håller sessionen i nyckelringen/Keystore själv.

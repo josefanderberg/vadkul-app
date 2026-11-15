@@ -327,7 +327,10 @@ export default function ProfilScreen() {
                 <Text style={styles.sektion}>Om VADKUL</Text>
                 <View style={styles.kort}>
                     <Text style={styles.kortText}>Eventkartan för Sverige.</Text>
-                    <Text style={styles.kortHjalp}>Kartdata © OpenStreetMap-bidragsgivare · © CARTO</Text>
+                    {/* Vädret i kartans stadsplatta kommer från SMHI:s öppna
+                        data (CC BY 4.0, josefanderberg/VADKUL#237) - krediten
+                        måste stå kvar så länge vädret visas. */}
+                    <Text style={styles.kortHjalp}>Kartdata © OpenStreetMap-bidragsgivare · © CARTO · Väder SMHI</Text>
                 </View>
 
                 {/* Logga ut - under mappen, egen rad (webben). */}
