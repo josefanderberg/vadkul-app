@@ -723,6 +723,7 @@ export default function KartScreen() {
             längd,
             offset,
             periodText: periodLabel(offset, längd).toLowerCase(),
+            zoom,
         })
         : null;
     const promptÅtgärd = (å: PromptÅtgärd) => {
@@ -965,10 +966,12 @@ export default function KartScreen() {
                 </View>
             </View>
 
+            {/* Prompten är EN RAD med knappen bredvid (VADKUL#252, som webbens
+                tom-prompt och Allt har varit-prompten). */}
             {prompt ? (
                 <View style={styles.promptYta} pointerEvents="box-none">
                     <View style={styles.prompt}>
-                        <Text style={styles.promptText}>{prompt.text}</Text>
+                        <Text style={styles.promptText} numberOfLines={1}>{prompt.text}</Text>
                         {prompt.knapp ? (
                             <Pressable style={styles.promptKnapp} onPress={() => promptÅtgärd(prompt.knapp!.åtgärd)}>
                                 <Text style={styles.promptKnappText}>{prompt.knapp.text}</Text>
@@ -1121,10 +1124,14 @@ const styles = StyleSheet.create({
     // Ovanför dagväljarens + och ↺ (56 pt sedan 29/10, toppen ~202 från botten).
     promptYta: { position: 'absolute', left: 16, right: 16, bottom: 208, alignItems: 'center' },
     prompt: {
+        flexDirection: 'row',
+        maxWidth: '100%',
         backgroundColor: '#ffffff',
-        borderRadius: 18,
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        borderRadius: 999,
+        paddingLeft: 14,
+        paddingRight: 6,
+        paddingVertical: 6,
+        minHeight: 40,
         alignItems: 'center',
         gap: 8,
         shadowColor: '#000',
@@ -1133,9 +1140,9 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 3 },
         elevation: 6,
     },
-    promptText: { fontSize: 14, fontWeight: '700', color: '#0f172a', textAlign: 'center' },
-    promptKnapp: { backgroundColor: '#0f172a', borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8 },
-    promptKnappText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
+    promptText: { flexShrink: 1, fontSize: 14, fontWeight: '700', color: '#0f172a', paddingRight: 8 },
+    promptKnapp: { backgroundColor: '#0f172a', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+    promptKnappText: { color: '#ffffff', fontSize: 12, fontWeight: '800' },
     /** Bannrarna: vit pill i prompt-slotten. Webbens vandrande gradient blir
      *  här ren eldfärg resp. kartans blå. */
     banner: {
