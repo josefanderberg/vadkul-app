@@ -2,7 +2,8 @@
  * Platsskyltarna på appens karta (VADKUL#216, #225; hit i #234, Josef 14/11:
  * apparna ska bli som webben, "med moln och skyltar för badplats osv"):
  * vägmärken för badplatser, museer, bibliotek, naturreservat, golfbanor,
- * lekplatser, idrottsplaner och parker.
+ * lekplatser, idrottsplaner och parker, sedan #241 även bio, teater, arena,
+ * idrottsanläggning (#231), restaurang och kafé (#242).
  *
  * Vilka skyltar som finns, vad de heter, när de tänds, hur lagren ser ut och
  * vilken skylt ett tryck träffar bestäms av kontraktets `poiSigns` - SAMMA kod
@@ -13,9 +14,11 @@
  * TVÅ SKILLNADER MOT WEBBEN, båda påtvingade:
  *  1. Webben hämtar skyltarnas punkter ur kakel ett zoomsteg djupare (#222)
  *     bakom ett eget kakelprotokoll som appens MapLibre saknar. Här ritas de
- *     ur baskartans egna kakel: bad, naturreservat, golf, museum och bibliotek
- *     från zoom 13 (webben 12), namn från 14,5; lekplats, idrottsplan och park
- *     från 15 som på webben.
+ *     ur baskartans egna kakel: resmålen (bad, naturreservat, golf, museum,
+ *     bibliotek, bio, teater, arena) från zoom 13 (webben 12), namn från 14,5;
+ *     idrottsanläggning, lekplats, idrottsplan och park från 15 och restaurang
+ *     och kafé från 16, som på webben. Kaklen bär bio och teater först på
+ *     z15, så i appen tänds de där.
  *  2. Rutan vid tryck är en egen vy (components/SkyltRuta) i stället för
  *     MapLibres popup.
  *
