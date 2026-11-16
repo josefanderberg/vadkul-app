@@ -5,7 +5,9 @@
  *  - STORA KÄLLOR (Svenska kyrkan, PRO, Korpen) klassas på länkens värdnamn och
  *    GÖMS tills de väljs. Kyrkan/PRO kan kryssas i ("Visa även på kartan" i
  *    profilen); Korpen nås bara via FLER i sökpanelen (ägarbeslut 8/8 + 16/9).
- *    I Stockholms flöde är det över hälften av alla event.
+ *    I Stockholms flöde är det över hälften av alla event. Undantag sedan
+ *    15/11 (VADKUL#253, webbens #240): inzoomat till kvartersnivå ritar
+ *    kartan dem även utan kryss - se medInzoomKällor längst ner.
  *  - 🔥 POPULÄRA ensamt smalnar allt, före källgrinden (källornas event är
  *    aldrig pop). IHOP MED KATEGORIER är 🔥 en UNION (ägarbeslut 11/10,
  *    Josef: "om jag väljer populära och scen, så ska det vara både scen och
@@ -157,4 +159,55 @@ export function planeraKategoriChips(
 /** FLER-källorna som syns: de med event, plus den valda även på noll. */
 export function synligaKällor(counts: ReadonlyMap<KällNyckel, number>, vald: KällNyckel | null): KällDef[] {
     return KÄLLOR.filter(k => (counts.get(k.key) ?? 0) > 0 || k.key === vald);
+}
+
+// ── KYRKAN, PRO OCH KORPEN PÅ KARTAN INZOOMAT (VADKUL#253) ────────────────
+/*
+ * Spegel av webbens utils/optInZoom (#240, ägarbeslut 15/11, Josef: visa dem
+ * inzoomat, inte i listan, eftersom de inte är intressanta för andra än de
+ * närboende). Den som zoomat in till sitt kvarter (OPT_IN_KARTA_MIN_ZOOM) ser
+ * källornas brickor på kartan utan något kryss, som om källorna vore
+ * ikryssade: kategori- och 🔥-filtret gäller dem precis som när de är
+ * ikryssade, och de går att öppna. Listan i kortet, plattans siffror, prompten,
+ * bannrarna och Nästa går genom matcharFilter med användarens eget filter som
+ * förut, så där syns källorna bara ikryssade. Ingen ny hämtning - eventen
+ * ligger redan i flödet. Den som själv kryssar i en källa får den som förut,
+ * på alla zoomnivåer och i listan.
+ */
+
+/** Zoomen där källorna tänds på kartan (webbens OPT_IN_MAP_MIN_ZOOM): samma
+ *  kvartersnivå som webbens nära skyltlager. Ticketen lät 15 eller 16 stå
+ *  öppet; 16 är ett steg till om 15 visar sig för tätt. */
+export const OPT_IN_KARTA_MIN_ZOOM = 15;
+
+/** Källorna som tänds inzoomat (webbens INZOOM_SOURCE_KEYS). */
+export const INZOOM_KÄLLOR: readonly KällNyckel[] = ['svenskakyrkan', 'pro', 'korpen'];
+
+/** Tänds källorna på kartan vid den här zoomen? null = okänd zoom (kartan har
+ *  inte rapporterat än) - då inte. */
+export function optInPåKartan(zoom: number | null): boolean {
+    return zoom !== null && zoom >= OPT_IN_KARTA_MIN_ZOOM;
+}
+
+/** Filtret för kartans inzoomade lager (webbens withInzoomSources): samma val,
+ *  men med inzoom-källorna bland de ikryssade. Rör inte `f`. */
+export function medInzoomKällor(f: KartFilter): KartFilter {
+    const optIn = new Set(f.optIn);
+    for (const k of INZOOM_KÄLLOR) optIn.add(k);
+    return { kategorier: f.kategorier, populärt: f.populärt, källa: f.källa, optIn };
+}
+
+/**
+ * Kartans underlag (webbens mapEventsFor). `inzoom` = optInPåKartan(zoom).
+ * Under gränsen är det exakt listans (samma referens, så brickorna inte byggs
+ * om i onödan). Över gränsen: hela flödet genom inzoom-filtret, i flödets
+ * ordning.
+ */
+export function kartansUrval<T>(
+    inzoom: boolean,
+    lista: T[],
+    underlag: readonly T[],
+    passerar: (e: T) => boolean,
+): T[] {
+    return inzoom ? underlag.filter(passerar) : lista;
 }

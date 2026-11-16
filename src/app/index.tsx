@@ -9,7 +9,9 @@
  *    gör ETT hopp. Kameran rör sig ALDRIG av kortnavigering (Nästa/Bakåt/lista).
  *  - allt som räknas "här" mäter KARTANS RUTA: plattans siffror, tom-prompten,
  *    auto-hoppet till Imorgon och ↺-hemmadagen (lib/vy, lib/harVarit).
- *  - kyrkan/PRO/Korpen göms tills de väljs (lib/kartFilter).
+ *  - kyrkan/PRO/Korpen göms tills de väljs (lib/kartFilter) - utom på
+ *    kartan från kvartersnivån (VADKUL#253, webbens #240): där ritas de som
+ *    om de vore ikryssade, men listan och siffrorna visar dem inte.
  *  - en bricka per plats med antal; tryck på en grupp öppnar väljarlistan i
  *    kortet.
  *  - hela Sverige laddas (api/useEvent); bara ~50 platser kring kartans mitt
@@ -58,7 +60,7 @@ import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
 import { bläddraTill, byggBrickor, byggÖnskningar, INGEN_BLÄDDRING, valdPlats, type Bläddring } from '@/lib/kartlager';
 import { byggPrickar, prickFilter, prickNyckel, väljBrickor, väljHål } from '@/lib/kartUrval';
 import { useKonto } from '@/lib/kontoContext';
-import { KÄLLOR, matcharFilter } from '@/lib/kartFilter';
+import { kartansUrval, KÄLLOR, matcharFilter, medInzoomKällor, optInPåKartan } from '@/lib/kartFilter';
 import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kartBanner';
 import { hoppDag, hoppPanorering, hoppStad, prenumereraKartHopp, taKartHopp, type HoppRetur, type KartHopp } from '@/lib/kartHopp';
 import { kartPrompt, type PromptÅtgärd } from '@/lib/kartPrompt';
@@ -110,6 +112,7 @@ export default function KartScreen() {
     const [offset, setOffset] = useState(0);
     const [längd, setLängd] = useState<1 | 7>(1);
     const [ruta, setRuta] = useState<Ruta | null>(null);
+    const [zoom, setZoom] = useState<number | null>(null);
 
     // Första starten: introt ovanpå den stilla kartan (en gång per enhet).
     useEffect(() => {
@@ -133,10 +136,32 @@ export default function KartScreen() {
     // köper synlighet alla dagar t.o.m. featuredUntil, så ett boostat
     // lördagsevent står på kartan redan i dag.
     const boostar = useBoostar();
-    const iPeriod = useMemo(
-        () => filtrerade.filter(e => eventIPeriod(e.time, offset, längd, idag) || synligVarjeDag(e, boostar, nuMs, idagMs)),
-        [filtrerade, offset, längd, idag, boostar, nuMs, idagMs],
+    const visasIPerioden = useCallback(
+        (e: AppFeedEvent) => eventIPeriod(e.time, offset, längd, idag) || synligVarjeDag(e, boostar, nuMs, idagMs),
+        [offset, längd, idag, boostar, nuMs, idagMs],
     );
+    const iPeriod = useMemo(() => filtrerade.filter(visasIPerioden), [filtrerade, visasIPerioden]);
+    // KYRKAN, PRO OCH KORPEN INZOOMAT (VADKUL#253, webbens #240, lib/
+    // kartFilter): från kvartersnivån ritar kartan även de tre källorna, som
+    // om de vore ikryssade. Bara kartans brickor och prickar, molnen och
+    // platsens grupp (väljarlistan, +N) läser kartUnderlag/kartPeriod. Listan
+    // i kortet, plattans siffror, prompten, bannrarna och Nästa går genom
+    // filtrerade/iPeriod som förut. Utzoomat är det exakt filtrerade/iPeriod
+    // (samma referens), och det beror bara på om gränsen är passerad - inte på
+    // varje zoomsteg - så brickorna byggs om en gång när gränsen passeras.
+    const inzoom = optInPåKartan(zoom);
+    const inzoomFilter = useMemo(() => medInzoomKällor(filter), [filter]);
+    const kartUnderlag = useMemo(
+        () => kartansUrval(inzoom, filtrerade, feed.data ?? [], e => matcharFilter(e, inzoomFilter)),
+        [inzoom, filtrerade, feed.data, inzoomFilter],
+    );
+    const kartPeriod = useMemo(
+        () => (kartUnderlag === filtrerade ? iPeriod : kartUnderlag.filter(visasIPerioden)),
+        [kartUnderlag, filtrerade, iPeriod, visasIPerioden],
+    );
+    /** Platsens grupp en annan dag än den visade (listraden, Nästa-dagbytet):
+     *  som kartans bricka räknar den, alltså med källorna inzoomat. */
+    const kartansDag = (o: number, l: number) => kartUnderlag.filter(e => eventIPeriod(e.time, o, l));
     const iRutan = useMemo(
         () => (ruta ? filtrerade.filter(e => iBild(e.lat, e.lng, ruta)) : []),
         [filtrerade, ruta],
@@ -215,7 +240,6 @@ export default function KartScreen() {
         if (offset === 0 && hemmadag === 1) setOffset(1);
     }, [city.slug, city.lat, city.lng, ruta, feed.data, offset, hemmadag]);
 
-    const [zoom, setZoom] = useState<number | null>(null);
     // Molnlagret (components/KartMoln) följer kartans kamera: första vyn här,
     // sedan kartans rörelsehändelser.
     const molnRef = useRef<KartMolnRef>(null);
@@ -255,8 +279,8 @@ export default function KartScreen() {
     };
 
     const trycktBricka = (id: string) => {
-        const e = iPeriod.find(x => x.id === id);
-        if (e) öppna(e, iPeriod);
+        const e = kartPeriod.find(x => x.id === id);
+        if (e) öppna(e, kartPeriod);
     };
 
 
@@ -373,6 +397,8 @@ export default function KartScreen() {
 
     // Nästa: närmaste obesökta i bild (ovanför kortet, inte passerat), sedan
     // nästa dag med event i bild - inget nytt varv, kameran står still.
+    // Nästa bläddrar bland listans event (iPeriod): kyrkan, PRO och Korpen
+    // inzoomat finns bara på kartan, som på webben (VADKUL#253).
     const poolIBild = useMemo(
         () => (ruta ? iPeriod.filter(e => iBild(e.lat, e.lng, ruta, KORT_TÄCKER) && !isEventPast(e, nuMs)) : []),
         [iPeriod, ruta, nuMs],
@@ -404,7 +430,7 @@ export default function KartScreen() {
         ? {
             nästaEtikett: nästaHär ? 'NÄSTA' : nästaDag !== null ? periodLabel(nästaDag, längd).toUpperCase() : null,
             nästaEvent: nästaHär,
-            nästaAntal: nästaHär ? sammaPlats(iPeriod, nästaHär).length : 0,
+            nästaAntal: nästaHär ? sammaPlats(kartPeriod, nästaHär).length : 0,
             bakåtEvent: bakåtKort ? bakåtKort.event ?? bakåtKort.grupp[0] ?? null : null,
             bakåtAntal: bakåtKort?.grupp.length ?? 0,
             onNästa: () => {
@@ -417,7 +443,7 @@ export default function KartScreen() {
                 push();
                 if (steg.nästa) {
                     setBesökta(steg.besökta);
-                    setKort({ event: steg.nästa, grupp: sammaPlats(iPeriod, steg.nästa), frånLista: false });
+                    setKort({ event: steg.nästa, grupp: sammaPlats(kartPeriod, steg.nästa), frånLista: false });
                     return;
                 }
                 if (nästaDag === null) return;
@@ -432,7 +458,7 @@ export default function KartScreen() {
                 setOffset(nästaDag);
                 ankareRef.current = val;
                 setBesökta(new Set());
-                setKort({ event: val, grupp: sammaPlats(period, val), frånLista: false });
+                setKort({ event: val, grupp: sammaPlats(kartansDag(nästaDag, längd), val), frånLista: false });
             },
             onBakåt: historik.length > 0
                 ? () => {
@@ -457,10 +483,9 @@ export default function KartScreen() {
         const d = dagOffset(e.time);
         const nyOffset = eventIPeriod(e.time, offset, längd) ? offset : Math.max(0, d);
         if (nyOffset !== offset) setOffset(nyOffset);
-        const period = filtrerade.filter(x => eventIPeriod(x.time, nyOffset, längd));
         ankareRef.current = e;
         setBesökta(new Set());
-        setKort({ event: e, grupp: sammaPlats(period, e), frånLista: false });
+        setKort({ event: e, grupp: sammaPlats(kartansDag(nyOffset, längd), e), frånLista: false });
     };
 
     // Dagbyte från väljaren stänger kortet om det valda inte längre syns.
@@ -487,8 +512,8 @@ export default function KartScreen() {
     // multibrickorna att börja om på första bilden. Den valda platsen är en
     // egen bricka som kartan ritar överst (lib/kartlager.valdPlats).
     const platser = useMemo(
-        () => byggBrickor(iPeriod, { nowMs: nuMs, ärSparad, stjärnor: stjärnmärkta, boostar }),
-        [iPeriod, nuMs, ärSparad, stjärnmärkta, boostar],
+        () => byggBrickor(kartPeriod, { nowMs: nuMs, ärSparad, stjärnor: stjärnmärkta, boostar }),
+        [kartPeriod, nuMs, ärSparad, stjärnmärkta, boostar],
     );
     // +N RÄKNAR NER (VADKUL#190, webbens visitedOrderRef): ordningen man valt
     // eventen på den valda platsen. Härleds ur valet under renderingen
@@ -500,8 +525,8 @@ export default function KartScreen() {
     const nyBläddring = bläddraTill(bläddring, aktuellt);
     if (nyBläddring !== bläddring) setBläddring(nyBläddring);
     const vald = useMemo(
-        () => valdPlats(iPeriod, valtId, { nowMs: nuMs, ärSparad, stjärnor: stjärnmärkta, boostar }, bläddring.ordning),
-        [iPeriod, valtId, nuMs, ärSparad, stjärnmärkta, boostar, bläddring.ordning],
+        () => valdPlats(kartPeriod, valtId, { nowMs: nuMs, ärSparad, stjärnor: stjärnmärkta, boostar }, bläddring.ordning),
+        [kartPeriod, valtId, nuMs, ärSparad, stjärnmärkta, boostar, bläddring.ordning],
     );
     // BRICKOR KRING MITTEN, PRICKAR ANNARS (Josef 19/10, lib/kartUrval -
     // webbens reveal-urval): de ~50 platserna närmast kartans mitt är
@@ -901,7 +926,7 @@ export default function KartScreen() {
 
             {/* MOLNEN (VADKUL#233): webbens molnlager, ovanpå kartan och under
                 allt krom. Tar aldrig emot tryck. */}
-            {klar ? <KartMoln ref={molnRef} punkter={iPeriod} fokus={molnFokus} fria={molnFria} /> : null}
+            {klar ? <KartMoln ref={molnRef} punkter={kartPeriod}fokus={molnFokus} fria={molnFria} /> : null}
 
             {/* SKYLTRUTAN (VADKUL#234): vad en tryckt platsskylt är. Ovanpå
                 kartan och molnen, under allt krom. Tar aldrig emot tryck. */}

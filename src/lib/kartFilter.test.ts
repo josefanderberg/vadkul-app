@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import {
+    INZOOM_KÄLLOR,
+    kartansUrval,
     klassaKälla,
+    KÄLLOR,
     matcharFilter,
+    medInzoomKällor,
+    OPT_IN_KARTA_MIN_ZOOM,
+    optInPåKartan,
     planeraKategoriChips,
     räknaKategorier,
     räknaKällor,
@@ -150,5 +156,80 @@ describe('synligaKällor', () => {
         expect(synligaKällor(new Map([['pro', 2]]), null).map(k => k.key)).toEqual(['pro']);
         expect(synligaKällor(new Map(), 'korpen').map(k => k.key)).toEqual(['korpen']);
         expect(synligaKällor(new Map(), null)).toEqual([]);
+    });
+});
+
+// Samma fall som webbens utils/optInZoom.test.ts (#240), plus hur inzoom-
+// filtret beter sig genom matcharFilter (VADKUL#253).
+describe('optInPåKartan', () => {
+    it('tänds från kvartersnivån och uppåt', () => {
+        expect(optInPåKartan(OPT_IN_KARTA_MIN_ZOOM)).toBe(true);
+        expect(optInPåKartan(OPT_IN_KARTA_MIN_ZOOM + 2.3)).toBe(true);
+    });
+    it('är släckt utzoomat och innan kartan rapporterat sin zoom', () => {
+        expect(optInPåKartan(OPT_IN_KARTA_MIN_ZOOM - 0.01)).toBe(false);
+        expect(optInPåKartan(11)).toBe(false);
+        expect(optInPåKartan(null)).toBe(false);
+    });
+    it('gränsen är webbens, 15 eller 16 som ticketen sa', () => {
+        expect([15, 16]).toContain(OPT_IN_KARTA_MIN_ZOOM);
+    });
+});
+
+describe('INZOOM_KÄLLOR', () => {
+    it('är kyrkan, PRO och Korpen, och alla finns i KÄLLOR', () => {
+        expect([...INZOOM_KÄLLOR].sort()).toEqual(['korpen', 'pro', 'svenskakyrkan']);
+        const kända = new Set(KÄLLOR.map(k => k.key));
+        for (const k of INZOOM_KÄLLOR) expect(kända.has(k)).toBe(true);
+    });
+    it('täcker varje källa som klassas, så ingen källa blir kvar dold inzoomat', () => {
+        for (const e of [KYRKAN, PRO, KORPEN]) expect(INZOOM_KÄLLOR).toContain(klassaKälla(e));
+    });
+});
+
+describe('medInzoomKällor', () => {
+    it('lägger till källorna utan att röra filtrets övriga val', () => {
+        const kategorier = new Set(['music' as const]);
+        const filtret = f({ kategorier, populärt: true, optIn: new Set(['pro'] as const) });
+        const ut = medInzoomKällor(filtret);
+        expect([...ut.optIn].sort()).toEqual(['korpen', 'pro', 'svenskakyrkan']);
+        expect(ut.kategorier).toBe(kategorier);
+        expect(ut.populärt).toBe(true);
+        expect(ut.källa).toBeNull();
+        expect([...filtret.optIn]).toEqual(['pro']);
+    });
+    it('släpper igenom källorna utan kryss, men listans filter gör det inte', () => {
+        for (const e of [KYRKAN, PRO, KORPEN]) {
+            expect(matcharFilter(e, TOMT_FILTER)).toBe(false);
+            expect(matcharFilter(e, medInzoomKällor(TOMT_FILTER))).toBe(true);
+        }
+    });
+    it('kategorin och 🔥 gäller källorna som när de är ikryssade', () => {
+        const sport = medInzoomKällor(f({ kategorier: new Set(['sport']) }));
+        expect(matcharFilter(KORPEN, sport)).toBe(true);
+        expect(matcharFilter(KYRKAN, sport)).toBe(false);
+        // Källornas event är aldrig pop: 🔥 ensamt håller dem borta.
+        expect(matcharFilter(KYRKAN, medInzoomKällor(f({ populärt: true })))).toBe(false);
+    });
+    it('FLER-källan visar fortfarande bara sin källa', () => {
+        const bara = medInzoomKällor(f({ källa: 'pro' }));
+        expect(matcharFilter(PRO, bara)).toBe(true);
+        expect(matcharFilter(KYRKAN, bara)).toBe(false);
+        expect(matcharFilter(JAZZ, bara)).toBe(false);
+    });
+});
+
+describe('kartansUrval', () => {
+    const lista = [{ id: 'a' }, { id: 'c' }];
+    const underlag = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+    const passerar = (e: { id: string }) => e.id !== 'd';
+
+    it('utzoomat är kartans underlag samma referens som listans', () => {
+        expect(kartansUrval(optInPåKartan(12), lista, underlag, passerar)).toBe(lista);
+        expect(kartansUrval(optInPåKartan(null), lista, underlag, passerar)).toBe(lista);
+    });
+    it('inzoomat filtreras underlaget med inzoom-regeln, i underlagets ordning', () => {
+        const inzoom = optInPåKartan(OPT_IN_KARTA_MIN_ZOOM);
+        expect(kartansUrval(inzoom, lista, underlag, passerar).map(e => e.id)).toEqual(['a', 'b', 'c']);
     });
 });

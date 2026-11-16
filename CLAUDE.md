@@ -61,7 +61,7 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
 - **Kartbesluten ärvs från huvudrepots `.claude/skills/kart-ui/`** — borttagna
   features återuppstår inte i appen. Kartan är MapLibre RN (aldrig Mapbox).
   Webbparitetens regler bor i lib/ med webbfilen angiven i huvudkommentaren
-  (kartFilter ← matchesFilterFor/sources, harVarit ← isEventPast/autoDayBump,
+  (kartFilter ← matchesFilterFor/sources/optInZoom, harVarit ← isEventPast/autoDayBump,
   vy ← viewportTour/popularList, sok ← eventSearch, stadsPeriod/stadsHero/
   stadsSpotlight/stadsTopplista ← stadssidornas app/(v1)/evenemang/) - ändras
   webben ska kopian följa. `HERO_STÄDER` i lib/stadsHero är en KOPIA av
