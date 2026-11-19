@@ -85,6 +85,51 @@ describe('väljTända', () => {
     });
 });
 
+describe('väljTända utzoomat med känd vy (webbens #200, VADKUL#261)', () => {
+    const VY = { width: 390, height: 844 };
+    const ZOOM = 9;
+    /** En punkt dx/dy pt från mitten vid ZOOM (öster/söder positivt). */
+    function vid(id: string, dx: number, dy: number, pop = false): UrvalsPunkt {
+        const world = 512 * 2 ** ZOOM;
+        const s = Math.sin((MITT.lat * Math.PI) / 180);
+        const y = 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI) + dy / world;
+        const lat = ((2 * Math.atan(Math.exp((0.5 - y) * 2 * Math.PI)) - Math.PI / 2) * 180) / Math.PI;
+        return { id, lat, lng: MITT.lng + (dx / world) * 360, pop };
+    }
+
+    it('samma urval som webben: kontraktets pickSpreadRevealKeys', () => {
+        const punkter = [
+            ...Array.from({ length: 40 }, (_, i) => vid(`klunga${i}`, 10 + (i % 6) * 4, 10 + Math.floor(i / 6) * 4, i < 4)),
+            vid('norr-pop', 0, -350, true),
+            vid('söder-pop', 20, 360, true),
+            vid('väster', -170, 40),
+            vid('öster', 170, -40),
+        ];
+        const t = väljTända(punkter, MITT, ZOOM, VY);
+        expect(t.size).toBe(URVAL_MIN);
+        // Inte bara klungan mitt i bild: de populära i bildens kanter och de
+        // ensamma vid sidorna kommer med.
+        for (const id of ['norr-pop', 'söder-pop', 'väster', 'öster']) expect(t.has(id), id).toBe(true);
+        const ur = [...t].filter(id => id.startsWith('klunga')).length;
+        expect(ur).toBeLessThan(URVAL_MIN);
+    });
+
+    it('event utanför vyn tänds aldrig', () => {
+        const t = väljTända([vid('inne', 0, 0), vid('ute', 0, 900)], MITT, ZOOM, VY);
+        expect([...t]).toEqual(['inne']);
+    });
+
+    it('från zoom 12 gäller urvalet kring mitten igen, även med vy', () => {
+        const t = väljTända(rad(80), MITT, 14, VY);
+        expect(t.size).toBe(50);
+        expect(t.has('p0')).toBe(true);
+    });
+
+    it('utan vy (kartan har inte mätts än): urvalet kring mitten', () => {
+        expect(väljTända(rad(80, i => i % 10 === 9), MITT, 10)).toEqual(väljTända(rad(80, i => i % 10 === 9), MITT, 10, null));
+    });
+});
+
 const ids = (fc: { features: { properties: { id: string } }[] }) => fc.features.map(f => f.properties.id);
 
 describe('väljBrickor', () => {
@@ -161,14 +206,17 @@ describe('molnhålet', () => {
         expect(väljHål(samling([plats('a', MITT.lng)]), null, ZOOM).features).toHaveLength(0);
     });
 
-    it('tänder de tre närmaste trycket, närmast oavsett popularitet', () => {
+    it('tänder de fem närmaste trycket, närmast oavsett popularitet (#261)', () => {
         const fc = samling([
-            plats('fjärde', MITT.lng + 0.04, { pop: true }),
+            plats('sjätte', MITT.lng + 0.06, { pop: true }),
             plats('andra', MITT.lng + 0.02),
             plats('första', MITT.lng + 0.01),
+            plats('femte', MITT.lng + 0.05),
             plats('tredje', MITT.lng + 0.03),
+            plats('fjärde', MITT.lng + 0.04),
         ]);
-        expect(väljHål(fc, TRYCK, ZOOM).features.map(f => f.properties.id).sort()).toEqual(['andra', 'första', 'tredje']);
+        expect(väljHål(fc, TRYCK, ZOOM).features.map(f => f.properties.id).sort())
+            .toEqual(['andra', 'femte', 'fjärde', 'första', 'tredje']);
     });
 
     it('ett tryck i havet tänder aldrig de närmaste långt bort', () => {
@@ -181,14 +229,16 @@ describe('molnhålet', () => {
         expect(väljHål(fc, TRYCK, ZOOM).features.map(f => f.properties.id)).toEqual(['kommer']);
     });
 
-    it('det som redan är bricka tar sin plats bland de tre men ritas inte igen', () => {
+    it('det som redan är bricka tar sin plats bland de fem men ritas inte igen', () => {
         const fc = samling([
             plats('a', MITT.lng + 0.01),
             plats('b', MITT.lng + 0.02),
             plats('c', MITT.lng + 0.03),
             plats('d', MITT.lng + 0.04),
+            plats('e', MITT.lng + 0.05),
+            plats('f', MITT.lng + 0.06),
         ]);
-        expect(väljHål(fc, TRYCK, ZOOM, new Set(['a'])).features.map(f => f.properties.id).sort()).toEqual(['b', 'c']);
+        expect(väljHål(fc, TRYCK, ZOOM, new Set(['a'])).features.map(f => f.properties.id).sort()).toEqual(['b', 'c', 'd', 'e']);
     });
 
     it('hålet är samma mått i pt på alla zoomar: inzoomat ryms färre grader', () => {

@@ -22,9 +22,15 @@
  * etikett under den faller bort utan att något filter byts (ett nytt filter
  * eller uttryck på ett symbollager lägger också ut hela lagret igen).
  *
- * MOLNHÅLET RÖR INTE BRICKKÄLLAN HELLER (VADKUL#233): de upp till tre
+ * MOLNHÅLET RÖR INTE BRICKKÄLLAN HELLER (VADKUL#233): de upp till fem
  * brickorna som ett tryck tänder (lib/kartUrval.väljHål) ligger i en egen
  * liten källa mellan brickorna och den valda. Ett tryck skickar bara om den.
+ *
+ * TITLARNA RUNT BRICKAN (VADKUL#261, webbens #196/#204): ett titellager per
+ * läge i webbens ordning (under, höger, vänster, över, snett), osynliga
+ * krockytor över de tända brickornas kropp och "+N" så ingen titel hamnar
+ * bakom en bricka, och en spärr i kroppens mitt så varje bricka får sin titel
+ * högst en gång. Hela resonemanget i lib/etikettLagen.
  *
  * Takten är webbens: en multibricka i taget byter ram var 0,5 s (tona 0,2 s),
  * men varje ram står minst 4 s (webbens 3-8 s per bricka), och en hög av
@@ -56,11 +62,24 @@ import {
     type TonPost,
 } from '@/lib/brickCykel';
 import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE } from '@/lib/brickor';
+import {
+    ETIKETT_LÄGEN,
+    HINDER_BADGE,
+    HINDER_HÖGER,
+    HINDER_VÄNSTER,
+    hinderIkon,
+    KATEGORI_LÄGE,
+    SPÄRR_MITT,
+    titelLagerId,
+    type Ruta,
+} from '@/lib/etikettLagen';
 import type { BrickProps } from '@/lib/kartlager';
 
 const GRUPP_FILTER: FilterSpecification = ['>', ['get', 'antal'], 1];
 /** Passerade grupper får ingen text (en etikett över en släckt bricka svävar). */
 const ETIKETT_FILTER: FilterSpecification = ['!', ['get', 'past']];
+/** "+N"-pillens krockyta: bara tända grupper. */
+const HINDER_BADGE_FILTER: FilterSpecification = ['all', ['!', ['get', 'past']], ['>', ['get', 'antal'], 1]];
 
 export const ETIKETT_STIL = {
     textFont: ['Montserrat Medium', 'Open Sans Bold'],
@@ -76,9 +95,61 @@ export const ETIKETT_STIL = {
     textHaloWidth: 2,
 };
 
-// Fasta stilar - samma objekt vid varje rendering.
-const KATEGORI_STIL = { ...ETIKETT_STIL, textField: ['get', 'label'] as unknown as Expression };
-const TITEL_STIL = { ...ETIKETT_STIL, textField: ['get', 'titel'] as unknown as Expression };
+// ── Titlarnas lägen, krockytor och spärr (VADKUL#261, lib/etikettLagen) ──
+// SPÄRREN: en osynlig 2x2-ikon mitt i kroppen (i springan mellan krock-
+// halvorna) som titeln bär. Den placeras ihop med titeln, så brickans titlar
+// i senare lager - och dess kategori - krockar med den.
+const SPÄRR: SymbolLayerStyle = {
+    iconImage: 'etikett-sparr',
+    iconSize: 1,
+    iconAnchor: 'center',
+    iconOffset: [SPÄRR_MITT[0], SPÄRR_MITT[1]],
+    iconPadding: [0],
+    iconAllowOverlap: false,
+    iconIgnorePlacement: false,
+    iconOpacity: 0,
+};
+// Fasta stilar - samma objekt vid varje rendering. Lager i = webbens läge i.
+// Första lagret (under spetsen) får stå även om spärren inte får plats -
+// de andra kräver den, annars kunde en bricka få titel i två lager.
+const TITEL_STILAR = ETIKETT_LÄGEN.map(([ankare, [x, y]], i) => ({
+    ...ETIKETT_STIL,
+    ...SPÄRR,
+    iconOptional: i === 0,
+    textField: ['get', 'titel'] as unknown as Expression,
+    textAnchor: ankare,
+    textOffset: [x, y],
+    textJustify: 'auto' as const,
+}));
+// Kategorireserven (webbens #196): bara under spetsen, och bara när brickan
+// inte fått någon titel - då står spärren redan där och kategorin krockar.
+const KATEGORI_STIL = {
+    ...ETIKETT_STIL,
+    ...SPÄRR,
+    textField: ['get', 'label'] as unknown as Expression,
+    textAnchor: KATEGORI_LÄGE[0],
+    textOffset: [KATEGORI_LÄGE[1][0], KATEGORI_LÄGE[1][1]],
+};
+// KROCKYTORNA (webbens #204): genomskinliga bilder över kroppens två halvor
+// och "+N"-pillen. allowOverlap: de står alltid; ignorePlacement false: de
+// skrivs in i kollisionen, så titlarna viker undan. Brickorna själva ignorerar
+// kollisionen (alla syns alltid) och ser alltså inte titlarna.
+function hinderStil(bild: string, ruta: Ruta): SymbolLayerStyle {
+    const { offset } = hinderIkon(ruta);
+    return {
+        iconImage: bild,
+        iconSize: 1,
+        iconAnchor: 'top-left',
+        iconOffset: offset,
+        iconPadding: [0],
+        iconAllowOverlap: true,
+        iconIgnorePlacement: false,
+        iconOpacity: 0,
+    };
+}
+const HINDER_VÄNSTER_STIL = hinderStil('hinder-halva', HINDER_VÄNSTER);
+const HINDER_HÖGER_STIL = hinderStil('hinder-halva', HINDER_HÖGER);
+const HINDER_BADGE_STIL = hinderStil('hinder-badge', HINDER_BADGE);
 const BRICK_STIL: SymbolLayerStyle = {
     iconImage: ['get', 'ikon'] as unknown as Expression,
     iconSize: BRICKA_ICON_SIZE,
@@ -115,7 +186,15 @@ const VALD_ANTAL_STIL: SymbolLayerStyle = {
 };
 // textAllowOverlap utan textIgnorePlacement: titeln syns alltid OCH tar sin
 // plats i kollisionen - platsens vanliga etikett på samma ställe faller bort.
-const VALD_TITEL_STIL = { ...ETIKETT_STIL, textField: ['get', 'titel'] as unknown as Expression, textAllowOverlap: true };
+// Den bär spärren (alltid placerad), så platsens titel inte dyker upp en gång
+// till vid sidan eller ovanför i ett senare lager.
+const VALD_TITEL_STIL = {
+    ...ETIKETT_STIL,
+    ...SPÄRR,
+    iconAllowOverlap: true,
+    textField: ['get', 'titel'] as unknown as Expression,
+    textAllowOverlap: true,
+};
 const INGEN_VALD = { type: 'FeatureCollection', features: [] } as Brickor;
 
 function useAppFramme(): boolean {
@@ -169,19 +248,25 @@ export function KartBrickor({
             <GeoJSONSource id="events" data={data}>
                 {/* Etiketterna (webbens LABEL_LAYER_IDS): TITEL FÖRE
                     KATEGORI NÄR DEN FÅR PLATS, annars kategorin, annars
-                    inget. Båda ligger UNDER brickorna (en etikett får
+                    inget. Alla ligger UNDER brickorna (en etikett får
                     aldrig skymma en bricka). MapLibre placerar
-                    uppifrån och ner - titellagret tar plats först, och
-                    kategorin för SAMMA bricka krockar med sin egen
-                    titel och syns bara när titeln inte fick plats.
-                    Inom lagret går de populäraste först (etikettPrio).
-                    INGEN zoomgräns, till skillnad från webbens
-                    LABEL_CAT_MIN_ZOOM 9 (Josef 9/10: "så man alltid
-                    ser något på avstånd iallafall") - kollisionen
+                    uppifrån och ner: först krockytorna, sedan titlarna
+                    läge för läge (VADKUL#261 - etikett-titel-1 under
+                    spetsen överst, alltså först), sist kategorin, som
+                    bara får stå där brickan inte fått någon titel.
+                    Inom varje lager går de populäraste först
+                    (etikettPrio). INGEN zoomgräns, till skillnad från
+                    webbens LABEL_CAT_MIN_ZOOM 9 (Josef 9/10: "så man
+                    alltid ser något på avstånd iallafall") - kollisionen
                     gallrar, och bara urvalet kring mitten är brickor
                     (resten är prickar utan etikett). */}
                 <Layer type="symbol" id="etikett-kategori" filter={ETIKETT_FILTER} style={KATEGORI_STIL} />
-                <Layer type="symbol" id="etikett-titel" filter={ETIKETT_FILTER} style={TITEL_STIL} />
+                {TITEL_STILAR.map((stil, i) => ({ stil, i })).reverse().map(({ stil, i }) => (
+                    <Layer key={i} type="symbol" id={titelLagerId('etikett', i)} filter={ETIKETT_FILTER} style={stil} />
+                ))}
+                <Layer type="symbol" id="hinder-vanster" filter={ETIKETT_FILTER} style={HINDER_VÄNSTER_STIL} />
+                <Layer type="symbol" id="hinder-hoger" filter={ETIKETT_FILTER} style={HINDER_HÖGER_STIL} />
+                <Layer type="symbol" id="hinder-badge" filter={HINDER_BADGE_FILTER} style={HINDER_BADGE_STIL} />
                 <Layer type="symbol" id="event-brickor" style={BRICK_STIL} />
                 {/* "+N" på grupper: vit pill + siffra som EN bakad bild
                     (antal-N), så en grannbadges siffra aldrig ritas
@@ -193,7 +278,15 @@ export function KartBrickor({
                 där molnen skingras. Alltid monterad - tom utan tryck - så
                 lagren ligger kvar ovanför brickorna och under den valda. */}
             <GeoJSONSource id="events-hal" data={hålData}>
-                <Layer type="symbol" id="etikett-hal" filter={ETIKETT_FILTER} style={TITEL_STIL} />
+                {/* Hålets titlar läge för läge direkt efter brickornas i
+                    samma läge (beforeId = strax under det lagret), och dess
+                    krockytor bland brickornas - före alla titlar. */}
+                {TITEL_STILAR.map((stil, i) => (
+                    <Layer key={i} type="symbol" id={titelLagerId('hal', i)} beforeId={titelLagerId('etikett', i)} filter={ETIKETT_FILTER} style={stil} />
+                ))}
+                <Layer type="symbol" id="hal-hinder-vanster" beforeId="event-brickor" filter={ETIKETT_FILTER} style={HINDER_VÄNSTER_STIL} />
+                <Layer type="symbol" id="hal-hinder-hoger" beforeId="event-brickor" filter={ETIKETT_FILTER} style={HINDER_HÖGER_STIL} />
+                <Layer type="symbol" id="hal-hinder-badge" beforeId="event-brickor" filter={HINDER_BADGE_FILTER} style={HINDER_BADGE_STIL} />
                 <Layer type="symbol" id="hal-brickor" style={BRICK_STIL} />
                 <Layer type="symbol" id="hal-antal" filter={GRUPP_FILTER} style={ANTAL_STIL} />
             </GeoJSONSource>
@@ -202,6 +295,11 @@ export function KartBrickor({
                 (som läggs under "+N") och badgarna. Brickan, dess "+N" och
                 titeln, som alltid syns. */}
             <GeoJSONSource id="events-vald" data={valdData}>
+                {/* Den valdas krockytor bland de andra (den kan ligga
+                    utanför urvalet), så inga titlar hamnar under den. */}
+                <Layer type="symbol" id="vald-hinder-vanster" beforeId="event-brickor" style={HINDER_VÄNSTER_STIL} />
+                <Layer type="symbol" id="vald-hinder-hoger" beforeId="event-brickor" style={HINDER_HÖGER_STIL} />
+                <Layer type="symbol" id="vald-hinder-badge" beforeId="event-brickor" filter={GRUPP_FILTER} style={HINDER_BADGE_STIL} />
                 <Layer type="symbol" id="vald-bricka" style={VALD_BRICK_STIL} />
                 <Layer type="symbol" id="vald-antal" filter={GRUPP_FILTER} style={VALD_ANTAL_STIL} />
                 <Layer type="symbol" id="etikett-vald" style={VALD_TITEL_STIL} />

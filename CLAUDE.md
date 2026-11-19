@@ -67,6 +67,20 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
   webben ska kopian följa. `HERO_STÄDER` i lib/stadsHero är en KOPIA av
   webbens utils/cityPages (kartbildernas mittpunkter) - ny stadssida på
   webben = ny rad här, annars hamnar brickorna fel på bilden.
+- **Titlarna står där webben ställer dem** (josefanderberg/VADKUL#261, 19/11
+  2026, Josef: "titlarna både över, under och höger och vänster om
+  eventmarkörerna ... och att de inte hamnar bakom något", på iOS och
+  Android). `src/lib/etikettLagen.ts` är en PORT av webbens
+  `apps/web/src/components/v2/v2MapLabel.ts` (lägena i webbens ordning,
+  krockytorna över kropp och "+N"). MapLibre RN saknar
+  `text-variable-anchor-offset`, så `components/KartBrickor` har ett
+  titellager per läge plus en osynlig spärr mitt i kroppen som hindrar att en
+  bricka får titel i två lager - ta inte bort spärren eller springan i
+  krockytan, då dubbleras titlarna. Bilderna i `assets/hinder/` är
+  genomskinliga och har exakt måtten i `HINDER_BILDER` (testat). Utzoomat
+  sprids de tända brickorna med kontraktets `pickSpreadRevealKeys`, SAMMA kod
+  som webben (#200), och hålet vid tryck/långtryck tänder kontraktets
+  `CLOUD_REVEAL_MAX` (5).
 - **Brickorna bakas med WEBBENS ritkod**: `node scripts/baka-brickor.mjs`
   (headless Chrome ur huvudrepots node_modules) skriver assets/brickor/ +
   src/lib/brick*.generated.ts och emoji*.generated.ts. Redigera aldrig de

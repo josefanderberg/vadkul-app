@@ -19,8 +19,12 @@
  *    (lib/kartUrval, webbens reveal). Passerade platser är dämpade prickar.
  *  - MOLNEN (VADKUL#233): vita moln över det som är glest, klart väder där
  *    eventen finns - webbens molnlager med samma kod (components/KartMoln).
- *    Ett tryck skingrar molnen där och tänder de tre närmaste brickorna
- *    (molnhålet); det valda eventet håller molnen undan.
+ *    Ett tryck eller långtryck skingrar molnen där och tänder de fem närmaste
+ *    brickorna (molnhålet, VADKUL#261); det valda eventet håller molnen undan.
+ *  - TITLARNA står där webben ställer dem - under, vid sidan, över, snett -
+ *    och aldrig bakom en tänd bricka (components/KartBrickor, VADKUL#261).
+ *    Utzoomat sprids de tända brickorna över vyn, det populäraste i varje
+ *    ruta (lib/kartUrval, webbens #200).
  *  - Platsskyltarna (VADKUL#234): webbens vägmärken för bad, museer,
  *    naturreservat m.m. när man zoomat in nära (lib/kartSkyltar). Ett tryck
  *    på en skylt visar vad den är (components/SkyltRuta).
@@ -29,7 +33,7 @@
  *    nedtonat - dagchipet byter aldrig bredd under laddningen (#221).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, GeoJSONSource, Images, Layer, Map } from '@maplibre/maplibre-react-native';
@@ -53,6 +57,7 @@ import { prenumereraStjärnmärkta } from '@/data/stjarnor';
 import { synligVarjeDag } from '@/lib/boost';
 import { useBoostar } from '@/lib/useBoostar';
 import { BRICKA_IMAGES } from '@/lib/brickBilder.generated';
+import { HINDER_IMAGES } from '@/lib/hinderBilder';
 import { BRICKA_ICON_SIZE } from '@/lib/brickor';
 import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/dagar';
 import { useFilter } from '@/lib/filterContext';
@@ -535,14 +540,19 @@ export default function KartScreen() {
     // med när man panorerar. Prick-källan beror bara på platserna och skickas
     // inte om vid panorering - de som är brickor döljs med filtret.
     const urvalsMitt = useMemo(() => (ruta ? rutansMitt(ruta) : null), [ruta]);
+    // Kartan fyller skärmen: fönstret ÄR vyn (webbens canvas-mått). Utzoomat
+    // sprids urvalet över den, det populäraste i varje ruta (VADKUL#261).
+    const fönster = useWindowDimensions();
+    const vy = useMemo(() => ({ width: fönster.width, height: fönster.height }), [fönster.width, fönster.height]);
     const brickor = useMemo(
-        () => väljBrickor(platser, urvalsMitt, zoom ?? 11),
-        [platser, urvalsMitt, zoom],
+        () => väljBrickor(platser, urvalsMitt, zoom ?? 11, vy),
+        [platser, urvalsMitt, zoom, vy],
     );
-    // MOLNHÅLET (VADKUL#233, webbens #195): ett tryck på kartan skingrar
-    // molnen där och tänder de tre platserna närmast trycket - ovanpå urvalet
-    // kring mitten, i en egen liten källa så brickkällan inte rörs av trycket.
-    // Hålet ligger kvar tills nästa tryck och finns på alla zoomar.
+    // MOLNHÅLET (VADKUL#233, webbens #195): ett tryck eller långtryck på
+    // kartan skingrar molnen där och tänder de fem platserna närmast trycket
+    // (VADKUL#261) - ovanpå urvalet kring mitten, i en egen liten källa så
+    // brickkällan inte rörs av trycket. Hålet ligger kvar tills nästa tryck
+    // och finns på alla zoomar.
     const [tryckPunkt, setTryckPunkt] = useState<CloudPoint | null>(null);
     const hål = useMemo(
         () => väljHål(platser, tryckPunkt, zoom ?? 11, new Set(brickor.features.map(f => f.properties.id))),
@@ -595,7 +605,7 @@ export default function KartScreen() {
         [brickor],
     );
     const emojiBrickor = useEmojiBrickor(önskadeBilder, förladdadeBilder);
-    const kartBilder = useMemo(() => ({ ...BRICKA_IMAGES, ...SKYLT_BILDER, ...emojiBrickor.bilder }), [emojiBrickor.bilder]);
+    const kartBilder = useMemo(() => ({ ...BRICKA_IMAGES, ...HINDER_IMAGES, ...SKYLT_BILDER, ...emojiBrickor.bilder }), [emojiBrickor.bilder]);
     const dolda = useMemo(() => prickFilter([...brickIds]) as unknown as FilterSpecification, [brickIds]);
 
     // ── Önskningarna (webbens drömska wish-brickor) ───────────────────────
@@ -631,6 +641,14 @@ export default function KartScreen() {
         // den igen nedan (webbens handleClick).
         skyltRef.current?.stäng();
         void träffPåKartan({ lng, lat }, tx, ty);
+    };
+    // LÅNGTRYCK (VADKUL#261, Josef 19/11: "där man klickar/håller. så ska de
+    // 5 närmsta synas"): håller man fingret på kartan flyttar molnhålet dit,
+    // precis som ett tryck - men inget väljs och kortet står kvar.
+    const kartHåll = (ev: { nativeEvent: { lngLat: LngLat } }) => {
+        const [lng, lat] = ev.nativeEvent.lngLat;
+        setTryckPunkt({ lng, lat });
+        molnRef.current?.tryck({ lng, lat });
     };
     // PLATSSKYLT UNDER TRYCKET (VADKUL#225, hit i #234): visa vad den är.
     // Kartan frågas bara om skyltlagren, och svaret används aldrig rakt av:
@@ -862,6 +880,7 @@ export default function KartScreen() {
                         skyltRef.current?.följ();
                     }}
                     onPress={karttryck}
+                    onLongPress={kartHåll}
                 >
                     <Camera ref={cameraRef} initialViewState={{ center: [city.lng, city.lat], zoom: 11 }} />
                     <Images images={kartBilder} />

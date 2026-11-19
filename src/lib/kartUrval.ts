@@ -15,14 +15,20 @@
  *   brickor) är alltid brickor. Passerade platser är alltid prickar (dämpade),
  *   utom den valda.
  *
- * - MOLNHÅLET (webbens #195, josefanderberg/VADKUL#233): ett tryck på kartan
- *   tänder de tre platserna närmast trycket, inom hålet där molnen skingras.
- *   De läggs OVANPÅ urvalet kring mitten, i en egen liten samling (väljHål) -
- *   brickkällan rörs inte av ett tryck.
+ * - UTZOOMAT SPRIDS URVALET över vyn (webbens #200, josefanderberg/VADKUL#261,
+ *   Josef 19/11: "när man är mycket utzoomat så prioriterar vi de populäraste
+ *   eventen på kartan. Alltså inte bara i mitten av skärmen"): under
+ *   URVAL_SPRIDNING_ZOOM delas kartan i rutor och varje ruta bidrar med sitt
+ *   populäraste - kontraktets pickSpreadRevealKeys, SAMMA kod som webben.
+ * - MOLNHÅLET (webbens #195, josefanderberg/VADKUL#233): ett tryck eller ett
+ *   långtryck på kartan tänder de CLOUD_REVEAL_MAX (5, #261) platserna närmast
+ *   trycket, inom hålet där molnen skingras. De läggs OVANPÅ urvalet kring
+ *   mitten, i en egen liten samling (väljHål) - brickkällan rörs inte av ett
+ *   tryck.
  *
  * Ren logik så den kan testas utan karta.
  */
-import { CLOUD_REVEAL_MAX, CLOUD_REVEAL_RADIUS_PX, pickCloudRevealKeys } from '@vadkul/kontrakt';
+import { CLOUD_REVEAL_MAX, CLOUD_REVEAL_RADIUS_PX, pickCloudRevealKeys, pickSpreadRevealKeys } from '@vadkul/kontrakt';
 import type { BrickProps } from './kartlager';
 
 export const URVAL_KANDIDATER = 50;
@@ -30,6 +36,14 @@ export const URVAL_MIN = 12;
 export const URVAL_RAMP_START_ZOOM = 10.5;
 /** Webbens LABEL_TITLE_MIN_ZOOM. */
 export const URVAL_TITEL_ZOOM = 13;
+/** Webbens REVEAL_SPREAD_MAX_ZOOM: under den sprids urvalet över vyn. */
+export const URVAL_SPRIDNING_ZOOM = 12;
+
+/** Kartvyns storlek i pt (webbens canvas clientWidth/clientHeight). */
+export interface Vy {
+    width: number;
+    height: number;
+}
 
 /** Webbens revealAllowance: hur många av kandidaterna som tänds vid en zoom. */
 export function urvalsTak(zoom: number): number {
@@ -48,17 +62,29 @@ export interface UrvalsPunkt {
 }
 
 /**
- * Id:na som tänds kring `mitt` (webbens nearestRevealCands + pickRevealKeys):
- * de 50 närmaste (kvadrerat avstånd, cos-lat-skalad longitud - samma billiga
- * partiella urval som webben), rankade populära först och kapade till
+ * Id:na som tänds kring `mitt` (webbens pickRevealKeys). Utzoomat (under
+ * URVAL_SPRIDNING_ZOOM) och med känd vy: utspritt över vyn, det populäraste
+ * i varje ruta (kontraktets pickSpreadRevealKeys). Annars de 50 närmaste
+ * (kvadrerat avstånd, cos-lat-skalad longitud - samma billiga partiella urval
+ * som webbens nearestRevealCands), rankade populära först. Båda kapas till
  * urvalsTak(zoom).
  */
 export function väljTända(
     punkter: readonly UrvalsPunkt[],
     mitt: { lng: number; lat: number },
     zoom: number,
+    vy: Vy | null = null,
     kandidater = URVAL_KANDIDATER,
 ): Set<string> {
+    if (vy && zoom < URVAL_SPRIDNING_ZOOM) {
+        return new Set(pickSpreadRevealKeys(
+            punkter.map(p => ({ key: p.id, lat: p.lat, lng: p.lng, pop: p.pop })),
+            mitt,
+            zoom,
+            vy,
+            urvalsTak(zoom),
+        ));
+    }
     const kx = Math.cos((mitt.lat * Math.PI) / 180);
     const bästa: { id: string; d2: number; pop: boolean }[] = [];
     let sämst = -Infinity;
@@ -98,9 +124,15 @@ type Brickor = GeoJSON.FeatureCollection<GeoJSON.Point, BrickProps>;
  * BRICKORNA kring kartans mitt ur platserna (lib/kartlager.byggBrickor):
  * urvalet + de fasta + den valda. `mitt` null = kartan har inte rapporterat
  * sin vy än: då tänds bara de fasta, som på webben när utgångspunkten saknas.
+ * `vy` = kartans storlek i pt, som sprider urvalet utzoomat (väljTända).
  * Liten samling (~50) - den är det enda som byts när man panorerar.
  */
-export function väljBrickor(platser: Brickor, mitt: { lng: number; lat: number } | null, zoom: number): Brickor {
+export function väljBrickor(
+    platser: Brickor,
+    mitt: { lng: number; lat: number } | null,
+    zoom: number,
+    vy: Vy | null = null,
+): Brickor {
     const punkter: UrvalsPunkt[] = [];
     for (const f of platser.features) {
         const p = f.properties;
@@ -108,7 +140,7 @@ export function väljBrickor(platser: Brickor, mitt: { lng: number; lat: number 
         const [lng, lat] = f.geometry.coordinates;
         punkter.push({ id: p.id, lng, lat, pop: p.pop });
     }
-    const tända = mitt ? väljTända(punkter, mitt, zoom) : new Set<string>();
+    const tända = mitt ? väljTända(punkter, mitt, zoom, vy) : new Set<string>();
     return {
         type: 'FeatureCollection',
         features: platser.features.filter(f => {
@@ -122,13 +154,14 @@ export function väljBrickor(platser: Brickor, mitt: { lng: number; lat: number 
  * MOLNHÅLETS brickor (webbens cloudHoverKeys + pickCloudRevealKeys, Josef
  * 13/11: "där man hovrar ... ska också visas de ... event som är över där
  * ... bara där molnen skingrar sig", och "även mobil"): de CLOUD_REVEAL_MAX
- * (3) platserna NÄRMAST trycket inom hålets radie vid den här zoomen. Bara
+ * (5 sedan #261, Josef 19/11: "där man klickar/håller. så ska de 5 närmsta
+ * synas") platserna NÄRMAST trycket inom hålets radie vid den här zoomen. Bara
  * avståndet räknas, aldrig populära först, och ligger hålet i havet tänds
  * ingenting - de närmaste långt bort tänds aldrig. Passerade platser är
  * prickar som på webben. Hålet finns på alla zoomar, med eller utan moln.
  *
  * `redan` = platserna som redan är brickor (urvalet kring mitten): de tar
- * sin plats bland de tre men ritas inte en gång till, så svaret är bara det
+ * sin plats bland de fem men ritas inte en gång till, så svaret är bara det
  * hålet LÄGGER TILL. Kartan ritar dem i en egen källa - ett tryck får aldrig
  * skicka om brickkällan (då tonar alla brickor in på nytt).
  */
