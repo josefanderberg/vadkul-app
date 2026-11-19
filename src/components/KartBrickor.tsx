@@ -62,6 +62,7 @@ import {
     type TonPost,
 } from '@/lib/brickCykel';
 import { BADGE_X, BADGE_Y, BRICKA_ICON_SIZE } from '@/lib/brickor';
+import { bySideExpression } from '@vadkul/kontrakt';
 import {
     ETIKETT_LÄGEN,
     HINDER_BADGE,
@@ -82,7 +83,9 @@ const ETIKETT_FILTER: FilterSpecification = ['!', ['get', 'past']];
 const HINDER_BADGE_FILTER: FilterSpecification = ['all', ['!', ['get', 'past']], ['>', ['get', 'antal'], 1]];
 
 export const ETIKETT_STIL = {
-    textFont: ['Montserrat Medium', 'Open Sans Bold'],
+    // Webbens typsnitt (#262, Josef 19/11: "titlarna vara lite fetare, som på
+    // webben") - samma CARTO-glyfserver, så Open Sans Bold finns för båda.
+    textFont: ['Open Sans Bold'],
     textSize: ['interpolate', ['linear'], ['zoom'], 9, 11, 13, 12.5, 16, 13.5] as unknown as Expression,
     // Spetsen står på koordinaten → texten börjar strax under den.
     textAnchor: 'top' as const,
@@ -109,16 +112,20 @@ const SPÄRR: SymbolLayerStyle = {
     iconIgnorePlacement: false,
     iconOpacity: 0,
 };
-// Fasta stilar - samma objekt vid varje rendering. Lager i = webbens läge i.
+// Läge i i brickans ordning (#262): den vanliga i bildens mitt, inåt i
+// kanterna - kontraktets match-uttryck på brickans `side`.
+const ANKARE_I = (i: number) => bySideExpression(o => o[i][0]) as unknown as Expression;
+const FÖRSKJUTNING_I = (i: number) => bySideExpression(o => ['literal', [o[i][1][0], o[i][1][1]]]) as unknown as Expression;
+// Fasta stilar - samma objekt vid varje rendering. Lager i = läge i.
 // Första lagret (under spetsen) får stå även om spärren inte får plats -
 // de andra kräver den, annars kunde en bricka få titel i två lager.
-const TITEL_STILAR = ETIKETT_LÄGEN.map(([ankare, [x, y]], i) => ({
+const TITEL_STILAR = ETIKETT_LÄGEN.map((_, i) => ({
     ...ETIKETT_STIL,
     ...SPÄRR,
     iconOptional: i === 0,
     textField: ['get', 'titel'] as unknown as Expression,
-    textAnchor: ankare,
-    textOffset: [x, y],
+    textAnchor: ANKARE_I(i),
+    textOffset: FÖRSKJUTNING_I(i),
     textJustify: 'auto' as const,
 }));
 // Kategorireserven (webbens #196): bara under spetsen, och bara när brickan
@@ -188,11 +195,15 @@ const VALD_ANTAL_STIL: SymbolLayerStyle = {
 // plats i kollisionen - platsens vanliga etikett på samma ställe faller bort.
 // Den bär spärren (alltid placerad), så platsens titel inte dyker upp en gång
 // till vid sidan eller ovanför i ett senare lager.
+// Under spetsen, utdragen inåt i bildens kanter (#262) - sidans första läge.
 const VALD_TITEL_STIL = {
     ...ETIKETT_STIL,
     ...SPÄRR,
     iconAllowOverlap: true,
     textField: ['get', 'titel'] as unknown as Expression,
+    textAnchor: ANKARE_I(0),
+    textOffset: FÖRSKJUTNING_I(0),
+    textJustify: 'auto' as const,
     textAllowOverlap: true,
 };
 const INGEN_VALD = { type: 'FeatureCollection', features: [] } as Brickor;

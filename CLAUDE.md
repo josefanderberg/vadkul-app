@@ -80,7 +80,12 @@ API:t; det här repot äger BARA appen. Plattformsplanen bor i huvudrepots
   genomskinliga och har exakt måtten i `HINDER_BILDER` (testat). Utzoomat
   sprids de tända brickorna med kontraktets `pickSpreadRevealKeys`, SAMMA kod
   som webben (#200), och hålet vid tryck/långtryck tänder kontraktets
-  `CLOUD_REVEAL_MAX` (5).
+  `CLOUD_REVEAL_MAX` (5). Sedan #262 (19/11): lägena och deras ordning per
+  sida av bilden bor i kontraktets `mapTitles` (titlarna växer mot mitten,
+  brickans `side` sätts av lib/kartUrval.medSida), inga brickor tänds i
+  `KARTANS_RAM` längs kanterna (kontraktets brickmått + appens krom - ändras
+  kromet i src/app/index.tsx ska `KROM_RAM` följa), och titlarna är Open Sans
+  Bold som på webben.
 - **Brickorna bakas med WEBBENS ritkod**: `node scripts/baka-brickor.mjs`
   (headless Chrome ur huvudrepots node_modules) skriver assets/brickor/ +
   src/lib/brick*.generated.ts och emoji*.generated.ts. Redigera aldrig de

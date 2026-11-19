@@ -16,7 +16,7 @@
  * platsen först inom lagret (lägst först): de populäraste, sedan större
  * grupper (Josef 9/10: "på avstånd så ska det populäraste eventet visas").
  */
-import type { AppFeedEvent } from '@vadkul/kontrakt';
+import type { AppFeedEvent, TitleSide } from '@vadkul/kontrakt';
 import { ärEgetVadkulEvent, type AppEvent } from './appEvent';
 import { INGA_BOOSTAR, ärBoostad, type Boostar } from './boost';
 import { brickaIkon, brickansKategori, type BrickTillstånd } from './brickor';
@@ -70,6 +70,9 @@ export interface BrickProps {
     pop: boolean;
     /** Kategorins färg - pricken när platsen inte är bricka. */
     färg: string;
+    /** Var i bildens bredd brickan står (kontraktets TitleSide, #262): sätts
+     *  av lib/kartUrval.medSida när kartan stannat, saknas annars. */
+    side?: TitleSide;
     /** Multibrickans växling (lib/brickCykel), tom när brickan står still:
      *  ensam, vald, boostad/stjärnmärkt, passerad eller bara en synlig bild. */
     ramar?: BrickRam[];

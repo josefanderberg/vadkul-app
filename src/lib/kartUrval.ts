@@ -25,10 +25,30 @@
  *   trycket, inom hålet där molnen skingras. De läggs OVANPÅ urvalet kring
  *   mitten, i en egen liten samling (väljHål) - brickkällan rörs inte av ett
  *   tryck.
+ * - KANTRAMEN (#262, Josef 19/11: "många precis på kanterna lyser upp, så
+ *   att mestadels av titlarna hamnar utanför"): inga brickor tänds i ramen
+ *   KARTANS_RAM längs bildens kanter - kontraktets brickmått plus appens
+ *   krom överst och nederst. Gäller både utspridningen och urvalet kring
+ *   mitten. Molnhålet och de fasta tänds som förut.
+ * - TITLARNA VÄXER MOT MITTEN (#262): varje bricka får `side` (kontraktets
+ *   titleSide) när kartan stannat - titellagren provar lägena inåt först
+ *   för brickor i bildens vänstra och högra del (medSida).
  *
  * Ren logik så den kan testas utan karta.
  */
-import { CLOUD_REVEAL_MAX, CLOUD_REVEAL_RADIUS_PX, pickCloudRevealKeys, pickSpreadRevealKeys } from '@vadkul/kontrakt';
+import {
+    addRevealInsets,
+    CLOUD_REVEAL_MAX,
+    CLOUD_REVEAL_RADIUS_PX,
+    insideRevealView,
+    pickCloudRevealKeys,
+    pickSpreadRevealKeys,
+    REVEAL_EDGE_INSET,
+    REVEAL_SPREAD_CELL_PX,
+    revealViewOffset,
+    titleSide,
+    type RevealInset,
+} from '@vadkul/kontrakt';
 import type { BrickProps } from './kartlager';
 
 export const URVAL_KANDIDATER = 50;
@@ -44,6 +64,16 @@ export interface Vy {
     width: number;
     height: number;
 }
+
+/**
+ * Appens krom över kartan (src/app/index.tsx): toppraden slutar 104 pt ner
+ * (topKrom top 58 + knapparna 46), dagväljaren börjar ~116 pt upp (yta
+ * bottom 72 + raden). En bricka därunder syns inte, och inte dess titel.
+ * Ändras kromet ska måtten följa.
+ */
+export const KROM_RAM: RevealInset = { top: 104, right: 0, bottom: 116, left: 0 };
+/** Ramen där inga brickor tänds: brickans mått (kontraktet) + kromet. */
+export const KARTANS_RAM: RevealInset = addRevealInsets(REVEAL_EDGE_INSET, KROM_RAM);
 
 /** Webbens revealAllowance: hur många av kandidaterna som tänds vid en zoom. */
 export function urvalsTak(zoom: number): number {
@@ -67,13 +97,14 @@ export interface UrvalsPunkt {
  * i varje ruta (kontraktets pickSpreadRevealKeys). Annars de 50 närmaste
  * (kvadrerat avstånd, cos-lat-skalad longitud - samma billiga partiella urval
  * som webbens nearestRevealCands), rankade populära först. Båda kapas till
- * urvalsTak(zoom).
+ * urvalsTak(zoom). Med känd vy räknas bara punkter innanför `ram` (#262).
  */
 export function väljTända(
     punkter: readonly UrvalsPunkt[],
     mitt: { lng: number; lat: number },
     zoom: number,
     vy: Vy | null = null,
+    ram: RevealInset = KARTANS_RAM,
     kandidater = URVAL_KANDIDATER,
 ): Set<string> {
     if (vy && zoom < URVAL_SPRIDNING_ZOOM) {
@@ -83,6 +114,8 @@ export function väljTända(
             zoom,
             vy,
             urvalsTak(zoom),
+            REVEAL_SPREAD_CELL_PX,
+            ram,
         ));
     }
     const kx = Math.cos((mitt.lat * Math.PI) / 180);
@@ -90,6 +123,7 @@ export function väljTända(
     let sämst = -Infinity;
     let sämstIdx = -1;
     for (const p of punkter) {
+        if (vy && !insideRevealView(p, mitt, zoom, vy, ram)) continue;
         const dx = kx * (p.lng - mitt.lng);
         const dy = p.lat - mitt.lat;
         const d2 = dx * dx + dy * dy;
@@ -141,13 +175,40 @@ export function väljBrickor(
         punkter.push({ id: p.id, lng, lat, pop: p.pop });
     }
     const tända = mitt ? väljTända(punkter, mitt, zoom, vy) : new Set<string>();
-    return {
+    return medSida({
         type: 'FeatureCollection',
         features: platser.features.filter(f => {
             const p = f.properties;
             return p.vald || (p.fast && !p.past) || tända.has(p.id);
         }),
+    }, mitt, zoom, vy);
+}
+
+/**
+ * Brickornas `side` (#262): var i bildens bredd spetsen står - mitten,
+ * vänster eller höger del (kontraktets titleSide). Titellagren väljer
+ * ordning på den så titeln växer mot mitten. Utan mitt eller vy får
+ * brickorna ingen sida, och lagren den vanliga ordningen.
+ */
+export function medSida(fc: Brickor, mitt: { lng: number; lat: number } | null, zoom: number, vy: Vy | null): Brickor {
+    if (!mitt || !vy) return fc;
+    return {
+        type: 'FeatureCollection',
+        features: fc.features.map(f => medSidaEn(f, mitt, zoom, vy)),
     };
+}
+
+/** En brickas `side`, se medSida. */
+export function medSidaEn(
+    f: GeoJSON.Feature<GeoJSON.Point, BrickProps>,
+    mitt: { lng: number; lat: number } | null,
+    zoom: number,
+    vy: Vy | null,
+): GeoJSON.Feature<GeoJSON.Point, BrickProps> {
+    if (!mitt || !vy) return f;
+    const [lng, lat] = f.geometry.coordinates;
+    const side = titleSide(revealViewOffset({ lng, lat }, mitt, zoom).dx, vy.width);
+    return f.properties.side === side ? f : { ...f, properties: { ...f.properties, side } };
 }
 
 /**

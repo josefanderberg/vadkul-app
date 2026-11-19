@@ -63,7 +63,7 @@ import { dygnetsStart, eventIPeriod, horisontOffset, periodLabel } from '@/lib/d
 import { useFilter } from '@/lib/filterContext';
 import { isEventPast, shouldAutoBumpDay } from '@/lib/harVarit';
 import { bläddraTill, byggBrickor, byggÖnskningar, INGEN_BLÄDDRING, valdPlats, type Bläddring } from '@/lib/kartlager';
-import { byggPrickar, prickFilter, prickNyckel, väljBrickor, väljHål } from '@/lib/kartUrval';
+import { byggPrickar, medSida, medSidaEn, prickFilter, prickNyckel, väljBrickor, väljHål } from '@/lib/kartUrval';
 import { useKonto } from '@/lib/kontoContext';
 import { kartansUrval, KÄLLOR, matcharFilter, medInzoomKällor, optInPåKartan } from '@/lib/kartFilter';
 import { kartBanner, zoomInMitt, ZOOM_IN_MÅL, type KartBanner } from '@/lib/kartBanner';
@@ -554,9 +554,17 @@ export default function KartScreen() {
     // brickkällan inte rörs av trycket. Hålet ligger kvar tills nästa tryck
     // och finns på alla zoomar.
     const [tryckPunkt, setTryckPunkt] = useState<CloudPoint | null>(null);
+    // Hålets och den valdas titlar växer också mot mitten (VADKUL#262).
     const hål = useMemo(
-        () => väljHål(platser, tryckPunkt, zoom ?? 11, new Set(brickor.features.map(f => f.properties.id))),
-        [platser, tryckPunkt, zoom, brickor],
+        () => medSida(
+            väljHål(platser, tryckPunkt, zoom ?? 11, new Set(brickor.features.map(f => f.properties.id))),
+            urvalsMitt, zoom ?? 11, vy,
+        ),
+        [platser, tryckPunkt, zoom, brickor, urvalsMitt, vy],
+    );
+    const valdBricka = useMemo(
+        () => (vald ? medSidaEn(vald.bricka, urvalsMitt, zoom ?? 11, vy) : null),
+        [vald, urvalsMitt, zoom, vy],
     );
     // Platserna byggs om varje minut (nuMs) - prickarna bara när något
     // synligt ändrats (lib/kartUrval.prickNyckel).
@@ -908,7 +916,7 @@ export default function KartScreen() {
                         som tickar: multibrickorna växlar bild och
                         överlappande brickor turas om att ligga överst
                         (lib/brickCykel, Josef 5/11). */}
-                    <KartBrickor brickor={brickor} hål={hål} vald={vald?.bricka ?? null} zoom={zoom ?? 11} klara={emojiBrickor.klara} />
+                    <KartBrickor brickor={brickor} hål={hål} vald={valdBricka} zoom={zoom ?? 11} klara={emojiBrickor.klara} />
                     {/* Önskningarna som eget drömskt lager (webbens wish-
                         brickor): kategoribrickan halvt genomskinlig med
                         "Önskas · {titel}" under. Egen källa - aldrig i

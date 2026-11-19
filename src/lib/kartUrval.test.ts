@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
     byggPrickar,
     INGEN_BRICKA,
+    KARTANS_RAM,
+    KROM_RAM,
+    medSida,
     prickFilter,
     prickNyckel,
     URVAL_KANDIDATER,
@@ -90,7 +93,10 @@ describe('väljTända utzoomat med känd vy (webbens #200, VADKUL#261)', () => {
     const ZOOM = 9;
     /** En punkt dx/dy pt från mitten vid ZOOM (öster/söder positivt). */
     function vid(id: string, dx: number, dy: number, pop = false): UrvalsPunkt {
-        const world = 512 * 2 ** ZOOM;
+        return vidZoom(id, dx, dy, ZOOM, pop);
+    }
+    function vidZoom(id: string, dx: number, dy: number, zoom: number, pop = false): UrvalsPunkt {
+        const world = 512 * 2 ** zoom;
         const s = Math.sin((MITT.lat * Math.PI) / 180);
         const y = 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI) + dy / world;
         const lat = ((2 * Math.atan(Math.exp((0.5 - y) * 2 * Math.PI)) - Math.PI / 2) * 180) / Math.PI;
@@ -100,10 +106,10 @@ describe('väljTända utzoomat med känd vy (webbens #200, VADKUL#261)', () => {
     it('samma urval som webben: kontraktets pickSpreadRevealKeys', () => {
         const punkter = [
             ...Array.from({ length: 40 }, (_, i) => vid(`klunga${i}`, 10 + (i % 6) * 4, 10 + Math.floor(i / 6) * 4, i < 4)),
-            vid('norr-pop', 0, -350, true),
-            vid('söder-pop', 20, 360, true),
-            vid('väster', -170, 40),
-            vid('öster', 170, -40),
+            vid('norr-pop', 0, -230, true),
+            vid('söder-pop', 20, 250, true),
+            vid('väster', -140, 40),
+            vid('öster', 140, -40),
         ];
         const t = väljTända(punkter, MITT, ZOOM, VY);
         expect(t.size).toBe(URVAL_MIN);
@@ -120,9 +126,29 @@ describe('väljTända utzoomat med känd vy (webbens #200, VADKUL#261)', () => {
     });
 
     it('från zoom 12 gäller urvalet kring mitten igen, även med vy', () => {
-        const t = väljTända(rad(80), MITT, 14, VY);
+        // 80 punkter tätt kring mitten (alla innanför ramen) vid zoom 14.
+        const z = 14;
+        const tätt = Array.from({ length: 80 }, (_, i) => vidZoom(`t${i}`, (i % 10) * 6 - 27, Math.floor(i / 10) * 6 - 21, z));
+        const t = väljTända(tätt, MITT, z, VY);
         expect(t.size).toBe(50);
-        expect(t.has('p0')).toBe(true);
+        expect(t.has('t44')).toBe(true);
+    });
+
+    it('kantramen (#262): inga brickor nära kanterna eller under kromet, varken utzoomat eller kring mitten', () => {
+        for (const z of [ZOOM, 14]) {
+            const halfW = VY.width / 2;
+            const halfH = VY.height / 2;
+            const punkter = [
+                vidZoom('mitten', 0, 0, z),
+                vidZoom('vänsterkant', -halfW + 15, 0, z),
+                vidZoom('högerkant', halfW - 15, 0, z),
+                vidZoom('under-toppraden', 0, -halfH + KROM_RAM.top + 10, z),
+                vidZoom('över-dagväljaren', 0, halfH - KROM_RAM.bottom - 5, z),
+                vidZoom('innanför', 0, -halfH + KARTANS_RAM.top + 5, z),
+            ];
+            const t = väljTända(punkter, MITT, z, VY);
+            expect([...t].sort(), `zoom ${z}`).toEqual(['innanför', 'mitten']);
+        }
     });
 
     it('utan vy (kartan har inte mätts än): urvalet kring mitten', () => {
@@ -245,5 +271,32 @@ describe('molnhålet', () => {
         const fc = samling([plats('nära', MITT.lng + 0.01), plats('bit', MITT.lng + 0.2)]);
         expect(väljHål(fc, TRYCK, 8).features).toHaveLength(2);
         expect(väljHål(fc, TRYCK, 12).features.map(f => f.properties.id)).toEqual(['nära']);
+    });
+});
+
+describe('medSida (#262: titlarna växer mot mitten)', () => {
+    const VY = { width: 390, height: 844 };
+    const Z = 14;
+    // 0,001° österut ≈ 23 pt vid zoom 14.
+    const fc = samling([
+        plats('mitt', MITT.lng),
+        plats('vänster', MITT.lng - 0.004),
+        plats('höger', MITT.lng + 0.004),
+    ]);
+
+    it('brickor i bildens vänstra och högra del får sin sida, mitten 0', () => {
+        const sidor = Object.fromEntries(medSida(fc, MITT, Z, VY).features.map(f => [f.properties.id, f.properties.side]));
+        expect(sidor).toEqual({ mitt: 0, vänster: 1, höger: 2 });
+    });
+
+    it('utan mitt eller vy rörs brickorna inte (lagren tar den vanliga ordningen)', () => {
+        expect(medSida(fc, null, Z, VY)).toBe(fc);
+        expect(medSida(fc, MITT, Z, null)).toBe(fc);
+    });
+
+    it('väljBrickor sätter sidan när vyn är känd', () => {
+        const b = väljBrickor(fc, MITT, Z, VY);
+        expect(b.features.find(f => f.properties.id === 'höger')?.properties.side).toBe(2);
+        expect(väljBrickor(fc, MITT, Z).features.every(f => f.properties.side === undefined)).toBe(true);
     });
 });

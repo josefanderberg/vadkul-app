@@ -35,30 +35,28 @@
  *  - KATEGORIRESERVEN (webbens #196-spärr) bär samma spärr, krävd: har
  *    brickan fått en titel står ingen kategori under den.
  *
+ * TITLARNA VÄXER MOT MITTEN (#262): lagret i provar läge i i brickans
+ * ordning - den vanliga i bildens mitt, inåt i kanterna (kontraktets
+ * mapTitles). Spärren bryr sig inte om vilket läge som vann.
+ *
  * Alla mått i pt relativt koordinaten (spetsen), y nedåt, vid icon-size 1 -
  * appens brickor ritas alltid i den storleken (lib/brickor: kroppen 40 pt,
  * bakad med webbens ritkod, så webbens mått vid icon-size 1 gäller).
  * Ren modul: inga kart- eller React-API:er.
  */
 
+import { TITLE_PLACEMENTS, type TitleAnchor, type TitlePlacement } from '@vadkul/kontrakt';
+
 /** MapLibres ankarnamn - sidan av texten som står på punkten. */
-export type EtikettAnkare =
-    'top' | 'left' | 'right' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+export type EtikettAnkare = TitleAnchor;
 
 /**
- * Webbens LABEL_TITLE_PLACEMENTS, ordagrant: ankare + förskjutning i em av
- * textstorleken. Första lediga vinner.
+ * Lägena i den vanliga ordningen: kontraktets TITLE_PLACEMENTS, SAMMA lista
+ * som webben (#262). Ankare + förskjutning i em av textstorleken. I bildens
+ * kanter provas de i en annan ordning så titeln växer inåt
+ * (TITLE_PLACEMENTS_BY_SIDE, egenskapen `side` på brickan).
  */
-export const ETIKETT_LÄGEN: readonly (readonly [EtikettAnkare, readonly [number, number]])[] = [
-    ['top', [0, 0.35]],             // under brickan (föredras, som förut)
-    ['left', [2.4, -2.5]],          // till höger om kroppen, i höjd med dess mitt
-    ['right', [-2.4, -2.5]],        // till vänster om kroppen
-    ['bottom', [0, -5.3]],          // ovanför brickan
-    ['top-left', [-0.5, 0.35]],     // under, utdragen åt höger
-    ['top-right', [0.5, 0.35]],     // under, utdragen åt vänster
-    ['bottom-left', [-0.25, -5.3]], // ovanför, utdragen åt höger
-    ['bottom-right', [0.25, -5.3]], // ovanför, utdragen åt vänster (fri från +N-pillen)
-];
+export const ETIKETT_LÄGEN: readonly TitlePlacement[] = TITLE_PLACEMENTS;
 
 /** Webbens LABEL_CAT_PLACEMENT: kategorireserven står bara under brickan. */
 export const KATEGORI_LÄGE: readonly [EtikettAnkare, readonly [number, number]] = ['top', [0, 0.35]];
