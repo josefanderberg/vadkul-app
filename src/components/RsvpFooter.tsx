@@ -45,6 +45,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { getAuth } from '@react-native-firebase/auth';
 import type { AppFeedEvent } from '@vadkul/kontrakt';
 import { useRsvp } from '@/lib/rsvpContext';
+import { efterKommerSvar } from '@/lib/betygsFraga';
 import { useKonto } from '@/lib/kontoContext';
 import { anmälKnappensVerkan, anmälanVidSvar, inbjudningsUrl, nextRsvp, rsvpShareId, svarVidUtlänk, type RsvpStatus } from '@/lib/rsvp';
 import { hämtaEngagemang, räknaKlick, type Engagemang } from '@/data/eventStats';
@@ -106,9 +107,13 @@ function useSvar(event: AppFeedEvent & { userCreated?: boolean }, anmälan: Anm�
     // samma verkan"): Kommer på → anmälan (namnet i listan), Kommer av →
     // avanmälan. Bara inloggad (anmälan kräver konto); växla är en toggle,
     // så läget kollas först. Webbens handleSetRsvp gör samma sak.
-    const välj = (status: RsvpStatus) => {
+    // `egetTryck` = trycket kom från Kommer-knappen själv. Bara då får
+    // betygsrutan komma (josefanderberg/VADKUL#194): ANMÄL-länken och Bjud med
+    // är på väg ut ur appen, och där ska ingen ruta lägga sig emellan.
+    const välj = (status: RsvpStatus, egetTryck = false) => {
         const prev = mitt;
         svara(event, status);
+        if (egetTryck && nextRsvp(prev, status) === 'going') void efterKommerSvar();
         if (!anmälan?.inloggad) return;
         const verkan = anmälanVidSvar(prev, nextRsvp(prev, status));
         if ((verkan === 'anmäl' && !anmälan.anmäld) || (verkan === 'avanmäl' && anmälan.anmäld)) anmälan.växla();
@@ -124,7 +129,7 @@ function SvarKnapp({ svar, status, text }: { svar: Svarsläge; status: RsvpStatu
     const n = svar.antal(status);
     return (
         <Pressable
-            onPress={() => svar.välj(status)}
+            onPress={() => svar.välj(status, true)}
             accessibilityRole="button"
             accessibilityState={{ selected: på }}
             style={({ pressed }) => [styles.knapp, styles.svarKnapp, på && styles.knappPå, pressed && styles.tryckt]}

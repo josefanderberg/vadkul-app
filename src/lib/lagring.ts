@@ -26,6 +26,8 @@ export const NYCKEL = {
     doldaMeddelanden: 'vadkul.doldaMeddelanden',
     /** Prefix: + '.<region>' = när CDN:et senast tillfrågades om appflödet (lib/flodesDisk). */
     flödesKontroll: 'vadkul.flodesKontroll',
+    /** Räknarna bakom betygsrutan (lib/betyg, lib/betygsFraga). */
+    betyg: 'vadkul.betyg',
 } as const;
 
 export async function läs<T>(key: string, fallback: T): Promise<T> {

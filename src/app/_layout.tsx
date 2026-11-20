@@ -9,6 +9,7 @@ import { FilterProvider } from '@/lib/filterContext';
 import { KontoProvider, useKonto } from '@/lib/kontoContext';
 import { RegionProvider } from '@/lib/regionContext';
 import { RsvpProvider } from '@/lib/rsvpContext';
+import { noteraAppDag } from '@/lib/betygsFraga';
 import { SparadeProvider } from '@/lib/sparadeContext';
 
 // Först av allt: Crashlytics installerar sin globala JS-felhanterare när
@@ -26,6 +27,14 @@ const queryClient = new QueryClient();
 focusManager.setEventListener(onFocus => {
     const sub = AppState.addEventListener('change', s => onFocus(s === 'active'));
     return () => sub.remove();
+});
+
+// Dagräknaren bakom betygsrutan (lib/betygsFraga): en ny dag räknas när
+// appen startar eller kommer fram igen. Här ställs ALDRIG frågan - den kommer
+// först efter ett eget Kommer-svar.
+void noteraAppDag();
+AppState.addEventListener('change', s => {
+    if (s === 'active') void noteraAppDag();
 });
 
 /** Håller Crashlytics-id:t i takt med kontot: uid inloggad, tomt annars. */
