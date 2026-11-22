@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-    pickPoiSignHit, POI_SIGN_CLOSE_LAYER_ID, POI_SIGN_CLOSE_MIN_ZOOM, POI_SIGN_HIT, POI_SIGN_KEYS, POI_SIGN_LAYER_ID,
+    BAD_SIGN_LAYER_ID, BAD_SIGN_SOURCE_ID, pickPoiSignHit, POI_SIGN_CLOSE_LAYER_ID, POI_SIGN_CLOSE_MIN_ZOOM, POI_SIGN_HIT, POI_SIGN_KEYS, POI_SIGN_LAYER_ID,
     POI_SIGN_LAYER_IDS, POI_SIGN_MIN_ZOOM, POI_SIGN_NAME_ZOOM, POI_SIGN_NEAR_LAYER_ID, POI_SIGN_NEAR_MIN_ZOOM,
 } from '@vadkul/kontrakt';
 import {
-    harSkyltar, läggTillSkyltar, SKYLT_MIN_ZOOM, SKYLT_NAMN_ZOOM, SKYLT_NÄRA_ZOOM, SKYLT_NÄRMAST_ZOOM, SKYLT_SKALA,
+    BADPLATS_URL, harSkyltar, läggTillSkyltar, SKYLT_MIN_ZOOM, SKYLT_NAMN_ZOOM, SKYLT_NÄRA_ZOOM, SKYLT_NÄRMAST_ZOOM, SKYLT_SKALA,
     skyltFrågeruta, skyltKandidater,
 } from './kartSkyltar';
 import { BAKADE_SKYLTAR, SKYLT_BILD } from './skyltMatt.generated';
@@ -53,9 +53,11 @@ describe('läggTillSkyltar', () => {
         expect(harSkyltar(s)).toBe(false);
         expect(läggTillSkyltar(s)).toBe(true);
         expect(harSkyltar(s)).toBe(true);
-        // Matställena (#242) underst, sedan det nära lagret, resmålen överst.
+        // Matställena (#242) underst, sedan det nära lagret, resmålen och
+        // badplatserna ur badplatsfilen (VADKUL#279) överst.
         expect(s.layers!.map(l => l.id)).toEqual([
-            'background', 'water', POI_SIGN_CLOSE_LAYER_ID, POI_SIGN_NEAR_LAYER_ID, POI_SIGN_LAYER_ID, 'place_town', 'poi_park',
+            'background', 'water', POI_SIGN_CLOSE_LAYER_ID, POI_SIGN_NEAR_LAYER_ID, POI_SIGN_LAYER_ID, BAD_SIGN_LAYER_ID,
+            'place_town', 'poi_park',
         ]);
         // Webben: 0,8 -> 1 av en bild i 1x. Här samma mått av en bild i 3x.
         expect(lager(s, POI_SIGN_LAYER_ID).layout!['icon-size'])
@@ -87,6 +89,28 @@ describe('läggTillSkyltar', () => {
         expect(far.layout!['text-font']).toEqual(FONT);
         // Voyagers egna parknamn göms - skylten bär namnet.
         expect(lager(s, 'poi_park').layout!.visibility).toBe('none');
+    });
+
+    // VADKUL#279, Josef 22/11: "badplatser syns bara när man zoomar in
+    // jättemycket. Fixa så det är mycket högre upp synligt."
+    it('badplatserna ritas ur webbens badplatsfil från zoom 9, inte ur kaklen', () => {
+        const s = voyagerLik();
+        läggTillSkyltar(s);
+        expect(BADPLATS_URL).toBe('https://vadkul.se/badplatser.json');
+        expect((s.sources as Record<string, unknown>)[BAD_SIGN_SOURCE_ID]).toEqual({ type: 'geojson', data: BADPLATS_URL });
+        const bad = lager(s, BAD_SIGN_LAYER_ID);
+        expect(bad).toMatchObject({ type: 'symbol', source: BAD_SIGN_SOURCE_ID, minzoom: 9 });
+        expect(bad['source-layer']).toBeUndefined();
+        // Namnet från samma zoom som resmålen i appen.
+        expect((bad.layout!['text-field'] as unknown[])[3]).toBe(SKYLT_NAMN_ZOOM);
+        const kindsIn = (id: string) => (lager(s, id).filter as unknown[])[2] as string[];
+        for (const kind of ['bathing_place', 'beach', 'public_bath']) {
+            expect(kindsIn(BAD_SIGN_LAYER_ID)).toContain(kind);
+            expect(kindsIn(POI_SIGN_LAYER_ID)).not.toContain(kind);
+        }
+        // Ett tryck på en badskylt ur filen ger samma ruta som förut.
+        expect(skyltKandidater([punkt('bathing_place', 'Evedal')]).map(k => k.info))
+            .toEqual([{ key: 'bad', type: 'Badplats', name: 'Evedal' }]);
     });
 
     it('reservstilen (en adress) har inga skyltar', () => {

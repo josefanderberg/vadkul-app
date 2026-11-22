@@ -30,10 +30,19 @@
  * idrottsanläggningar och restauranger. Under sin kakelzoom syns en skylt
  * alltså inte hur lågt lagret än börjar.
  *
+ * BADPLATSERNA FRÅN ZOOM 9, SOM PÅ WEBBEN (josefanderberg/VADKUL#279, Josef
+ * 22/11: "badplatser syns bara när man zoomar in jättemycket. Fixa så det är
+ * mycket högre upp synligt"): badskylten ritas ur webbens badplatsfil
+ * (https://vadkul.se/badplatser.json, byggd av nattkedjan ur OSM) i stället för
+ * ur kaklen, som bär badplatserna först från z13. Kontraktet lägger källan och
+ * lagret och tar bort baden ur kakellagret, så ingen skylt står dubbelt.
+ * Zoom 9 är Josefs val och gäller både webb och app (inte ett steg tidigare
+ * här, som de andra skyltarna).
+ *
  * Ren, React-fri modul (testas i vitest utan nät).
  */
 import {
-    addPoiSignLayers, POI_SIGN_CLOSE_MIN_ZOOM, POI_SIGN_HIT, POI_SIGN_LAYER_ID, POI_SIGN_MIN_ZOOM, POI_SIGN_NAME_ZOOM,
+    addPoiSignLayers, BADPLATS_DATA_PATH, POI_SIGN_CLOSE_MIN_ZOOM, POI_SIGN_HIT, POI_SIGN_LAYER_ID, POI_SIGN_MIN_ZOOM, POI_SIGN_NAME_ZOOM,
     POI_SIGN_NEAR_MIN_ZOOM, poiSignInfo, type PoiSignInfo, type PoiSignStyle,
 } from '@vadkul/kontrakt';
 import { SKYLT_BILD } from './skyltMatt.generated';
@@ -49,6 +58,8 @@ export const SKYLT_MIN_ZOOM = POI_SIGN_MIN_ZOOM - SKYLT_TIDIGARE;
 export const SKYLT_NAMN_ZOOM = POI_SIGN_NAME_ZOOM - SKYLT_TIDIGARE;
 export const SKYLT_NÄRA_ZOOM = POI_SIGN_NEAR_MIN_ZOOM - SKYLT_TIDIGARE;
 export const SKYLT_NÄRMAST_ZOOM = POI_SIGN_CLOSE_MIN_ZOOM - SKYLT_TIDIGARE;
+/** Badplatsfilen på webben (#279). Hel adress - native-koden hämtar den. */
+export const BADPLATS_URL = 'https://vadkul.se' + BADPLATS_DATA_PATH;
 
 /** Lägg skyltlagren i stilen (muterar den - anropas på transformens egen kopia). */
 export function läggTillSkyltar(style: StyleJson): boolean {
@@ -58,6 +69,7 @@ export function läggTillSkyltar(style: StyleJson): boolean {
         nameZoom: SKYLT_NAMN_ZOOM,
         nearMinZoom: SKYLT_NÄRA_ZOOM,
         closeMinZoom: SKYLT_NÄRMAST_ZOOM,
+        badData: BADPLATS_URL,
     });
 }
 

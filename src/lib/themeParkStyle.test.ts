@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { POI_SIGN_CLOSE_LAYER_ID, POI_SIGN_LAYER_ID, POI_SIGN_NEAR_LAYER_ID } from '@vadkul/kontrakt';
+import { BAD_SIGN_LAYER_ID, POI_SIGN_CLOSE_LAYER_ID, POI_SIGN_LAYER_ID, POI_SIGN_NEAR_LAYER_ID } from '@vadkul/kontrakt';
 import { COARSE_LAYER_ID, DETAIL_LAYER_ID, FOREST_LAYER_ID } from './kartMarktacke';
 import {
     transformThemeParkStyle,
@@ -128,7 +128,7 @@ describe('transformThemeParkStyle: marktäcket och platsskyltarna', () => {
         const ut = transformThemeParkStyle(medKälla(), { skyltar: true });
         expect(ut.layers!.map(l => l.id)).toEqual([
             'background', 'landcover', FOREST_LAYER_ID, COARSE_LAYER_ID, DETAIL_LAYER_ID, 'water',
-            POI_SIGN_CLOSE_LAYER_ID, POI_SIGN_NEAR_LAYER_ID, POI_SIGN_LAYER_ID, 'place_town', 'poi_park',
+            POI_SIGN_CLOSE_LAYER_ID, POI_SIGN_NEAR_LAYER_ID, POI_SIGN_LAYER_ID, BAD_SIGN_LAYER_ID, 'place_town', 'poi_park',
         ]);
         expect(ut.layers!.find(l => l.id === 'poi_park')!.layout!.visibility).toBe('none');
     });
