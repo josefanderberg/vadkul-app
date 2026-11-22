@@ -78,6 +78,11 @@ export function transformThemeParkStyle(style: StyleJson, val: StilVal = {}): St
     if (!style.layers) return style;
     const ny: StyleJson = {
         ...style,
+        // Egen kopia av källorna: skyltarna lägger till badplatsfilens källa
+        // (VADKUL#279), och den hämtade stilen får aldrig muteras.
+        ...(style.sources && typeof style.sources === 'object'
+            ? { sources: { ...(style.sources as Record<string, unknown>) } }
+            : {}),
         layers: style.layers.map(layer => {
             // Hav-/ocean-namnen etiketteras på ~10 språk i källdatan — göms,
             // precis som på webben. Insjönamnen (watername_lake) berörs inte.
