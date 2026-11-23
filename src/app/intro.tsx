@@ -8,10 +8,11 @@
  *    sök). Valet sparas (lib/startval via regionContext.väljStartstad) och
  *    VINNER över GPS:en och Stockholm-fallbacken; med vald stad ställs ingen
  *    platsfråga vid start.
- *  - Kategorisidan är väljarens steg 2: 🔥 Populära först, kategorierna och
- *    Fler (källorna). Valen går rakt in i det vanliga sparade kartfiltret
- *    (lib/filterContext, som redan har sökpanelens växlingsregler: källan
- *    utesluter kategorierna och 🔥; kategorier sparas, 🔥/källa gäller besöket).
+ *  - Kategorisidan är väljarens steg 2: 🔥 Populära först, sedan kategorierna.
+ *    Valen går rakt in i det vanliga sparade kartfiltret (lib/filterContext;
+ *    kategorier sparas, 🔥 gäller besöket). Fler-källorna (kyrkan, PRO,
+ *    Korpen) finns INTE här (josefanderberg/VADKUL#283, ägarbeslut 23/11):
+ *    ett källval släckte kategorierna, vilket såg ut som en bugg.
  *
  * Två saker introt INTE är:
  *  - ingen kamerarörelse på kartan (kart-ui: "DET FINNS INGET INTRO" gäller
@@ -55,7 +56,6 @@ import {
 import { spåra } from '@/data/matning';
 import { useFilter } from '@/lib/filterContext';
 import { KONTON_PÅ } from '@/lib/funktioner';
-import { KÄLLOR } from '@/lib/kartFilter';
 import { KATEGORIER } from '@/lib/kategorier';
 import { useRegionVal } from '@/lib/regionContext';
 import { searchCities } from '@/lib/sok';
@@ -91,7 +91,6 @@ export default function IntroScreen() {
     /** Platssidans svar: 'plats' = min plats, City = vald startstad. */
     const [svar, setSvar] = useState<'plats' | City | null>(null);
     const [ortSök, setOrtSök] = useState('');
-    const [flerÖppet, setFlerÖppet] = useState(false);
 
     const valdOrt = svar !== null && svar !== 'plats' ? svar : null;
     const träffar = ortSök.trim().length >= 2 ? searchCities(ortSök, 8) : SNABBVAL;
@@ -239,21 +238,10 @@ export default function IntroScreen() {
                                 onPress={() => filter.växlaKategori(k as EventCategoryType)}
                             />
                         ))}
-                        <ValChip
-                            text={flerÖppet ? 'Färre' : 'Fler …'}
-                            vald={flerÖppet || filter.källa !== null}
-                            onPress={() => setFlerÖppet(o => !o)}
-                        />
-                        {flerÖppet
-                            ? KÄLLOR.map(k => (
-                                <ValChip
-                                    key={k.key}
-                                    text={`${k.emoji} ${k.label}`}
-                                    vald={filter.källa === k.key}
-                                    onPress={() => filter.växlaKälla(k.key)}
-                                />
-                            ))
-                            : null}
+                        {/* Inga källchips här (josefanderberg/VADKUL#283, ägarbeslut
+                            23/11): "Fler …" med kyrkan, PRO och Korpen var "visa bara
+                            källan" och släckte kategorierna. Källorna nås via Fler i
+                            sökpanelen, som på webben. */}
                     </View>
                 </Sida>
 
